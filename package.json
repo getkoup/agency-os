@@ -1,0 +1,36 @@
+{
+  "name": "agency-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "latest",
+    "@supabase/ssr": "latest",
+    "@supabase/supabase-js": "latest",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwind-merge": "latest"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "latest",
+    "@tailwindcss/postcss": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "9",
+    "eslint-config-next": "latest",
+    "tailwindcss": "latest",
+    "typescript": "5.9.2"
+  }
+}
