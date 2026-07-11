@@ -9,13 +9,17 @@ These rules are intentionally **not domain-specific**. Business rules for dashbo
 Use this stack unless we explicitly decide otherwise.
 
 ```txt
-Next.js latest App Router
+T3 Stack using the latest compatible versions:
+Next.js App Router
 TypeScript strict mode
-Bun package manager and script runner
+tRPC
+Drizzle ORM
+Auth.js
+Postgres
 Tailwind CSS
 shadcn/ui
 Lucide React
-Supabase Postgres/Auth/RLS
+Bun package manager and script runner
 ```
 
 Supporting libraries should be added only when the need is real.
@@ -251,27 +255,26 @@ src/
     (auth)/
     (app)/
     api/
+      auth/
+      trpc/
   components/
-    ui/
     shared/
     layout/
   features/
     feature-name/
       components/
-      actions.ts
-      queries.ts
       schemas.ts
       types.ts
       utils.ts
-  lib/
-    supabase/
-    validations/
-    utils/
   server/
-    actions/
-    services/
+    api/
+      routers/
+      root.ts
+      trpc.ts
+    auth/
     db/
-  types/
+      schema.ts
+  trpc/
 ```
 
 Hard rule:
@@ -284,7 +287,7 @@ Hard rule:
 
 > `components/ui` is only for shadcn-generated primitives.
 
-Custom app components go here instead:
+Custom application components go here instead:
 
 ```txt
 components/shared/
@@ -320,28 +323,9 @@ Hard rule:
 
 Hard rule:
 
-> Check shadcn/ui before building a custom primitive.
+> Check the shadcn/ui registry before building a custom component. If a suitable shadcn component exists, use it instead of creating another implementation.
 
-Use shadcn for common UI:
-
-- Button
-- Card
-- Dialog
-- Sheet
-- Dropdown
-- Select
-- Table
-- Tabs
-- Badge
-- Input
-- Form
-- Calendar
-- Popover
-- Command
-- Skeleton
-- Toast/Sonner
-- Alert
-- Tooltip
+Add shadcn components through the shadcn CLI so their dependencies, styles, and accessibility behavior stay consistent. Customize the generated component only when product requirements require it.
 
 ### Component Names Must Be Specific
 
@@ -426,7 +410,7 @@ Hard rule:
 
 Hard rule:
 
-> Use existing shadcn components, spacing, colors, radius, and typography before inventing new visual patterns.
+> Use existing components, spacing, colors, radius, and typography before inventing new visual patterns.
 
 ## Data Access Rules
 
@@ -435,7 +419,7 @@ Hard rule:
 Bad:
 
 ```ts
-supabase.from("items").select("*")
+db.query.items.findMany()
 ```
 
 scattered across components.
@@ -461,22 +445,22 @@ Hard rule:
 
 Use server actions, route handlers, or service functions with validation and authorization.
 
-### Avoid `select("*")`
+### Select Only Required Columns
 
 Hard rule:
 
-> Select only the columns needed for the current use case.
+> Query only the columns needed for the current use case.
 
 Bad:
 
 ```ts
-select("*")
+db.select().from(items)
 ```
 
 Good:
 
 ```ts
-select("id,name,created_at")
+db.select({ id: items.id, name: items.name }).from(items)
 ```
 
 ### Pagination by Default for Lists
@@ -487,35 +471,35 @@ Hard rule:
 
 Do not load unbounded records by default.
 
-## Supabase Rules
+## Drizzle and Postgres Rules
 
-### Use Generated Types
+### Infer Database Types
 
 Hard rule:
 
-> Supabase table types should come from generated database types.
+> Database types should be inferred from the Drizzle schema.
 
-Do not manually recreate database table types unless there is a clear reason.
+Do not manually recreate table shapes unless a boundary requires a distinct type.
 
 ### Use Migrations
 
 Hard rule:
 
-> Database schema changes must be represented as migrations.
+> Production database schema changes must be represented as Drizzle migrations.
 
-Manual Supabase dashboard edits are acceptable for exploration only. Final schema must be reproducible.
+`db:push` is acceptable for local exploration. Deployed schema changes must be reproducible through committed migrations.
 
-### Row Level Security Required for Sensitive Tables
+### Enforce Access in Application Code
 
 Hard rule:
 
-> Tables containing user, tenant, private, or business-sensitive data must use Row Level Security before production use.
+> Every protected query and mutation must enforce authentication and authorization on the server.
 
 ### Timestamps on Important Tables
 
 Hard rule:
 
-> Important records should have `created_at` and `updated_at` unless there is a clear reason not to.
+> Important records should have `createdAt` and `updatedAt` unless there is a clear reason not to.
 
 ### Index Real Query Patterns
 
@@ -865,7 +849,7 @@ Hard rule:
 
 > Interactive UI must be keyboard-accessible and screen-reader understandable.
 
-Use semantic HTML and shadcn primitives where possible.
+Use semantic HTML and proven accessible primitives where possible.
 
 Minimum expectations:
 
@@ -950,24 +934,24 @@ If code needs a long explanation to be understood, simplify it.
 
 ## Final Rule Summary
 
-1. Use Next.js App Router, TypeScript strict mode, Bun, Tailwind, shadcn/ui, Lucide, and Supabase.
+1. Use the T3 Stack with Tailwind, shadcn/ui, Lucide, and Postgres.
 2. Use Bun only. Do not mix package managers.
 3. Use Server Components by default.
 4. Use Client Components only when interaction requires them.
 5. Keep `page.tsx` files thin.
 6. Keep route handlers small.
 7. Use feature-first folder structure.
-8. Keep `components/ui` only for shadcn primitives.
-9. Use shadcn before building custom UI primitives.
+8. Keep `components/ui` only for shadcn-generated primitives.
+9. Use shadcn components instead of custom primitives whenever a suitable component exists.
 10. Keep types close to their feature.
 11. Validate external input with server-side validation.
 12. Use `unknown` before validation, not `any`.
-13. Use generated Supabase types.
-14. Use database migrations.
-15. Use RLS for sensitive data before production.
+13. Infer database types from the Drizzle schema.
+14. Use Drizzle migrations for deployed schema changes.
+15. Enforce authentication and authorization in protected server code.
 16. Centralize database access through named functions.
-17. Do not mutate the database directly from random UI components.
-18. Avoid `select("*")` in production queries.
+17. Do not mutate the database directly from UI components.
+18. Select only required database columns.
 19. Paginate or limit growing lists.
 20. Keep secrets server-side.
 21. Check authorization on the server.
