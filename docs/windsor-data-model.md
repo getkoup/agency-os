@@ -4,7 +4,7 @@
 
 This document records the current understanding of the Windsor lead and advertising-performance datasets. Update it as product and data-model decisions are made.
 
-Status: **Discussion draft**
+Status: **Implemented for phase one**
 
 Last reviewed: **2026-07-12**
 
@@ -19,6 +19,27 @@ Last reviewed: **2026-07-12**
 
 Both sources use the Windsor `/all` endpoint with `date_preset=last_7d` and an account filter. The API key is intentionally omitted here.
 
+### Important import requests
+
+These are the two canonical phase-one imports. `WINDSOR_API_KEY` is read from
+the server environment; never paste a real key into source code, documentation,
+browser code, or a committed `.env` file.
+
+Advertising performance:
+
+```txt
+https://connectors.windsor.ai/all?api_key=${WINDSOR_API_KEY}&date_preset=last_7d&fields=date,account_id,account_name,campaign_id,campaign,adset_id,adset_name,ad_id,ad_name,spend,actions_onsite_conversion_messaging_conversation_started_7d,actions_onsite_conversion_total_messaging_connection,actions_post_engagement,link_clicks,actions_lead,actions_leadgen_grouped,cost_per_action_type_lead,cpc,ctr&select_accounts=facebook__2298991543451560,facebook__3936585339919458,facebook__947049041046274
+```
+
+Leads:
+
+```txt
+https://connectors.windsor.ai/all?api_key=${WINDSOR_API_KEY}&date_preset=last_7d&fields=id,created_time,account_id,account_name,campaign_id,campaign,adset_id,adset_name,ad_id,ad_name,form_id,email,full_name,phone,phone_number&select_accounts=facebook_leads__1084237868095826,facebook_leads__1749361305140569,facebook_leads__454302567777196
+```
+
+The stable ID fields shown here are required by the importer even when a
+display-only Windsor URL omits them.
+
 ### Lead source
 
 Selected connectors:
@@ -32,12 +53,16 @@ facebook_leads__454302567777196
 Requested fields:
 
 ```txt
+id
 created_time
+account_id
 account_name
-ad_name
+campaign_id
 campaign
-adset_name
 adset_id
+adset_name
+ad_id
+ad_name
 form_id
 email
 full_name
@@ -117,6 +142,22 @@ Observed completeness:
 - There are 551 unique normalized phone numbers.
 - Approximately three rows are duplicates when deduplicated by normalized phone number.
 
+
+Lead identity preflight, repeated on 2026-07-12 across the three selected
+Facebook Leads connectors for the UTC-backed `last_7d` response:
+
+- `id` was non-null in 555/555 rows and unique in 555/555 rows.
+- `account_id` was non-null in 555/555 rows.
+- Every returned `account_id` equaled the numeric suffix of its selected
+  `facebook_leads__…` connector.
+- `campaign_id` was non-null in 555/555 rows.
+- `ad_id` was null in 555/555 rows; all reviewed ads resolved uniquely beneath
+  their `adset_id` by `ad_name`.
+- `created_time` included an explicit `+0000` UTC offset.
+
+The implementation therefore uses Windsor `id` as the required source-scoped
+lead identity and treats a missing ID or connector/account mismatch as a batch
+failure. It never invents an identity from contact information.
 ### Advertising performance
 
 | Measurement | Observed value |
@@ -197,13 +238,15 @@ Stable source IDs should therefore be used for entity identity and joins. Names 
 
 ## Agreed Provider-Neutral Schema
 
-This is the agreed design direction, not an implemented database schema. Windsor.ai is the current data provider. The underlying advertising platform may be Facebook, Google Ads, or another Windsor-supported platform.
+This is the implemented phase-one schema. Windsor.ai is the current data provider. The underlying advertising platform may be Facebook, Google Ads, or another Windsor-supported platform.
 
 ```txt
 users
 - id
 - name
 - email
+- role (`agency_admin` or `client_viewer`)
+- password_hash nullable; seeded credentials use bcrypt cost 12
 
 clients
 - id
@@ -215,7 +258,6 @@ clients
 client_memberships
 - user_id
 - client_id
-- role
 
 source_accounts
 - id
@@ -223,6 +265,7 @@ source_accounts
 - data_provider
 - platform
 - connector
+- connector_account_id
 - external_account_id
 - external_account_name
 - normalized_name
@@ -261,9 +304,8 @@ lead_forms
 
 leads
 - id
-- client_id nullable
 - source_account_id
-- external_id nullable
+- external_id required
 - campaign_id nullable
 - ad_group_id nullable
 - ad_id nullable
@@ -342,7 +384,7 @@ Discover Windsor connector accounts
 → upsert source_accounts by stable external identity
 → suggest an existing client using normalized names
 → assign automatically only when a stored mapping exists
-→ otherwise leave client_id null for agency-admin review
+→ otherwise leave client_id null for owner review
 → synchronize campaigns, ad groups, ads, performance, and leads
 ```
 
@@ -350,18 +392,132 @@ Fixed `select_accounts` URLs do not discover newly connected accounts. Account d
 
 If a source account disappears from Windsor, mark it inactive or disconnected. Do not delete its client, leads, or historical performance.
 
-## Access and Analytics Rules
+### Approved account-assignment workflow
 
 ```txt
-Agency admin → all assigned and unassigned source data
-Client user  → only data belonging to clients in their memberships
+Windsor discovers a source account
+→ Agency OS stores it as unassigned when no fixed mapping exists
+→ owner sees it under Unassigned accounts
+→ owner selects an existing client or creates a client
+→ owner assigns the source account to that client
+→ owner creates or selects one or more client users
+→ owner grants those users membership in the client
+→ client users receive access to every source account owned by that client
 ```
 
-`source_accounts.client_id = null` means unassigned, not hidden. Agency-wide analytics include this data under an explicit **Unassigned accounts** group. Unassigned data must not contribute to a specific client's analytics and must never be visible to client users.
+Permissions are client-based rather than directly attached to each advertising
+account:
+
+```txt
+user → client_memberships → client → source_accounts
+```
+
+For example, membership in Tint Lab grants access to its Facebook Ads,
+Facebook Leads, and future Google Ads source accounts. A newly connected
+source account becomes available to those users when the owner assigns it to
+Tint Lab; the owner does not need to recreate per-user account permissions.
+
+Changing `source_accounts.client_id` changes access immediately. Historical
+performance and leads remain owned through their source account and move with
+that assignment. Removing a client membership immediately removes that user's
+access without deleting source data.
+
+### Planned navigation by role
+
+```txt
+Owner  → Dashboard, Clients, Advertising Accounts, Unassigned Accounts,
+         Users & Access, Synchronization
+Admin  → Dashboard, Clients, Advertising Accounts, Synchronization
+Client → Dashboard, Advertising Accounts, Leads
+```
+
+The owner interface exposes assignment actions. Admin and client responses
+must not include those actions or user-assignment information.
+
+## Access and Analytics Rules
+
+### Current implementation
+
+Phase one currently has two database roles:
+
+```txt
+agency_admin  → all assigned and unassigned source data
+client_viewer → only data belonging to clients in their memberships
+```
+
+`source_accounts.client_id = null` means unassigned, not hidden.
+Agency-wide analytics include this data under **Unassigned accounts**.
+Unassigned data never contributes to a specific client's analytics and is
+never visible to client users.
+
+### Approved proper-dashboard role model
+
+The next dashboard iteration will replace the two-role model with three roles:
+
+```txt
+owner
+admin
+client
+```
+
+This is an approved design but is not implemented yet.
+
+| Capability | Owner | Admin | Client |
+| --- | :---: | :---: | :---: |
+| View all assigned advertising data | Yes | Yes | No |
+| View unassigned account data | Yes | Yes | No |
+| View data for membership clients | Yes | Yes | Yes |
+| View user and client-membership assignments | Yes | No | No |
+| Create or invite users | Yes | No | No |
+| Change roles or disable users | Yes | No | No |
+| Assign source accounts to clients | Yes | No | No |
+| Assign users to clients | Yes | No | No |
+| Change permissions | Yes | No | No |
+
+#### Owner
+
+The owner has complete agency access. The owner can see every assigned and
+unassigned source account, all performance and lead data, all users, and all
+client memberships. Only an owner can create users, change roles, disable
+users, assign source accounts to clients, and add or remove client
+memberships.
+
+#### Admin
+
+An admin has agency-wide read access to assigned and unassigned advertising
+data. An admin cannot see user-management or membership-assignment information
+and cannot create users, change roles, assign accounts, assign memberships, or
+modify permissions. Account assignment controls must not be returned by the
+server or rendered in the admin interface.
+
+#### Client
+
+A client user can access only clients listed in their
+`client_memberships`. The client can see only source accounts, performance,
+and leads belonging to those clients. A client can never access unassigned
+accounts, other clients, agency-wide totals, user management, or permission
+controls. Server-side scope checks enforce this even when a user manually
+changes a URL or tRPC input.
+
+### Authorization path
+
+Every protected data request follows this path:
+
+```txt
+authenticated session
+→ load current user and current role from PostgreSQL
+→ resolve authorized client memberships
+→ restrict through source_accounts.client_id
+→ query performance or leads
+→ return only authorized rows and filter options
+```
+
+The database role is authoritative. JWT role values are session/display hints
+and must not authorize requests.
 
 ## Initial Data Rules
 
-These rules are provisional and must be confirmed during product discussion:
+These rules are implemented for phase one:
 
 1. Treat a lead response row as an individual captured lead.
 2. Use `phone_number`; treat `phone` as unavailable for the reviewed source.
@@ -376,13 +532,13 @@ These rules are provisional and must be confirmed during product discussion:
 
 ## Open Questions
 
-- Can the lead endpoint return a stable source lead ID?
-- Which selected lead connector corresponds to which selected advertising connector?
-- What timezone does Windsor use for `created_time`, `date`, and `last_7d`?
-- Are late-arriving leads or performance corrections expected?
-- Should duplicate contacts across separate campaigns remain separate lead events?
+- What are the exact Windsor field mappings for Google Ads connectors?
+- What timezone should account-level reporting use beyond storing lead instants
+  and interpreting phase-one dashboard date boundaries in UTC?
+- Are late-arriving leads or performance corrections expected beyond the
+  rolling seven-day resynchronization?
 - Which conversion metric defines success for each campaign type?
-- How frequently should each source synchronize?
+- Which scheduler should invoke the server-only synchronization command?
 - How long should personally identifiable lead data be retained?
 
 ## Decision Log
@@ -401,4 +557,15 @@ These rules are provisional and must be confirmed during product discussion:
 - Decided that synchronization automatically upserts new source accounts but does not automatically create users.
 - Decided that uncertain client mappings remain unassigned with `client_id = null` until an agency admin assigns or merges them.
 - Decided that agency admins can analyze unassigned data, while client users can access only their assigned clients.
-- No application schema or ingestion code has been implemented yet.
+- Implemented the provider-neutral schema, seeded credentials, `agency_admin` and `client_viewer` authorization, and source-account-derived client isolation.
+- Implemented server-only all-account Windsor discovery and idempotent `last_7d` synchronization; only the six known source accounts auto-assign to the three mapped clients.
+- Implemented the phase-one dashboard with UTC date, client, platform, and campaign filters; spend, platform leads, captured leads, messaging conversations, and link-click KPIs; and paginated performance and lead tables.
+- Approved the next dashboard authorization model with `owner`, `admin`, and
+  `client` roles; this supersedes the two-role model as the target design but
+  is not implemented yet.
+- Approved owner-only user management, client membership management, and
+  source-account-to-client assignment.
+- Approved agency-wide read-only advertising access for admins without user,
+  membership, role, permission, or assignment controls.
+- Approved client access through `user → client_memberships → client →
+  source_accounts`, not direct per-user advertising-account permissions.

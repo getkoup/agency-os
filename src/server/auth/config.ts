@@ -1,6 +1,9 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { compare, hash } from "bcryptjs";
+import { sql } from "drizzle-orm";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import Credentials from "next-auth/providers/credentials";
+import { z } from "zod";
 
 import { db } from "~/server/db";
 import {
@@ -10,58 +13,95 @@ import {
   verificationTokens,
 } from "~/server/db/schema";
 
-/**
- * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
- * object and keep type safety.
- *
- * @see https://next-auth.js.org/getting-started/typescript#module-augmentation
- */
+export type UserRole = "agency_admin" | "client_viewer";
+
+const credentialsSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .email()
+    .transform((value) => value.toLowerCase()),
+  password: z.string().min(1),
+});
+
+const dummyHashPromise = hash("agency-os-invalid-credential-placeholder", 12);
+
 declare module "next-auth" {
   interface Session extends DefaultSession {
-    user: {
-      id: string;
-      // ...other properties
-      // role: UserRole;
-    } & DefaultSession["user"];
+    user: { id: string; role: UserRole } & DefaultSession["user"];
   }
 
-  // interface User {
-  //   // ...other properties
-  //   // role: UserRole;
-  // }
+  interface User {
+    role: UserRole;
+  }
 }
 
-/**
- * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
- *
- * @see https://next-auth.js.org/configuration/options
- */
+const adapter = DrizzleAdapter(db, {
+  usersTable: users,
+  accountsTable: accounts,
+  sessionsTable: sessions,
+  verificationTokensTable: verificationTokens,
+}) as NonNullable<NextAuthConfig["adapter"]>;
+
 export const authConfig = {
+  adapter,
+  session: { strategy: "jwt" },
+  pages: { signIn: "/login" },
   providers: [
-    DiscordProvider,
-    /**
-     * ...add more providers here.
-     *
-     * Most other providers require a bit more work than the Discord provider. For example, the
-     * GitHub provider requires you to add the `refresh_token_expires_in` field to the Account
-     * model. Refer to the NextAuth.js docs for the provider you want to use. Example:
-     *
-     * @see https://next-auth.js.org/providers/github
-     */
-  ],
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
-  callbacks: {
-    session: ({ session, user }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: user.id,
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      authorize: async (credentials) => {
+        const parsed = credentialsSchema.safeParse(credentials);
+        if (!parsed.success) return null;
+
+        const [user] = await db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            role: users.role,
+            passwordHash: users.passwordHash,
+          })
+          .from(users)
+          .where(sql`lower(${users.email}) = ${parsed.data.email}`)
+          .limit(1);
+        const passwordMatches = await compare(
+          parsed.data.password,
+          user?.passwordHash ?? (await dummyHashPromise),
+        );
+        if (!user?.passwordHash || !passwordMatches) return null;
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
       },
     }),
+  ],
+  callbacks: {
+    jwt: ({ token, user }) => {
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
+      }
+      return token;
+    },
+    session: ({ session, token }) => {
+      const id = typeof token.id === "string" ? token.id : token.sub;
+      const role =
+        token.role === "agency_admin" || token.role === "client_viewer"
+          ? token.role
+          : null;
+      if (!id || !role) return session;
+      return {
+        ...session,
+        user: { ...session.user, id, role },
+      };
+    },
   },
 } satisfies NextAuthConfig;
