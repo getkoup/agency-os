@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "~/server/db";
 import {
@@ -358,15 +358,16 @@ export async function syncWindsor(
 
     const clientIds = new Map<string, string>();
     for (const mapping of CLIENT_MAPPINGS) {
-      const [clientRow] = await db
+      await db
         .insert(clients)
         .values({ slug: mapping.slug, name: mapping.name })
-        .onConflictDoUpdate({
-          target: clients.slug,
-          set: { name: mapping.name, status: "active", updatedAt: new Date() },
-        })
-        .returning({ id: clients.id });
-      if (!clientRow) throw new Error("Client mapping upsert failed");
+        .onConflictDoNothing({ target: clients.slug });
+      const [clientRow] = await db
+        .select({ id: clients.id })
+        .from(clients)
+        .where(eq(clients.slug, mapping.slug))
+        .limit(1);
+      if (!clientRow) throw new Error("Client mapping insert failed");
       clientIds.set(mapping.slug, clientRow.id);
     }
 
@@ -401,9 +402,6 @@ export async function syncWindsor(
         await db
           .update(sourceAccounts)
           .set({
-            ...(existing.clientId === null && mappedClientId
-              ? { clientId: mappedClientId }
-              : {}),
             externalAccountId: parsed.externalAccountId,
             externalAccountName: displayName,
             normalizedName: normalizeSuggestionKey(displayName),
@@ -412,15 +410,43 @@ export async function syncWindsor(
           })
           .where(eq(sourceAccounts.id, existing.id));
       } else {
-        await db.insert(sourceAccounts).values({
-          clientId: mappedClientId ?? null,
-          dataProvider: "windsor",
-          platform: "facebook",
-          connector: parsed.connector,
-          connectorAccountId: account.account_id,
-          externalAccountId: parsed.externalAccountId,
-          externalAccountName: displayName,
-          normalizedName: normalizeSuggestionKey(displayName),
+        await db.transaction(async (tx) => {
+          if (mappedClientId) {
+            await tx.execute(
+              sql`select "id" from ${clients} where "id" = ${mappedClientId} order by "id" for update`,
+            );
+          }
+          const [alreadyInserted] = await tx
+            .select({ id: sourceAccounts.id })
+            .from(sourceAccounts)
+            .where(
+              and(
+                eq(sourceAccounts.dataProvider, "windsor"),
+                eq(sourceAccounts.connectorAccountId, account.account_id),
+              ),
+            )
+            .limit(1);
+          if (alreadyInserted) return;
+          const [mappedClient] = mappedClientId
+            ? await tx
+                .select({ status: clients.status })
+                .from(clients)
+                .where(eq(clients.id, mappedClientId))
+                .limit(1)
+            : [];
+          await tx.insert(sourceAccounts).values({
+            clientId:
+              mappedClientId && mappedClient?.status === "active"
+                ? mappedClientId
+                : null,
+            dataProvider: "windsor",
+            platform: "facebook",
+            connector: parsed.connector,
+            connectorAccountId: account.account_id,
+            externalAccountId: parsed.externalAccountId,
+            externalAccountName: displayName,
+            normalizedName: normalizeSuggestionKey(displayName),
+          });
         });
       }
     }

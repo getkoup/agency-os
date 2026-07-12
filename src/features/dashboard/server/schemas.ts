@@ -8,10 +8,14 @@ const dashboardFilterFields = z.object({
   campaignId: z.string().uuid().optional(),
 });
 
-const validDateRange = (value: { from: string; to: string }) =>
-  value.from <= value.to;
+const validDateRange = (value: { from: string; to: string }) => {
+  if (value.from > value.to) return false;
+  const from = Date.parse(`${value.from}T00:00:00.000Z`);
+  const to = Date.parse(`${value.to}T00:00:00.000Z`);
+  return (to - from) / 86_400_000 + 1 <= 366;
+};
 const dateRangeIssue = {
-  message: "The start date must not be after the end date",
+  message: "The date range must be ordered and no longer than 366 days",
   path: ["from"],
 };
 

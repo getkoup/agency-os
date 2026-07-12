@@ -1,6 +1,7 @@
 import { hash } from "bcryptjs";
 import { eq, or, sql } from "drizzle-orm";
 
+import { type UserRole } from "~/lib/roles";
 import { db } from "~/server/db";
 import { parseSeedEnvironment } from "~/server/db/seed-env";
 import { clientMemberships, sourceAccounts, users } from "~/server/db/schema";
@@ -23,14 +24,14 @@ const accountMatches = await db
     ),
   );
 const clientIds = new Set(
-  accountMatches.map((match) => match.clientId).filter((id) => id !== null),
+  accountMatches.map(({ clientId }) => clientId).filter((id) => id !== null),
 );
 if (accountMatches.length === 0) {
   throw new Error(
     "Seed client account was not found. Run the Windsor sync before db:seed.",
   );
 }
-if (accountMatches.some((match) => match.clientId === null)) {
+if (accountMatches.some(({ clientId }) => clientId === null)) {
   throw new Error("Seed client account is unassigned; assign or map it first.");
 }
 if (clientIds.size !== 1) {
@@ -39,51 +40,68 @@ if (clientIds.size !== 1) {
 const [clientId] = clientIds;
 if (!clientId) throw new Error("Seed client account did not resolve a client.");
 
-const [adminPasswordHash, clientPasswordHash] = await Promise.all([
-  hash(seed.SEED_ADMIN_PASSWORD, 12),
-  hash(seed.SEED_CLIENT_PASSWORD, 12),
-]);
+const [ownerPasswordHash, adminPasswordHash, clientPasswordHash] =
+  await Promise.all([
+    hash(seed.SEED_OWNER_PASSWORD, 12),
+    hash(seed.SEED_ADMIN_PASSWORD, 12),
+    hash(seed.SEED_CLIENT_PASSWORD, 12),
+  ]);
 
 await db.transaction(async (tx) => {
   async function upsertSeedUser(input: {
     email: string;
     name: string;
     passwordHash: string;
-    role: "agency_admin" | "client_viewer";
+    role: UserRole;
   }) {
     const [existing] = await tx
       .select({ id: users.id })
       .from(users)
       .where(sql`lower(${users.email}) = ${input.email}`)
       .limit(1);
+    const values = { ...input, status: "active" as const };
     if (existing) {
-      await tx.update(users).set(input).where(eq(users.id, existing.id));
+      await tx.update(users).set(values).where(eq(users.id, existing.id));
       return existing.id;
     }
     const [created] = await tx
       .insert(users)
-      .values(input)
+      .values(values)
       .returning({ id: users.id });
     if (!created) throw new Error(`Failed to seed user ${input.email}`);
     return created.id;
   }
 
-  await upsertSeedUser({
+  const ownerId = await upsertSeedUser({
+    email: seed.SEED_OWNER_EMAIL,
+    name: seed.SEED_OWNER_NAME,
+    passwordHash: ownerPasswordHash,
+    role: "owner",
+  });
+  const adminId = await upsertSeedUser({
     email: seed.SEED_ADMIN_EMAIL,
     name: seed.SEED_ADMIN_NAME,
     passwordHash: adminPasswordHash,
-    role: "agency_admin",
+    role: "admin",
   });
-  const viewerId = await upsertSeedUser({
+  const clientUserId = await upsertSeedUser({
     email: seed.SEED_CLIENT_EMAIL,
     name: seed.SEED_CLIENT_NAME,
     passwordHash: clientPasswordHash,
-    role: "client_viewer",
+    role: "client",
   });
   await tx
     .delete(clientMemberships)
-    .where(eq(clientMemberships.userId, viewerId));
-  await tx.insert(clientMemberships).values({ userId: viewerId, clientId });
+    .where(
+      or(
+        eq(clientMemberships.userId, ownerId),
+        eq(clientMemberships.userId, adminId),
+      ),
+    );
+  await tx
+    .delete(clientMemberships)
+    .where(eq(clientMemberships.userId, clientUserId));
+  await tx.insert(clientMemberships).values({ userId: clientUserId, clientId });
 });
 
-console.info("Seeded one agency admin and one client viewer.");
+console.info("Seeded one owner, one read-only admin, and one client user.");

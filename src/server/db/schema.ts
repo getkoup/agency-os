@@ -11,8 +11,9 @@ import { type AdapterAccount } from "next-auth/adapters";
 export const createTable = pgTableCreator((name) => `agency_os_${name}`);
 
 export const userRole = pgEnum("agency_os_user_role", [
-  "agency_admin",
-  "client_viewer",
+  "owner",
+  "admin",
+  "client",
 ]);
 export const recordStatus = pgEnum("agency_os_record_status", [
   "active",
@@ -41,7 +42,8 @@ export const users = createTable(
     email: d.varchar({ length: 255 }).notNull(),
     emailVerified: d.timestamp({ mode: "date", withTimezone: true }),
     image: d.varchar({ length: 255 }),
-    role: userRole().default("client_viewer").notNull(),
+    role: userRole().default("client").notNull(),
+    status: recordStatus().default("active").notNull(),
     passwordHash: d.text(),
   }),
   (t) => [uniqueIndex("user_email_lower_idx").on(sql`lower(${t.email})`)],
@@ -104,7 +106,10 @@ export const clients = createTable(
     createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
   }),
-  (t) => [uniqueIndex("client_slug_idx").on(t.slug)],
+  (t) => [
+    uniqueIndex("client_slug_idx").on(t.slug),
+    uniqueIndex("client_name_lower_idx").on(sql`lower(${t.name})`),
+  ],
 );
 
 export const clientMemberships = createTable(

@@ -238,23 +238,24 @@ Stable source IDs should therefore be used for entity identity and joins. Names 
 
 ## Agreed Provider-Neutral Schema
 
-This is the implemented phase-one schema. Windsor.ai is the current data provider. The underlying advertising platform may be Facebook, Google Ads, or another Windsor-supported platform.
+This is the implemented provider-neutral schema. Windsor.ai is the current data provider. The underlying advertising platform may be Facebook, Google Ads, or another Windsor-supported platform.
 
 ```txt
 users
 - id
 - name
 - email
-- role (`agency_admin` or `client_viewer`)
-- password_hash nullable; seeded credentials use bcrypt cost 12
+- role (`owner`, `admin`, or `client`)
+- status (`active` or `inactive`)
+- password_hash nullable; credentials use bcrypt cost 12
 
 clients
 - id
-- name
+- immutable slug
+- name (case-insensitively unique)
 - status
 - created_at
 - updated_at
-
 client_memberships
 - user_id
 - client_id
@@ -381,9 +382,10 @@ Synchronization flow:
 
 ```txt
 Discover Windsor connector accounts
-→ upsert source_accounts by stable external identity
-→ suggest an existing client using normalized names
-→ assign automatically only when a stored mapping exists
+→ insert missing mapped clients without overwriting owner-controlled names/status
+→ insert missing source accounts by stable external identity
+→ apply a fixed client mapping only to a newly discovered account and only while the client is active
+→ preserve every existing source account client_id, including explicit null and manual reassignment
 → otherwise leave client_id null for owner review
 → synchronize campaigns, ad groups, ads, performance, and leads
 ```
@@ -392,12 +394,12 @@ Fixed `select_accounts` URLs do not discover newly connected accounts. Account d
 
 If a source account disappears from Windsor, mark it inactive or disconnected. Do not delete its client, leads, or historical performance.
 
-### Approved account-assignment workflow
+### Implemented account-assignment workflow
 
 ```txt
 Windsor discovers a source account
 → Agency OS stores it as unassigned when no fixed mapping exists
-→ owner sees it under Unassigned accounts
+→ owner sees it under Accounts
 → owner selects an existing client or creates a client
 → owner assigns the source account to that client
 → owner creates or selects one or more client users
@@ -412,67 +414,48 @@ account:
 user → client_memberships → client → source_accounts
 ```
 
-For example, membership in Tint Lab grants access to its Facebook Ads,
-Facebook Leads, and future Google Ads source accounts. A newly connected
-source account becomes available to those users when the owner assigns it to
-Tint Lab; the owner does not need to recreate per-user account permissions.
-
 Changing `source_accounts.client_id` changes access immediately. Historical
 performance and leads remain owned through their source account and move with
 that assignment. Removing a client membership immediately removes that user's
 access without deleting source data.
-
-### Planned navigation by role
+### Navigation by role
 
 ```txt
-Owner  → Dashboard, Clients, Advertising Accounts, Unassigned Accounts,
-         Users & Access, Synchronization
-Admin  → Dashboard, Clients, Advertising Accounts, Synchronization
-Client → Dashboard, Advertising Accounts, Leads
+Owner  → Overview, Performance, Accounts, Leads, Clients, Synchronization,
+         Users & Access
+Admin  → Overview, Performance, Accounts, Leads, Clients, Synchronization
+Client → Overview, Performance, Accounts, Leads
 ```
 
-The owner interface exposes assignment actions. Admin and client responses
-must not include those actions or user-assignment information.
-
+The owner interface exposes assignment and user-management actions. Admin and
+client responses do not include user or membership assignment information.
 ## Access and Analytics Rules
 
-### Current implementation
+### Implemented role model
 
-Phase one currently has two database roles:
+The database has exactly three roles:
 
 ```txt
-agency_admin  → all assigned and unassigned source data
-client_viewer → only data belonging to clients in their memberships
+owner  → agency analytics plus user, client, membership, and account management
+admin  → agency-wide read-only analytics, including unassigned accounts
+client → analytics only for active client memberships
 ```
 
 `source_accounts.client_id = null` means unassigned, not hidden.
-Agency-wide analytics include this data under **Unassigned accounts**.
-Unassigned data never contributes to a specific client's analytics and is
-never visible to client users.
-
-### Approved proper-dashboard role model
-
-The next dashboard iteration will replace the two-role model with three roles:
-
-```txt
-owner
-admin
-client
-```
-
-This is an approved design but is not implemented yet.
-
+Owner/admin analytics include this data under **Unassigned**. Unassigned data
+never contributes to a specific client's analytics and is never visible to
+client users.
 | Capability | Owner | Admin | Client |
 | --- | :---: | :---: | :---: |
 | View all assigned advertising data | Yes | Yes | No |
 | View unassigned account data | Yes | Yes | No |
 | View data for membership clients | Yes | Yes | Yes |
 | View user and client-membership assignments | Yes | No | No |
-| Create or invite users | Yes | No | No |
-| Change roles or disable users | Yes | No | No |
-| Assign source accounts to clients | Yes | No | No |
+| Create users with an owner-entered initial password | Yes | No | No |
+| Change roles or deactivate users | Yes | No | No |
+| Create, edit, or deactivate clients | Yes | No | No |
+| Assign or unassign source accounts | Yes | No | No |
 | Assign users to clients | Yes | No | No |
-| Change permissions | Yes | No | No |
 
 #### Owner
 
@@ -514,6 +497,17 @@ authenticated session
 
 The database role is authoritative. JWT role values are session/display hints
 and must not authorize requests.
+
+Owner-created users receive an owner-entered initial password of at least 12
+characters. Agency OS hashes it with bcrypt cost 12 and never returns or stores
+plaintext. There is no public registration or reset flow; owners can reset a
+password from **Users & Access**.
+
+Role/status updates lock owner rows and reject any mutation that would leave
+zero active owners. Client deactivation and account reassignment lock clients
+before source accounts in ascending ID order. Deactivation is rejected while
+accounts remain assigned. These lock invariants serialize management and sync
+without rewriting historical leads or performance.
 
 ## Initial Data Rules
 
@@ -560,12 +554,13 @@ These rules are implemented for phase one:
 - Implemented the provider-neutral schema, seeded credentials, `agency_admin` and `client_viewer` authorization, and source-account-derived client isolation.
 - Implemented server-only all-account Windsor discovery and idempotent `last_7d` synchronization; only the six known source accounts auto-assign to the three mapped clients.
 - Implemented the phase-one dashboard with UTC date, client, platform, and campaign filters; spend, platform leads, captured leads, messaging conversations, and link-click KPIs; and paginated performance and lead tables.
-- Approved the next dashboard authorization model with `owner`, `admin`, and
-  `client` roles; this supersedes the two-role model as the target design but
-  is not implemented yet.
-- Approved owner-only user management, client membership management, and
-  source-account-to-client assignment.
-- Approved agency-wide read-only advertising access for admins without user,
-  membership, role, permission, or assignment controls.
-- Approved client access through `user → client_memberships → client →
+- Implemented the three-role `owner`, `admin`, and `client` authorization
+  model, replacing the two-role phase-one model without compatibility aliases.
+- Implemented owner-only user, client-membership, client, password-reset, and
+  source-account assignment management.
+- Implemented agency-wide read-only advertising access for admins without
+  user, membership, role, permission, or assignment-control payloads.
+- Implemented client access through `user → client_memberships → client →
   source_accounts`, not direct per-user advertising-account permissions.
+- Implemented immutable client slugs, sync preservation of owner-controlled
+  assignments, and lock-based last-owner/client-assignment invariants.

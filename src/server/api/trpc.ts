@@ -50,8 +50,15 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   });
 });
 
-export const agencyAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.currentUser.role !== "agency_admin") {
+export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.currentUser.role !== "owner") {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+  return next({ ctx });
+});
+
+export const agencyReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.currentUser.role === "client") {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return next({ ctx });
