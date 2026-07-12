@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -26,9 +26,15 @@ interface DashboardFiltersProps {
     platforms: string[];
     campaigns: Array<{ id: string; name: string }>;
   };
+  resetPageKeys?: string[];
 }
 
-export function DashboardFilters({ values, options }: DashboardFiltersProps) {
+export function DashboardFilters({
+  values,
+  options,
+  resetPageKeys = [],
+}: DashboardFiltersProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -36,9 +42,8 @@ export function DashboardFilters({ values, options }: DashboardFiltersProps) {
     const next = new URLSearchParams(searchParams);
     if (value === "all") next.delete(key);
     else next.set(key, value);
-    next.set("performancePage", "1");
-    next.set("leadPage", "1");
-    router.push(`/dashboard?${next.toString()}`);
+    for (const pageKey of resetPageKeys) next.set(pageKey, "1");
+    router.push(`${pathname}?${next.toString()}`);
   }
 
   return (

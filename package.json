@@ -20,6 +20,7 @@
     "preview": "next build && next start",
     "start": "next start",
     "test": "vitest run",
+    "test:migration": "bun scripts/verify-role-migration.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
@@ -41,6 +42,7 @@
     "radix-ui": "^1.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "3.8.0",
     "server-only": "^0.0.1",
     "shadcn": "^4.13.0",
     "superjson": "^2.2.1",

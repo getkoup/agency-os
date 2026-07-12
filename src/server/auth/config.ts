@@ -5,6 +5,7 @@ import { type DefaultSession, type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 
+import { USER_ROLES, type UserRole } from "~/lib/roles";
 import { db } from "~/server/db";
 import {
   accounts,
@@ -12,8 +13,6 @@ import {
   users,
   verificationTokens,
 } from "~/server/db/schema";
-
-export type UserRole = "agency_admin" | "client_viewer";
 
 const credentialsSchema = z.object({
   email: z
@@ -63,6 +62,7 @@ export const authConfig = {
             name: users.name,
             email: users.email,
             role: users.role,
+            status: users.status,
             passwordHash: users.passwordHash,
           })
           .from(users)
@@ -72,7 +72,8 @@ export const authConfig = {
           parsed.data.password,
           user?.passwordHash ?? (await dummyHashPromise),
         );
-        if (!user?.passwordHash || !passwordMatches) return null;
+        if (!user?.passwordHash || user.status !== "active" || !passwordMatches)
+          return null;
 
         return {
           id: user.id,
@@ -93,10 +94,7 @@ export const authConfig = {
     },
     session: ({ session, token }) => {
       const id = typeof token.id === "string" ? token.id : token.sub;
-      const role =
-        token.role === "agency_admin" || token.role === "client_viewer"
-          ? token.role
-          : null;
+      const role = USER_ROLES.find((value) => value === token.role) ?? null;
       if (!id || !role) return session;
       return {
         ...session,

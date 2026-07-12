@@ -1,11 +1,11 @@
 import "server-only";
 
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
+import { type UserRole } from "~/lib/roles";
 import { db } from "~/server/db";
-import { clientMemberships } from "~/server/db/schema";
-import { type UserRole } from "~/server/auth/config";
+import { clientMemberships, clients } from "~/server/db/schema";
 
 export type RequestedClientScope = string | undefined;
 
@@ -13,7 +13,7 @@ export async function resolveAccessibleClientScope(
   user: { id: string; role: UserRole },
   requestedClientId: RequestedClientScope,
 ): Promise<{ includeUnassigned: boolean; clientIds: string[] | null }> {
-  if (user.role === "agency_admin") {
+  if (user.role === "owner" || user.role === "admin") {
     if (requestedClientId === undefined) {
       return { clientIds: null, includeUnassigned: true };
     }
@@ -26,8 +26,11 @@ export async function resolveAccessibleClientScope(
   const memberships = await db
     .select({ clientId: clientMemberships.clientId })
     .from(clientMemberships)
-    .where(eq(clientMemberships.userId, user.id));
-  const membershipIds = memberships.map((membership) => membership.clientId);
+    .innerJoin(clients, eq(clientMemberships.clientId, clients.id))
+    .where(
+      and(eq(clientMemberships.userId, user.id), eq(clients.status, "active")),
+    );
+  const membershipIds = memberships.map(({ clientId }) => clientId);
   if (requestedClientId === undefined) {
     return { clientIds: membershipIds, includeUnassigned: false };
   }

@@ -1,9 +1,13 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import {
+  BarChart3,
+  MessageCircle,
+  MousePointerClick,
+  Receipt,
+  Users,
+} from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Table,
@@ -14,23 +18,15 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
+import { OverviewChart } from "~/features/dashboard/overview-chart";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
-import { auth, signOut } from "~/server/auth";
-import { getCurrentUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
-
-interface DashboardPageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
 
 export default async function DashboardPage({
   searchParams,
-}: DashboardPageProps) {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const currentUser = await getCurrentUser(session.user.id).catch(() => null);
-  if (!currentUser) redirect("/login");
-
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const search = resolveDashboardPageSearch(await searchParams);
   const filters = {
     from: search.from,
@@ -39,270 +35,187 @@ export default async function DashboardPage({
     platform: search.platform,
     campaignId: search.campaignId,
   };
-  const [options, overview, performance, leadRows] = await Promise.all([
-    api.dashboard.filterOptions({
-      from: search.from,
-      to: search.to,
-      clientId: search.clientId,
-      platform: search.platform,
-    }),
-    api.dashboard.overview(filters),
-    api.dashboard.performance({
-      ...filters,
-      page: search.performancePage,
-      pageSize: 50,
-    }),
-    api.dashboard.leads({ ...filters, page: search.leadPage, pageSize: 50 }),
-  ]);
-
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(search)) {
-    if (value !== undefined) query.set(key, String(value));
-  }
-  const performancePages = Math.max(1, Math.ceil(performance.total / 50));
-  const leadPages = Math.max(1, Math.ceil(leadRows.total / 50));
-
+  const [options, overview, trend, campaigns, accounts, recentLeads] =
+    await Promise.all([
+      api.dashboard.filterOptions({
+        from: search.from,
+        to: search.to,
+        clientId: search.clientId,
+        platform: search.platform,
+      }),
+      api.dashboard.overview(filters),
+      api.dashboard.trend(filters),
+      api.dashboard.topCampaigns(filters),
+      api.dashboard.accountSummary({
+        clientId: search.clientId,
+        platform: search.platform,
+      }),
+      api.dashboard.recentLeads(filters),
+    ]);
+  const kpis = [
+    {
+      title: "Spend",
+      value: `$${overview.spend}`,
+      detail: overview.cpl ? `CPL $${overview.cpl}` : "CPL —",
+      icon: Receipt,
+    },
+    {
+      title: "Platform Leads",
+      value: overview.platformLeads.toLocaleString(),
+      detail: "Reported conversions",
+      icon: BarChart3,
+    },
+    {
+      title: "Captured Leads",
+      value: overview.capturedLeads.toLocaleString(),
+      detail: "Individual lead events",
+      icon: Users,
+    },
+    {
+      title: "Messaging Conversations",
+      value: overview.messagingConversations.toLocaleString(),
+      detail: "Started conversations",
+      icon: MessageCircle,
+    },
+    {
+      title: "Link Clicks",
+      value: overview.linkClicks.toLocaleString(),
+      detail: overview.cpc ? `CPC $${overview.cpc}` : "CPC —",
+      icon: MousePointerClick,
+    },
+  ];
   return (
-    <main className="bg-muted/30 min-h-screen">
-      <header className="bg-background border-b">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <h1 className="text-xl font-semibold">Agency OS</h1>
-            <p className="text-muted-foreground text-sm">
-              {currentUser.name ?? currentUser.email} ·{" "}
-              {currentUser.role.replace("_", " ")}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {overview.latestSync ? (
-              <Badge variant="outline">Sync {overview.latestSync.status}</Badge>
-            ) : null}
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/login" });
-              }}
-            >
-              <Button variant="outline" type="submit">
-                Sign out
-              </Button>
-            </form>
-          </div>
+    <div className="mx-auto max-w-7xl space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-primary text-sm font-medium">Overview</p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Agency performance
+          </h1>
+          <p className="text-muted-foreground">
+            {search.from} through {search.to}, inclusive UTC.
+          </p>
         </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        {currentUser.role === "agency_admin" &&
-        overview.latestSync?.status === "failed" ? (
-          <Alert variant="destructive">
-            <AlertTitle>Latest synchronization failed</AlertTitle>
-            <AlertDescription>
-              Run the server synchronization command again or inspect server
-              logs.
-            </AlertDescription>
-          </Alert>
+        {overview.latestSync ? (
+          <Badge variant="outline">Sync {overview.latestSync.status}</Badge>
         ) : null}
-
-        <DashboardFilters values={filters} options={options} />
-
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {[
-            [
-              "Spend",
-              `$${overview.spend}`,
-              overview.cpl ? `CPL $${overview.cpl}` : "CPL —",
-            ],
-            [
-              "Platform Leads",
-              overview.platformLeads.toLocaleString(),
-              "Reported by Windsor",
-            ],
-            [
-              "Captured Leads",
-              overview.capturedLeads.toLocaleString(),
-              "Individual lead events",
-            ],
-            [
-              "Messaging Conversations",
-              overview.messagingConversations.toLocaleString(),
-              "Started conversations",
-            ],
-            [
-              "Link Clicks",
-              overview.linkClicks.toLocaleString(),
-              overview.cpc ? `CPC $${overview.cpc}` : "CPC —",
-            ],
-          ].map(([title, value, supporting]) => (
-            <Card key={title}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">{title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{value}</div>
-                <p className="text-muted-foreground text-xs">{supporting}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
-
+      </div>
+      <DashboardFilters values={filters} options={options} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {kpis.map(({ title, value, detail, icon: Icon }) => (
+          <Card key={title}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">{title}</CardTitle>
+              <Icon className="text-primary size-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold tabular-nums">{value}</div>
+              <p className="text-muted-foreground text-xs">{detail}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+      <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Daily Performance ({performance.total})</CardTitle>
+            <CardTitle>Daily trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OverviewChart rows={trend} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Account coverage</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4 text-sm">
+            {Object.entries(accounts).map(([label, value]) => (
+              <div key={label} className="rounded-lg border p-3">
+                <div className="text-muted-foreground capitalize">{label}</div>
+                <div className="text-2xl font-semibold tabular-nums">
+                  {value}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top campaigns</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Account</TableHead>
                   <TableHead>Campaign</TableHead>
-                  <TableHead>Ad group</TableHead>
-                  <TableHead>Ad</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Spend</TableHead>
                   <TableHead>Leads</TableHead>
-                  <TableHead>Messages</TableHead>
-                  <TableHead>Clicks</TableHead>
+                  <TableHead>CPL</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {performance.rows.length ? (
-                  performance.rows.map((row) => (
+                {campaigns.length ? (
+                  campaigns.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell>{row.date}</TableCell>
+                      <TableCell className="font-medium">{row.name}</TableCell>
                       <TableCell>{row.client ?? "Unassigned"}</TableCell>
-                      <TableCell>{row.sourceAccount}</TableCell>
-                      <TableCell>{row.campaign}</TableCell>
-                      <TableCell>{row.adGroup}</TableCell>
-                      <TableCell>{row.ad}</TableCell>
                       <TableCell>${row.spend}</TableCell>
                       <TableCell>{row.platformLeads}</TableCell>
-                      <TableCell>{row.messagingConversations}</TableCell>
-                      <TableCell>{row.linkClicks}</TableCell>
+                      <TableCell>{row.cpl ? `$${row.cpl}` : "—"}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
+                      colSpan={5}
                       className="text-muted-foreground py-8 text-center"
                     >
-                      No performance data for these filters.
+                      No campaign data.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                disabled={search.performancePage <= 1}
-              >
-                <Link
-                  href={`/dashboard?${new URLSearchParams({ ...Object.fromEntries(query), performancePage: String(Math.max(1, search.performancePage - 1)) })}`}
-                >
-                  Previous
-                </Link>
-              </Button>
-              <span className="text-sm">
-                Page {search.performancePage} of {performancePages}
-              </span>
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                disabled={search.performancePage >= performancePages}
-              >
-                <Link
-                  href={`/dashboard?${new URLSearchParams({ ...Object.fromEntries(query), performancePage: String(Math.min(performancePages, search.performancePage + 1)) })}`}
-                >
-                  Next
-                </Link>
-              </Button>
-            </div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle>Recent Leads ({leadRows.total})</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent leads</CardTitle>
+            <Link href="/dashboard/leads" className="text-primary text-sm">
+              View all
+            </Link>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Captured</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Ad group</TableHead>
-                  <TableHead>Ad</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leadRows.rows.length ? (
-                  leadRows.rows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.occurredAt.toISOString()}</TableCell>
-                      <TableCell>{row.client ?? "Unassigned"}</TableCell>
-                      <TableCell>{row.sourceAccount}</TableCell>
-                      <TableCell>{row.campaign ?? "—"}</TableCell>
-                      <TableCell>{row.adGroup ?? "—"}</TableCell>
-                      <TableCell>{row.ad ?? "—"}</TableCell>
-                      <TableCell>{row.fullName ?? "—"}</TableCell>
-                      <TableCell>{row.email ?? "—"}</TableCell>
-                      <TableCell>{row.phoneNumber ?? "—"}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-muted-foreground py-8 text-center"
-                    >
-                      No leads for these filters.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                disabled={search.leadPage <= 1}
-              >
-                <Link
-                  href={`/dashboard?${new URLSearchParams({ ...Object.fromEntries(query), leadPage: String(Math.max(1, search.leadPage - 1)) })}`}
+          <CardContent className="space-y-3">
+            {recentLeads.length ? (
+              recentLeads.map((lead) => (
+                <div
+                  key={lead.id}
+                  className="flex items-center justify-between gap-4 border-b pb-3"
                 >
-                  Previous
-                </Link>
-              </Button>
-              <span className="text-sm">
-                Page {search.leadPage} of {leadPages}
-              </span>
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                disabled={search.leadPage >= leadPages}
-              >
-                <Link
-                  href={`/dashboard?${new URLSearchParams({ ...Object.fromEntries(query), leadPage: String(Math.min(leadPages, search.leadPage + 1)) })}`}
-                >
-                  Next
-                </Link>
-              </Button>
-            </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {lead.fullName ?? lead.email ?? "Unnamed lead"}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      {lead.campaign ?? lead.sourceAccount}
+                    </p>
+                  </div>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {lead.occurredAt.toISOString().slice(0, 10)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground py-8 text-center text-sm">
+                No leads for these filters.
+              </p>
+            )}
           </CardContent>
         </Card>
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }
