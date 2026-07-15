@@ -1,3 +1,4 @@
+import { ChartNoAxesCombined } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Table,
@@ -8,6 +9,9 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
+import { EmptyState } from "~/features/dashboard/empty-state";
+import { PageHeader } from "~/features/dashboard/page-header";
+import { Pagination } from "~/features/dashboard/pagination";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { api } from "~/trpc/server";
 
@@ -16,7 +20,8 @@ export default async function PerformancePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const search = resolveDashboardPageSearch(await searchParams);
+  const rawSearch = await searchParams;
+  const search = resolveDashboardPageSearch(rawSearch);
   const filters = {
     from: search.from,
     to: search.to,
@@ -38,68 +43,92 @@ export default async function PerformancePage({
     }),
   ]);
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <p className="text-primary text-sm font-medium">Analytics</p>
-        <h1 className="text-3xl font-semibold">Performance</h1>
-        <p className="text-muted-foreground">
-          Daily ad-level results across accessible accounts.
-        </p>
-      </div>
+    <div className="mx-auto max-w-[96rem] space-y-7">
+      <PageHeader
+        eyebrow="Analytics"
+        title="Performance"
+        description="Daily ad-level results across every account you can access."
+        meta={
+          <span className="text-muted-foreground text-xs">
+            {search.from} through {search.to} · inclusive UTC
+          </span>
+        }
+      />
       <DashboardFilters
         values={filters}
         options={options}
         resetPageKeys={["performancePage"]}
       />
-      <Card>
+      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
-          <CardTitle>Daily performance ({performance.total})</CardTitle>
+          <CardTitle className="tracking-tight">
+            Daily performance ({performance.total})
+          </CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Campaign</TableHead>
-                <TableHead>Ad group</TableHead>
-                <TableHead>Ad</TableHead>
-                <TableHead>Spend</TableHead>
-                <TableHead>Leads</TableHead>
-                <TableHead>Messages</TableHead>
-                <TableHead>Clicks</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {performance.rows.length ? (
-                performance.rows.map((row) => (
+        <CardContent className="overflow-x-auto px-0">
+          {performance.rows.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-6">Date</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Ad group</TableHead>
+                  <TableHead>Ad</TableHead>
+                  <TableHead className="text-right">Spend</TableHead>
+                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Messages</TableHead>
+                  <TableHead className="pr-6 text-right">Clicks</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {performance.rows.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>{row.date}</TableCell>
-                    <TableCell>{row.client ?? "Unassigned"}</TableCell>
+                    <TableCell className="pl-6 tabular-nums">
+                      {row.date}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {row.client ?? "Unassigned"}
+                    </TableCell>
                     <TableCell>{row.sourceAccount}</TableCell>
-                    <TableCell>{row.campaign}</TableCell>
+                    <TableCell className="font-medium">
+                      {row.campaign}
+                    </TableCell>
                     <TableCell>{row.adGroup}</TableCell>
                     <TableCell>{row.ad}</TableCell>
-                    <TableCell className="tabular-nums">${row.spend}</TableCell>
-                    <TableCell>{row.platformLeads}</TableCell>
-                    <TableCell>{row.messagingConversations}</TableCell>
-                    <TableCell>{row.linkClicks}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      ${row.spend}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.platformLeads}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.messagingConversations}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right tabular-nums">
+                      {row.linkClicks}
+                    </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={10}
-                    className="text-muted-foreground py-12 text-center"
-                  >
-                    No performance data for these filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <EmptyState
+              icon={ChartNoAxesCombined}
+              title="No performance data"
+              description="No daily performance rows match these filters."
+            />
+          )}
         </CardContent>
+        <Pagination
+          pathname="/dashboard/performance"
+          searchParams={rawSearch}
+          pageKey="performancePage"
+          page={search.performancePage}
+          pageSize={50}
+          total={performance.total}
+        />
       </Card>
     </div>
   );

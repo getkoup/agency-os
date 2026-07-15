@@ -43,7 +43,7 @@ function Memberships({
   disabled: boolean;
 }) {
   return (
-    <div className="grid max-h-40 gap-2 overflow-auto rounded-md border p-3">
+    <div className="border-border/80 bg-secondary/25 grid max-h-44 gap-2 overflow-auto rounded-xl border p-3">
       {options.map((client) => (
         <Label key={client.id} className="flex items-center gap-2 font-normal">
           <Checkbox
@@ -104,7 +104,7 @@ export function UserManagement({
   function roleSelect(value: string, onChange: (next: UserRole) => void) {
     return (
       <select
-        className="bg-background h-9 rounded-md border px-3 text-sm"
+        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
         value={value}
         onChange={(event) => onChange(event.target.value as UserRole)}
       >
@@ -116,7 +116,7 @@ export function UserManagement({
   }
   return (
     <>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end px-5">
         <Dialog
           open={createOpen}
           onOpenChange={(open) => {
@@ -127,9 +127,9 @@ export function UserManagement({
           }}
         >
           <DialogTrigger asChild>
-            <Button>Create user</Button>
+            <Button className="h-11 rounded-full px-5">Create user</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>
               <DialogTitle>Create user</DialogTitle>
               <DialogDescription>
@@ -137,7 +137,7 @@ export function UserManagement({
               </DialogDescription>
             </DialogHeader>
             <form
-              className="space-y-4"
+              className="space-y-5"
               onSubmit={(event) => {
                 event.preventDefault();
                 const data = new FormData(event.currentTarget);
@@ -152,17 +152,28 @@ export function UserManagement({
             >
               <Label>
                 Name
-                <Input name="name" required maxLength={255} />
+                <Input
+                  name="name"
+                  className="mt-2 h-11 rounded-xl"
+                  required
+                  maxLength={255}
+                />
               </Label>
               <Label>
                 Email
-                <Input name="email" type="email" required />
+                <Input
+                  name="email"
+                  className="mt-2 h-11 rounded-xl"
+                  type="email"
+                  required
+                />
               </Label>
               <Label>
                 Initial password
                 <Input
                   name="password"
                   type="password"
+                  className="mt-2 h-11 rounded-xl"
                   required
                   minLength={12}
                 />
@@ -183,8 +194,12 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button type="submit" disabled={create.isPending}>
-                  Create user
+                <Button
+                  className="h-11 sm:min-w-32"
+                  type="submit"
+                  disabled={create.isPending}
+                >
+                  {create.isPending ? "Creating…" : "Create user"}
                 </Button>
               </DialogFooter>
             </form>
@@ -195,7 +210,7 @@ export function UserManagement({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
+              <TableHead className="pl-6">User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Clients</TableHead>
@@ -205,17 +220,26 @@ export function UserManagement({
           <TableBody>
             {rows.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>
+                <TableCell className="pl-6">
                   <div className="font-medium">{user.name ?? user.email}</div>
                   <div className="text-muted-foreground text-xs">
                     {user.email}
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{user.role}</Badge>
+                  <Badge variant="secondary" className="capitalize">
+                    {user.role}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{user.status}</Badge>
+                  <Badge
+                    variant={
+                      user.status === "active" ? "secondary" : "destructive"
+                    }
+                    className="capitalize"
+                  >
+                    {user.status}
+                  </Badge>
                 </TableCell>
                 <TableCell>
                   {user.clients.length
@@ -266,7 +290,7 @@ export function UserManagement({
         }}
       >
         {editing ? (
-          <DialogContent>
+          <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>
               <DialogTitle>Edit {editing.name ?? editing.email}</DialogTitle>
             </DialogHeader>
@@ -292,6 +316,7 @@ export function UserManagement({
                 <Input
                   name="name"
                   defaultValue={editing.name ?? editing.email}
+                  className="mt-2 h-11 rounded-xl"
                   required
                 />
               </Label>
@@ -305,7 +330,7 @@ export function UserManagement({
                 <select
                   name="status"
                   defaultValue={editing.status}
-                  className="bg-background ml-3 h-9 rounded-md border px-3"
+                  className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 mt-2 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -321,8 +346,12 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button type="submit" disabled={update.isPending}>
-                  Save changes
+                <Button
+                  className="h-11 sm:min-w-32"
+                  type="submit"
+                  disabled={update.isPending}
+                >
+                  {update.isPending ? "Saving…" : "Save changes"}
                 </Button>
               </DialogFooter>
             </form>
@@ -336,7 +365,7 @@ export function UserManagement({
         }}
       >
         {resetting ? (
-          <DialogContent>
+          <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>
               <DialogTitle>Reset password</DialogTitle>
               <DialogDescription>
@@ -359,6 +388,7 @@ export function UserManagement({
                 <Input
                   name="password"
                   type="password"
+                  className="mt-2 h-11 rounded-xl"
                   minLength={12}
                   required
                 />
@@ -367,8 +397,12 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button type="submit" disabled={reset.isPending}>
-                  Reset password
+                <Button
+                  className="h-11 sm:min-w-32"
+                  type="submit"
+                  disabled={reset.isPending}
+                >
+                  {reset.isPending ? "Resetting…" : "Reset password"}
                 </Button>
               </DialogFooter>
             </form>

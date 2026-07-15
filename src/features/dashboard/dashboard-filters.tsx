@@ -47,32 +47,38 @@ export function DashboardFilters({
   }
 
   return (
-    <div className="bg-card grid gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-5">
-      <div className="space-y-2">
-        <Label htmlFor="from">From</Label>
+    <div className="shadow-sage border-border/80 bg-secondary/35 grid gap-3 rounded-[1.2rem] border p-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="space-y-1.5">
+        <Label htmlFor="from" className="text-muted-foreground px-1 text-xs">
+          From
+        </Label>
         <Input
           id="from"
           type="date"
           value={values.from}
+          className="bg-card h-11 rounded-xl"
           onChange={(event) => updateFilter("from", event.target.value)}
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="to">To</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="to" className="text-muted-foreground px-1 text-xs">
+          To
+        </Label>
         <Input
           id="to"
           type="date"
           value={values.to}
+          className="bg-card h-11 rounded-xl"
           onChange={(event) => updateFilter("to", event.target.value)}
         />
       </div>
-      <div className="space-y-2">
-        <Label>Client</Label>
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground px-1 text-xs">Client</Label>
         <Select
           value={values.clientId ?? "all"}
           onValueChange={(value) => updateFilter("clientId", value)}
         >
-          <SelectTrigger>
+          <SelectTrigger className="bg-card h-11 w-full rounded-xl">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -88,13 +94,13 @@ export function DashboardFilters({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-2">
-        <Label>Platform</Label>
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground px-1 text-xs">Platform</Label>
         <Select
           value={values.platform ?? "all"}
           onValueChange={(value) => updateFilter("platform", value)}
         >
-          <SelectTrigger>
+          <SelectTrigger className="bg-card h-11 w-full rounded-xl">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -107,13 +113,13 @@ export function DashboardFilters({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-2">
-        <Label>Campaign</Label>
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground px-1 text-xs">Campaign</Label>
         <Select
           value={values.campaignId ?? "all"}
           onValueChange={(value) => updateFilter("campaignId", value)}
         >
-          <SelectTrigger>
+          <SelectTrigger className="bg-card h-11 w-full rounded-xl">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -31,17 +31,18 @@ export function AccountFilters({
     router.push(`${pathname}?${next.toString()}`);
   }
   return (
-    <div className="bg-card grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="shadow-sage border-border/80 bg-secondary/35 grid gap-3 rounded-[1.2rem] border p-3 sm:grid-cols-2 lg:grid-cols-5">
       <Input
         placeholder="Search accounts"
         defaultValue={search.get("query") ?? ""}
+        className="bg-card h-11 rounded-xl"
         onBlur={(event) => update("query", event.target.value.trim())}
       />
       <Select
         value={search.get("clientId") ?? "all"}
         onValueChange={(value) => update("clientId", value)}
       >
-        <SelectTrigger>
+        <SelectTrigger className="bg-card h-11 w-full rounded-xl">
           <SelectValue placeholder="Client" />
         </SelectTrigger>
         <SelectContent>
@@ -60,7 +61,7 @@ export function AccountFilters({
         value={search.get("platform") ?? "all"}
         onValueChange={(value) => update("platform", value)}
       >
-        <SelectTrigger>
+        <SelectTrigger className="bg-card h-11 w-full rounded-xl">
           <SelectValue placeholder="Platform" />
         </SelectTrigger>
         <SelectContent>
@@ -76,7 +77,7 @@ export function AccountFilters({
         value={search.get("status") ?? "all"}
         onValueChange={(value) => update("status", value)}
       >
-        <SelectTrigger>
+        <SelectTrigger className="bg-card h-11 w-full rounded-xl">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
@@ -90,7 +91,7 @@ export function AccountFilters({
         value={search.get("assignment") ?? "all"}
         onValueChange={(value) => update("assignment", value)}
       >
-        <SelectTrigger>
+        <SelectTrigger className="bg-card h-11 w-full rounded-xl">
           <SelectValue placeholder="Assignment" />
         </SelectTrigger>
         <SelectContent>

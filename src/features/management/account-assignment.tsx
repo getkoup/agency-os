@@ -39,11 +39,11 @@ export function AccountAssignment({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" className="rounded-full">
           {currentClientId ? "Reassign" : "Assign client"}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
         <DialogHeader>
           <DialogTitle>Assign source account</DialogTitle>
           <DialogDescription>
@@ -51,7 +51,7 @@ export function AccountAssignment({
           </DialogDescription>
         </DialogHeader>
         <select
-          className="bg-background h-10 rounded-md border px-3"
+          className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
           value={clientId}
           onChange={(event) => setClientId(event.target.value)}
         >
@@ -66,6 +66,7 @@ export function AccountAssignment({
         <DialogFooter>
           <Button
             disabled={mutation.isPending}
+            className="h-11 sm:min-w-32"
             onClick={() =>
               mutation.mutate({
                 sourceAccountId,
@@ -73,7 +74,7 @@ export function AccountAssignment({
               })
             }
           >
-            Save assignment
+            {mutation.isPending ? "Saving…" : "Save assignment"}
           </Button>
         </DialogFooter>
       </DialogContent>
