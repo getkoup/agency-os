@@ -1,0 +1,76 @@
+import {
+  BarChart3,
+  Building2,
+  DatabaseZap,
+  LayoutDashboard,
+  ListFilter,
+  Users,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
+
+import { type UserRole } from "~/lib/roles";
+
+export type DashboardDestination = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  roles: UserRole[];
+  group: "Workspace" | "Administration";
+};
+
+export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
+  {
+    href: "/dashboard",
+    label: "Overview",
+    icon: LayoutDashboard,
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/performance",
+    label: "Performance",
+    icon: BarChart3,
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/accounts",
+    label: "Accounts",
+    icon: WalletCards,
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/leads",
+    label: "Leads",
+    icon: ListFilter,
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/clients",
+    label: "Clients",
+    icon: Building2,
+    roles: ["owner", "admin"],
+    group: "Administration",
+  },
+  {
+    href: "/dashboard/synchronization",
+    label: "Synchronization",
+    icon: DatabaseZap,
+    roles: ["owner", "admin"],
+    group: "Administration",
+  },
+  {
+    href: "/dashboard/users",
+    label: "Users & Access",
+    icon: Users,
+    roles: ["owner"],
+    group: "Administration",
+  },
+];
+
+export function isDestinationActive(pathname: string, href: string) {
+  return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+}

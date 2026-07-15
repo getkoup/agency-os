@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WalletCards } from "lucide-react";
 import { z } from "zod";
 
 import { Badge } from "~/components/ui/badge";
@@ -13,6 +14,9 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { AccountFilters } from "~/features/dashboard/account-filters";
+import { EmptyState } from "~/features/dashboard/empty-state";
+import { PageHeader } from "~/features/dashboard/page-header";
+import { Pagination } from "~/features/dashboard/pagination";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { AccountAssignment } from "~/features/management/account-assignment";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
@@ -66,31 +70,43 @@ export default async function AccountsPage({
       : Promise.resolve([]),
   ]);
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <p className="text-primary text-sm font-medium">Inventory</p>
-        <h1 className="text-3xl font-semibold">Source accounts</h1>
-        <p className="text-muted-foreground">
-          Connection health and client ownership for accessible accounts.
-        </p>
-      </div>
+    <div className="mx-auto max-w-[96rem] space-y-7">
+      <PageHeader
+        eyebrow="Inventory"
+        title="Source accounts"
+        description="Connection health, client ownership, and access across your ad account portfolio."
+      />
       <AccountFilters
         clients={options.clients}
         platforms={options.platforms}
         includeUnassigned={options.includeUnassigned}
       />
-      <Card>
+      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
-          <CardTitle>Accounts ({accounts.total})</CardTitle>
+          <CardTitle className="tracking-tight">
+            Accounts ({accounts.total})
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:hidden">
+        <CardContent className="px-0">
+          <div className="grid gap-3 px-5 lg:hidden">
             {accounts.rows.map((row) => (
-              <Card key={row.id}>
-                <CardContent className="space-y-2 p-4">
+              <Card
+                key={row.id}
+                className="border-border/80 rounded-[1.1rem] shadow-none"
+              >
+                <CardContent className="space-y-3 p-4">
                   <div className="flex justify-between gap-3">
                     <strong>{row.name}</strong>
-                    <Badge variant="outline">{row.status}</Badge>
+                    <Badge
+                      variant={
+                        row.status === "disconnected"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                      className="capitalize"
+                    >
+                      {row.status}
+                    </Badge>
                   </div>
                   <p className="text-muted-foreground text-sm">
                     {row.client?.name ?? "Unassigned"} · {row.platform}
@@ -106,11 +122,11 @@ export default async function AccountsPage({
               </Card>
             ))}
           </div>
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden overflow-x-auto lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Account</TableHead>
+                  <TableHead className="pl-6">Account</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Platform</TableHead>
                   <TableHead>Status</TableHead>
@@ -119,80 +135,95 @@ export default async function AccountsPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.rows.length ? (
-                  accounts.rows.map((row) => {
-                    const management = managed?.rows.find(
-                      ({ id }) => id === row.id,
-                    );
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">
-                          {row.name}
-                          <div className="text-muted-foreground text-xs">
-                            {row.connector}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {row.client?.name ?? "Unassigned"}
-                        </TableCell>
-                        <TableCell>{row.platform}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{row.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {row.lastSyncedAt?.toISOString() ?? "—"}
-                        </TableCell>
-                        {managed ? (
+                {accounts.rows.length
+                  ? accounts.rows.map((row) => {
+                      const management = managed?.rows.find(
+                        ({ id }) => id === row.id,
+                      );
+                      return (
+                        <TableRow key={row.id}>
+                          <TableCell className="pl-6 font-medium">
+                            {row.name}
+                            <div className="text-muted-foreground text-xs">
+                              {row.connector}
+                            </div>
+                          </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <AccountAssignment
-                                sourceAccountId={row.id}
-                                currentClientId={row.client?.id ?? null}
-                                clients={clientOptions}
-                              />
-                              {management?.client &&
-                              management.clientUserCount === 0 ? (
-                                <>
-                                  <Badge variant="destructive">
-                                    No client users
-                                  </Badge>
+                            {row.client?.name ?? "Unassigned"}
+                          </TableCell>
+                          <TableCell>{row.platform}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                row.status === "disconnected"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="capitalize"
+                            >
+                              {row.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {row.lastSyncedAt?.toISOString() ?? "—"}
+                          </TableCell>
+                          {managed ? (
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <AccountAssignment
+                                  sourceAccountId={row.id}
+                                  currentClientId={row.client?.id ?? null}
+                                  clients={clientOptions}
+                                />
+                                {management?.client &&
+                                management.clientUserCount === 0 ? (
+                                  <>
+                                    <Badge variant="destructive">
+                                      No client users
+                                    </Badge>
+                                    <Button asChild size="sm" variant="ghost">
+                                      <Link
+                                        href={`/dashboard/users?clientId=${management.client.id}`}
+                                      >
+                                        Add client user
+                                      </Link>
+                                    </Button>
+                                  </>
+                                ) : management?.client ? (
                                   <Button asChild size="sm" variant="ghost">
                                     <Link
                                       href={`/dashboard/users?clientId=${management.client.id}`}
                                     >
-                                      Add client user
+                                      {management.clientUserCount} users
                                     </Link>
                                   </Button>
-                                </>
-                              ) : management?.client ? (
-                                <Button asChild size="sm" variant="ghost">
-                                  <Link
-                                    href={`/dashboard/users?clientId=${management.client.id}`}
-                                  >
-                                    {management.clientUserCount} users
-                                  </Link>
-                                </Button>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                        ) : null}
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="text-muted-foreground py-12 text-center"
-                    >
-                      No accounts match these filters.
-                    </TableCell>
-                  </TableRow>
-                )}
+                                ) : null}
+                              </div>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      );
+                    })
+                  : null}
               </TableBody>
             </Table>
           </div>
+          {!accounts.rows.length ? (
+            <EmptyState
+              icon={WalletCards}
+              title="No accounts found"
+              description="No source accounts match the current filters."
+            />
+          ) : null}
         </CardContent>
+        <Pagination
+          pathname="/dashboard/accounts"
+          searchParams={raw}
+          pageKey="accountPage"
+          page={search.accountPage}
+          pageSize={25}
+          total={accounts.total}
+        />
       </Card>
     </div>
   );

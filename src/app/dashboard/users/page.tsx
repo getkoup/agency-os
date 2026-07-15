@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { PageHeader } from "~/features/dashboard/page-header";
 import { UserManagement } from "~/features/management/user-management";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
@@ -13,19 +14,19 @@ export default async function UsersPage() {
     api.management.clientOptions({ limit: 50 }),
   ]);
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <p className="text-primary text-sm font-medium">Owner settings</p>
-        <h1 className="text-3xl font-semibold">Users &amp; Access</h1>
-        <p className="text-muted-foreground">
-          Manage roles, client memberships, status, and passwords.
-        </p>
-      </div>
-      <Card>
+    <div className="mx-auto max-w-[96rem] space-y-7">
+      <PageHeader
+        eyebrow="Owner settings"
+        title="Users & Access"
+        description="Manage roles, client memberships, account status, and password resets."
+      />
+      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
-          <CardTitle>Users ({users.total})</CardTitle>
+          <CardTitle className="tracking-tight">
+            Users ({users.total})
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <UserManagement rows={users.rows} clients={clients} />
         </CardContent>
       </Card>

@@ -1,3 +1,4 @@
+import { Building2 } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { Badge } from "~/components/ui/badge";
@@ -11,7 +12,12 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
-import { ClientManagement } from "~/features/management/client-management";
+import { EmptyState } from "~/features/dashboard/empty-state";
+import { PageHeader } from "~/features/dashboard/page-header";
+import {
+  ClientEditButton,
+  ClientManagement,
+} from "~/features/management/client-management";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -35,69 +41,90 @@ export default async function ClientsPage({
       : Promise.resolve(null),
   ]);
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-primary text-sm font-medium">Agency</p>
-          <h1 className="text-3xl font-semibold">Clients</h1>
-          <p className="text-muted-foreground">
-            Client-level totals without exposing memberships to read-only
-            admins.
-          </p>
-        </div>
-        {managed ? <ClientManagement rows={managed.rows} /> : null}
-      </div>
-      <Card>
+    <div className="mx-auto max-w-[96rem] space-y-7">
+      <PageHeader
+        eyebrow="Agency"
+        title="Clients"
+        description="Client-level portfolio totals and access health without exposing private memberships."
+        actions={managed ? <ClientManagement /> : undefined}
+      />
+      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
-          <CardTitle>Clients ({result.total})</CardTitle>
+          <CardTitle className="tracking-tight">
+            Clients ({result.total})
+          </CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Accounts</TableHead>
-                <TableHead>Spend</TableHead>
-                <TableHead>Platform leads</TableHead>
-                <TableHead>Captured leads</TableHead>
-                {managed ? <TableHead>Client users</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {result.rows.length ? (
-                result.rows.map((row) => {
+        <CardContent className="overflow-x-auto px-0">
+          {result.rows.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-6">Client</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Accounts</TableHead>
+                  <TableHead>Spend</TableHead>
+                  <TableHead>Platform leads</TableHead>
+                  <TableHead>Captured leads</TableHead>
+                  {managed ? <TableHead>Client users</TableHead> : null}
+                  {managed ? (
+                    <TableHead className="pr-6 text-right">Actions</TableHead>
+                  ) : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {result.rows.map((row) => {
                   const counts = managed?.rows.find(({ id }) => id === row.id);
                   return (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{row.status}</Badge>
+                      <TableCell className="pl-6 font-medium">
+                        {row.name}
                       </TableCell>
-                      <TableCell>{row.sourceAccountCount}</TableCell>
-                      <TableCell>${row.spend}</TableCell>
-                      <TableCell>{row.platformLeads}</TableCell>
-                      <TableCell>{row.capturedLeads}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            row.status === "active"
+                              ? "secondary"
+                              : "destructive"
+                          }
+                          className="capitalize"
+                        >
+                          {row.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.sourceAccountCount}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        ${row.spend}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.platformLeads}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.capturedLeads}
+                      </TableCell>
                       {managed ? (
-                        <TableCell>
+                        <TableCell className="tabular-nums">
                           {counts?.activeClientUserCount ?? 0}
+                        </TableCell>
+                      ) : null}
+                      {counts ? (
+                        <TableCell className="pr-6 text-right">
+                          <ClientEditButton row={counts} />
                         </TableCell>
                       ) : null}
                     </TableRow>
                   );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-muted-foreground py-12 text-center"
-                  >
-                    No clients match these filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <EmptyState
+              icon={Building2}
+              title="No clients found"
+              description="No client workspaces match the current view."
+            />
+          )}
         </CardContent>
       </Card>
     </div>
