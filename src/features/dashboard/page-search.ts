@@ -8,6 +8,9 @@ const dashboardPageSearchSchema = z.object({
   campaignId: z.string().uuid().optional(),
   performancePage: z.coerce.number().int().positive().default(1),
   leadPage: z.coerce.number().int().positive().default(1),
+  clientPage: z.coerce.number().int().positive().default(1),
+  revenuePage: z.coerce.number().int().positive().default(1),
+  rulePage: z.coerce.number().int().positive().default(1),
 });
 
 export interface DashboardPageSearch {
@@ -18,6 +21,9 @@ export interface DashboardPageSearch {
   campaignId?: string;
   performancePage: number;
   leadPage: number;
+  clientPage: number;
+  revenuePage: number;
+  rulePage: number;
 }
 
 export function resolveDashboardPageSearch(

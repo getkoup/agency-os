@@ -4,11 +4,14 @@ import { z } from "zod";
 import { resolveAccessibleClientScope } from "~/features/dashboard/server/client-scope";
 import {
   getAccountSummary,
+  getClientHealthRows,
   getClientAnalytics,
   getDashboardOverview,
   getFilterOptions,
   getLeadRows,
+  getLeadAnalytics,
   getPerformanceRows,
+  getRevenueRows,
   getSourceAccountRows,
   getSyncRuns,
   getTopCampaigns,
@@ -35,11 +38,11 @@ export const dashboardRouter = createTRPCRouter({
   filterOptions: protectedProcedure
     .input(filterOptionsInputSchema)
     .query(async ({ ctx, input }) => {
-      const scope = await resolveAccessibleClientScope(
-        ctx.currentUser,
-        input.clientId,
-      );
-      return getFilterOptions(input, scope);
+      const [scope, clientOptionScope] = await Promise.all([
+        resolveAccessibleClientScope(ctx.currentUser, input.clientId),
+        resolveAccessibleClientScope(ctx.currentUser, undefined),
+      ]);
+      return getFilterOptions(input, scope, clientOptionScope);
     }),
   overview: protectedProcedure
     .input(dashboardFiltersSchema)
@@ -77,6 +80,24 @@ export const dashboardRouter = createTRPCRouter({
       );
       const result = await getLeadRows(input, scope, 1, 5);
       return result.rows;
+    }),
+  clientHealth: protectedProcedure
+    .input(dashboardFiltersSchema)
+    .query(async ({ ctx, input }) => {
+      const scope = await resolveAccessibleClientScope(
+        ctx.currentUser,
+        input.clientId,
+      );
+      return getClientHealthRows(input, scope);
+    }),
+  leadAnalytics: protectedProcedure
+    .input(dashboardFiltersSchema)
+    .query(async ({ ctx, input }) => {
+      const scope = await resolveAccessibleClientScope(
+        ctx.currentUser,
+        input.clientId,
+      );
+      return getLeadAnalytics(input, scope);
     }),
   accountSummary: protectedProcedure
     .input(
@@ -146,13 +167,28 @@ export const dashboardRouter = createTRPCRouter({
       z.object({
         from: z.string().date(),
         to: z.string().date(),
+        clientId: z.string().uuid().optional(),
         query: z.string().trim().optional(),
         status: z.enum(["active", "inactive"]).optional(),
         page: z.number().int().positive().default(1),
         pageSize: z.number().int().positive().max(100).default(25),
       }),
     )
-    .query(({ input }) => getClientAnalytics(input)),
+    .query(({ input }) =>
+      getClientAnalytics({
+        ...input,
+        clientIds: input.clientId ? [input.clientId] : undefined,
+      }),
+    ),
+  revenue: agencyProcedure
+    .input(dashboardListInputSchema)
+    .query(async ({ ctx, input }) => {
+      const scope = await resolveAccessibleClientScope(
+        ctx.currentUser,
+        input.clientId,
+      );
+      return getRevenueRows(input, scope, input.page, input.pageSize);
+    }),
   performance: protectedProcedure
     .input(dashboardListInputSchema)
     .query(async ({ ctx, input }) => {

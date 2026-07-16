@@ -50,6 +50,8 @@ try {
   `;
   await applyMigration(test, "drizzle/0001_proper_dashboard_rbac.sql");
   await applyMigration(test, "drizzle/0002_nifty_roland_deschain.sql");
+  await applyMigration(test, "drizzle/0003_glamorous_vulture.sql");
+  await applyMigration(test, "drizzle/0004_mute_northstar.sql");
   const rows =
     await test`select "id", "email", "role", "status" from "agency_os_user" order by "id"`;
   const enumRows = await test`
@@ -102,11 +104,59 @@ try {
     returning "id"
   `;
   if (!client) throw new Error("Migration client was not created");
-  await test`
+  const [mapping] = await test`
     insert into "agency_os_integration_mapping"
       ("clientId", "provider", "externalLocationId", "syncFromAt")
     values (${client.id}, 'ghl', 'migration-location', now())
+    returning "id", "timezone"
   `;
+  if (!mapping) throw new Error("Integration mapping was not created");
+  if (mapping.timezone !== "UTC") {
+    throw new Error("Integration mapping timezone does not default to UTC");
+  }
+  const [contact] = await test`
+    insert into "agency_os_ghl_contact"
+      ("integrationMappingId", "externalId", "providerUpdatedAt", "rawPayload")
+    values (${mapping.id}, 'migration-contact', now(), '{}')
+    returning "id", "tags"
+  `;
+  if (!contact || contact.tags.length !== 0) {
+    throw new Error("GHL contact tags do not default to an empty array");
+  }
+  const [opportunity] = await test`
+    insert into "agency_os_ghl_opportunity"
+      ("integrationMappingId", "contactId", "externalId", "status", "wonAt",
+       "providerUpdatedAt", "rawPayload")
+    values (${mapping.id}, ${contact.id}, 'migration-opportunity', 'won', now(),
+      now(), '{}')
+    returning "tags"
+  `;
+  if (!opportunity || opportunity.tags.length !== 0) {
+    throw new Error("GHL opportunity tags do not default to an empty array");
+  }
+  await test`
+    insert into "agency_os_revenue_rule"
+      ("clientId", "tagName", "revenueValue")
+    values (${client.id}, 'Qualified', 125.50)
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_revenue_rule"
+          ("clientId", "tagName", "revenueValue")
+        values (${client.id}, 'qualified', 200)
+      `,
+    "case-insensitive revenue rule uniqueness",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_revenue_rule"
+          ("clientId", "tagName", "revenueValue")
+        values (${client.id}, 'Invalid', -0.01)
+      `,
+    "non-negative revenue value",
+  );
   await expectConstraintViolation(
     () =>
       test!`
