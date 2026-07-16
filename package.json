@@ -20,7 +20,7 @@
     "preview": "next build && next start",
     "start": "next start",
     "test": "vitest run",
-    "test:migration": "bun scripts/verify-role-migration.ts",
+    "test:migration": "bun scripts/verify-migrations.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
