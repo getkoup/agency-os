@@ -69,11 +69,13 @@ export function DateRangeFilter({
   to,
   preset,
   onChange,
+  className,
 }: {
   from: string;
   to: string;
   preset: DatePreset;
   onChange: (from: string, to: string, preset: DatePreset) => void;
+  className?: string;
 }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [draftRange, setDraftRange] = useState<DateRange>({
@@ -97,72 +99,84 @@ export function DateRangeFilter({
   }
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-muted-foreground px-1 text-xs">Date range</Label>
-      <div className="flex gap-2">
-        <Select
-          value={preset}
-          onValueChange={(value) => selectPreset(value as DatePreset)}
-        >
-          <SelectTrigger className="bg-card h-11 min-w-0 flex-1 rounded-xl">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {presets.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              className="bg-card h-11 rounded-xl px-3"
-              aria-label={`Selected dates: ${rangeLabel({ from: parseDate(from), to: parseDate(to) })}`}
-            >
-              <CalendarDays aria-hidden="true" />
-              <span className="hidden whitespace-nowrap 2xl:inline">
-                {rangeLabel({ from: parseDate(from), to: parseDate(to) })}
-              </span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto overflow-hidden p-0">
-            <Calendar
-              mode="range"
-              selected={draftRange}
-              onSelect={(range) =>
-                setDraftRange(range ?? { from: undefined, to: undefined })
-              }
-              defaultMonth={draftRange.from}
-              numberOfMonths={2}
-            />
-            <div className="border-border flex items-center justify-between gap-4 border-t p-3">
-              <p className="text-muted-foreground text-xs">
-                {rangeLabel(draftRange)}
-              </p>
+    <div className={className}>
+      <div className="grid items-end gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label className="text-foreground/75 px-0.5 text-xs font-medium">
+            Range
+          </Label>
+          <Select
+            value={preset}
+            onValueChange={(value) => selectPreset(value as DatePreset)}
+          >
+            <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-md shadow-xs transition-colors data-[size=default]:h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-foreground/75 px-0.5 text-xs font-medium">
+            Dates
+          </Label>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
               <Button
                 type="button"
-                size="sm"
-                disabled={!draftRange.from}
-                onClick={() => {
-                  if (!draftRange.from) return;
-                  const rangeEnd = draftRange.to ?? draftRange.from;
-                  onChange(
-                    format(draftRange.from, "yyyy-MM-dd"),
-                    format(rangeEnd, "yyyy-MM-dd"),
-                    "custom",
-                  );
-                  setCalendarOpen(false);
-                }}
+                variant="outline"
+                className="border-border/80 bg-background/70 hover:border-primary/25 h-10 w-full justify-start rounded-md px-3 shadow-xs transition-colors"
+                aria-label={`Selected dates: ${rangeLabel({ from: parseDate(from), to: parseDate(to) })}`}
               >
-                Apply range
+                <CalendarDays aria-hidden="true" />
+                <span className="truncate whitespace-nowrap">
+                  {rangeLabel({ from: parseDate(from), to: parseDate(to) })}
+                </span>
               </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-auto overflow-hidden p-0"
+            >
+              <Calendar
+                mode="range"
+                selected={draftRange}
+                onSelect={(range) =>
+                  setDraftRange(range ?? { from: undefined, to: undefined })
+                }
+                defaultMonth={draftRange.from}
+                numberOfMonths={2}
+              />
+              <div className="border-border flex items-center justify-between gap-4 border-t p-3">
+                <p className="text-muted-foreground text-xs">
+                  {rangeLabel(draftRange)}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!draftRange.from}
+                  onClick={() => {
+                    if (!draftRange.from) return;
+                    const rangeEnd = draftRange.to ?? draftRange.from;
+                    onChange(
+                      format(draftRange.from, "yyyy-MM-dd"),
+                      format(rangeEnd, "yyyy-MM-dd"),
+                      "custom",
+                    );
+                    setCalendarOpen(false);
+                  }}
+                >
+                  Apply range
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </div>
   );
