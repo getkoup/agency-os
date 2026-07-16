@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { CalendarCheck, CircleDollarSign, Tags } from "lucide-react";
 import { notFound } from "next/navigation";
 
-import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Table,
@@ -34,7 +32,7 @@ export default async function RevenuePage({
   const filters = {
     from: search.from,
     to: search.to,
-    clientId: search.clientId,
+    clientId: undefined,
   };
   const [options, revenue] = await Promise.all([
     api.dashboard.filterOptions(filters),
@@ -60,6 +58,7 @@ export default async function RevenuePage({
       <DashboardFilters
         values={filters}
         options={options}
+        showClient={false}
         showPlatform={false}
         showCampaign={false}
         resetPageKeys={["revenuePage"]}
@@ -79,45 +78,30 @@ export default async function RevenuePage({
           icon={CalendarCheck}
         />
         <MetricCard
-          label="Missing Rules"
+          label="Missing Revenue Rules"
           value={revenue.missingRules.toLocaleString()}
           supporting="Bookings with zero active matches"
           icon={Tags}
         />
       </section>
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="tracking-tight">
-              Opportunity ledger ({revenue.total})
-            </CardTitle>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Each booking sums every distinct matching tag rule.
-            </p>
-          </div>
-          {revenue.missingRules > 0 ? (
-            <Link
-              href="/dashboard/settings"
-              className="text-primary text-sm font-medium hover:underline"
-            >
-              Manage revenue rules
-            </Link>
-          ) : null}
+        <CardHeader>
+          <CardTitle className="tracking-tight">
+            Opportunity ledger ({revenue.total})
+          </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {revenue.rows.length ? (
-            <Table className="min-w-[72rem]">
+            <Table className="min-w-[48rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Created locally</TableHead>
+                  <TableHead className="pl-6">Client local date</TableHead>
                   <TableHead>Client</TableHead>
-                  <TableHead>Opportunity / Contact</TableHead>
+                  <TableHead>Opportunity</TableHead>
                   <TableHead>Tags</TableHead>
-                  <TableHead>Matched services</TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="pr-6 text-right">
                     Estimated revenue
                   </TableHead>
-                  <TableHead className="pr-6">Rule status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -127,36 +111,14 @@ export default async function RevenuePage({
                       {formatClientDate(row.wonAt, row.timezone)}
                     </TableCell>
                     <TableCell>{row.client}</TableCell>
-                    <TableCell>
-                      <p className="font-medium">
-                        {row.opportunity ?? "Unnamed opportunity"}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {row.contact ?? row.email ?? "Unknown contact"}
-                      </p>
+                    <TableCell className="font-medium">
+                      {row.opportunity ?? "Unnamed opportunity"}
                     </TableCell>
                     <TableCell className="max-w-64 whitespace-normal">
                       {row.tags.length ? row.tags.join(", ") : "—"}
                     </TableCell>
-                    <TableCell className="max-w-64 whitespace-normal">
-                      {row.matchedServices.length
-                        ? row.matchedServices.join(", ")
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="pr-6 text-right tabular-nums">
                       ${row.estimatedRevenue}
-                    </TableCell>
-                    <TableCell className="pr-6">
-                      <Badge
-                        variant={
-                          row.ruleStatus === "matched"
-                            ? "default"
-                            : "destructive"
-                        }
-                        className="capitalize"
-                      >
-                        {row.ruleStatus}
-                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}

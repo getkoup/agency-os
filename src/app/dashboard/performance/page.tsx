@@ -58,6 +58,9 @@ export default async function PerformancePage({
         values={filters}
         options={options}
         resetPageKeys={["performancePage"]}
+        showClient={false}
+        showPlatform={false}
+        showCampaign={false}
       />
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
@@ -67,20 +70,16 @@ export default async function PerformancePage({
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {performance.rows.length ? (
-            <Table className="min-w-[86rem]">
+            <Table className="min-w-[64rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Date</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Account</TableHead>
                   <TableHead>Creative / Ad</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Campaign</TableHead>
-                  <TableHead>Ad group</TableHead>
-                  <TableHead className="text-right">Spend</TableHead>
-                  <TableHead className="text-right">Captured leads</TableHead>
-                  <TableHead className="text-right">Platform leads</TableHead>
-                  <TableHead className="text-right">Messages</TableHead>
                   <TableHead className="text-right">Clicks</TableHead>
+                  <TableHead className="text-right">Spend</TableHead>
+                  <TableHead className="text-right">Leads</TableHead>
                   <TableHead className="text-right">CTR</TableHead>
                   <TableHead className="text-right">CPC</TableHead>
                   <TableHead className="pr-6 text-right">CPL</TableHead>
@@ -92,27 +91,19 @@ export default async function PerformancePage({
                     <TableCell className="pl-6 tabular-nums">
                       {row.date}
                     </TableCell>
+                    <TableCell className="font-medium">{row.ad}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.client ?? "Unassigned"}
                     </TableCell>
-                    <TableCell>{row.sourceAccount}</TableCell>
-                    <TableCell className="font-medium">{row.ad}</TableCell>
                     <TableCell>{row.campaign}</TableCell>
-                    <TableCell>{row.adGroup}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.linkClicks}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       ${row.spend}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.capturedLeads}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
                       {row.platformLeads}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.messagingConversations}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.linkClicks}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.ctr ? `${row.ctr}%` : "—"}

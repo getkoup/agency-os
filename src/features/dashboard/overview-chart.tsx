@@ -19,14 +19,14 @@ export function OverviewChart({
   rows: Array<{
     date: string;
     spend: string;
-    platformLeads: number;
     capturedLeads: number;
+    wonOpportunities: number;
   }>;
 }) {
   const data = rows.map((row) => ({ ...row, spend: Number(row.spend) }));
   const hasActivity = data.some(
     (row) =>
-      row.spend !== 0 || row.platformLeads !== 0 || row.capturedLeads !== 0,
+      row.spend !== 0 || row.capturedLeads !== 0 || row.wonOpportunities !== 0,
   );
   if (!hasActivity) {
     return (
@@ -40,8 +40,11 @@ export function OverviewChart({
       className="h-72 w-full sm:h-80"
       config={{
         spend: { label: "Spend", color: "var(--chart-1)" },
-        platformLeads: { label: "Platform leads", color: "var(--chart-2)" },
-        capturedLeads: { label: "Captured leads", color: "var(--chart-3)" },
+        capturedLeads: { label: "Captured leads", color: "var(--chart-2)" },
+        wonOpportunities: {
+          label: "Won opportunities",
+          color: "var(--chart-3)",
+        },
       }}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -77,6 +80,7 @@ export function OverviewChart({
           <Area
             yAxisId="money"
             dataKey="spend"
+            name="Spend"
             type="monotone"
             fill="var(--color-spend)"
             fillOpacity={0.12}
@@ -85,17 +89,19 @@ export function OverviewChart({
           />
           <Line
             yAxisId="count"
-            dataKey="platformLeads"
+            dataKey="capturedLeads"
+            name="Captured leads"
             type="monotone"
-            stroke="var(--color-platformLeads)"
+            stroke="var(--color-capturedLeads)"
             strokeWidth={2.5}
             dot={false}
           />
           <Line
             yAxisId="count"
-            dataKey="capturedLeads"
+            dataKey="wonOpportunities"
+            name="Won opportunities"
             type="monotone"
-            stroke="var(--color-capturedLeads)"
+            stroke="var(--color-wonOpportunities)"
             strokeWidth={2.5}
             dot={false}
           />

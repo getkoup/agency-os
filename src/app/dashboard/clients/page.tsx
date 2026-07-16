@@ -16,10 +16,7 @@ import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
-import {
-  ClientEditButton,
-  ClientManagement,
-} from "~/features/management/client-management";
+import { ClientManagement } from "~/features/management/client-management";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -32,13 +29,11 @@ export default async function ClientsPage({
   if (user.role === "client") notFound();
   const rawSearch = await searchParams;
   const search = resolveDashboardPageSearch(rawSearch);
-  const selectedClientId =
-    search.clientId === "unassigned" ? undefined : search.clientId;
   const [result, managed, options] = await Promise.all([
     api.dashboard.clients({
       from: search.from,
       to: search.to,
-      clientId: selectedClientId,
+      clientId: undefined,
       page: search.clientPage,
       pageSize: 25,
     }),
@@ -62,9 +57,9 @@ export default async function ClientsPage({
         values={{
           from: search.from,
           to: search.to,
-          clientId: selectedClientId,
         }}
         options={{ ...options, includeUnassigned: false }}
+        showClient={false}
         showPlatform={false}
         showCampaign={false}
         resetPageKeys={["clientPage"]}
@@ -77,96 +72,59 @@ export default async function ClientsPage({
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {result.rows.length ? (
-            <Table className="min-w-[72rem]">
+            <Table className="min-w-[42rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Client</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Health</TableHead>
-                  <TableHead>Accounts</TableHead>
-                  <TableHead>Spend</TableHead>
-                  <TableHead>Platform leads</TableHead>
-                  <TableHead>Captured leads</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Total leads</TableHead>
                   <TableHead>Bookings</TableHead>
-                  <TableHead>Conversion</TableHead>
-                  <TableHead>Estimated revenue</TableHead>
-                  {managed ? <TableHead>Client users</TableHead> : null}
-                  {managed ? (
-                    <TableHead className="pr-6 text-right">Actions</TableHead>
-                  ) : null}
+                  <TableHead className="pr-6">Estimated revenue</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {result.rows.map((row) => {
-                  const counts = managed?.rows.find(({ id }) => id === row.id);
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell className="pl-6 font-medium">
-                        {row.name}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            row.status === "active"
-                              ? "secondary"
-                              : "destructive"
-                          }
-                          className="capitalize"
-                        >
-                          {row.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            row.health.status === "healthy"
-                              ? "default"
-                              : row.health.status === "critical"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className="capitalize"
-                        >
-                          {row.health.status.replace("_", " ")} ·{" "}
-                          {row.health.score}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {row.sourceAccountCount}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        ${row.spend}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {row.platformLeads}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {row.capturedLeads}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {row.bookings}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {row.capturedLeads === 0
-                          ? "—"
-                          : `${(row.conversion * 100).toFixed(1)}%`}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        ${row.estimatedRevenue}
-                      </TableCell>
-                      {managed ? (
-                        <TableCell className="tabular-nums">
-                          {counts?.activeClientUserCount ?? 0}
-                        </TableCell>
-                      ) : null}
-                      {counts ? (
-                        <TableCell className="pr-6 text-right">
-                          <ClientEditButton row={counts} />
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  );
-                })}
+                {result.rows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="pl-6 font-medium">
+                      {row.name}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          row.health.status === "healthy"
+                            ? "default"
+                            : row.health.status === "critical"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                        className="capitalize"
+                      >
+                        {row.health.status.replace("_", " ")} ·{" "}
+                        {row.health.score}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          row.status === "active" ? "secondary" : "destructive"
+                        }
+                        className="capitalize"
+                      >
+                        {row.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {row.capturedLeads}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {row.bookings}
+                    </TableCell>
+                    <TableCell className="pr-6 tabular-nums">
+                      ${row.estimatedRevenue}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           ) : (

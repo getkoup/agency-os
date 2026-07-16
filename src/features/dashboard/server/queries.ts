@@ -637,7 +637,6 @@ export async function getTrend(
     .select({
       date: adPerformanceDaily.date,
       spend: sql<string>`coalesce(sum(${adPerformanceDaily.spend}), 0)::numeric(14,2)`,
-      platformLeads: sql<number>`coalesce(sum(${adPerformanceDaily.leads}), 0)::int`,
     })
     .from(adPerformanceDaily)
     .innerJoin(
@@ -658,9 +657,31 @@ export async function getTrend(
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(and(...leadConditions(filters, scope)))
     .groupBy(sql`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`);
+  const wonOpportunityRows = await db
+    .select({
+      date: sql<string>`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`,
+      wonOpportunities: count(),
+    })
+    .from(ghlOpportunities)
+    .innerJoin(
+      integrationMappings,
+      eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+    )
+    .leftJoin(
+      ghlOpportunityMatches,
+      eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+    )
+    .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+    .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+    .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+    .where(and(...opportunityConditions(filters, scope)))
+    .groupBy(sql`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`);
   const byDate = new Map(performanceRows.map((row) => [row.date, row]));
   const capturedByDate = new Map(
     capturedRows.map((row) => [row.date, row.capturedLeads]),
+  );
+  const wonOpportunitiesByDate = new Map(
+    wonOpportunityRows.map((row) => [row.date, row.wonOpportunities]),
   );
   const rows = [];
   const cursor = new Date(`${filters.from}T00:00:00.000Z`);
@@ -671,8 +692,8 @@ export async function getTrend(
     rows.push({
       date,
       spend: performance?.spend ?? "0.00",
-      platformLeads: performance?.platformLeads ?? 0,
       capturedLeads: capturedByDate.get(date) ?? 0,
+      wonOpportunities: wonOpportunitiesByDate.get(date) ?? 0,
     });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }

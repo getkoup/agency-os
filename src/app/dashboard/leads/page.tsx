@@ -58,6 +58,8 @@ export default async function LeadsPage({
         values={filters}
         options={options}
         resetPageKeys={["leadPage"]}
+        showPlatform={false}
+        showCampaign={false}
       />
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -103,8 +105,9 @@ export default async function LeadsPage({
                     <TableHead className="pl-6">Source</TableHead>
                     <TableHead className="text-right">Leads</TableHead>
                     <TableHead className="text-right">Bookings</TableHead>
+                    <TableHead className="text-right">Conversion</TableHead>
                     <TableHead className="pr-6 text-right">
-                      Conversion
+                      Share of all leads
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -120,10 +123,15 @@ export default async function LeadsPage({
                       <TableCell className="text-right tabular-nums">
                         {row.bookings}
                       </TableCell>
-                      <TableCell className="pr-6 text-right tabular-nums">
+                      <TableCell className="text-right tabular-nums">
                         {row.leads === 0
                           ? "—"
                           : `${(row.conversion * 100).toFixed(1)}%`}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {analytics.totalLeads === 0
+                          ? "—"
+                          : `${((row.leads / analytics.totalLeads) * 100).toFixed(1)}%`}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -181,29 +189,30 @@ export default async function LeadsPage({
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
           <CardTitle className="tracking-tight">
-            Captured leads ({leads.total})
+            Lead details ({leads.total})
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {leads.rows.length ? (
-            <Table className="min-w-[76rem]">
+            <Table className="min-w-[68rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Lead</TableHead>
-                  <TableHead>Captured</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Booking status</TableHead>
+                  <TableHead className="pl-6">Client</TableHead>
+                  <TableHead>Lead</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Ad group</TableHead>
-                  <TableHead>Ad</TableHead>
-                  <TableHead className="pr-6">Phone</TableHead>
+                  <TableHead>Client local created</TableHead>
+                  <TableHead>Timezone</TableHead>
+                  <TableHead className="pr-6">UTC created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {leads.rows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="pl-6">
+                      {row.client ?? "Unassigned"}
+                    </TableCell>
+                    <TableCell>
                       <p className="font-medium">
                         {row.fullName ?? row.email ?? "Unnamed lead"}
                       </p>
@@ -211,21 +220,18 @@ export default async function LeadsPage({
                         {row.email ?? "No email"}
                       </p>
                     </TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">
-                      {formatClientDateTime(row.occurredAt, row.timezone)}
-                    </TableCell>
-                    <TableCell>{row.client ?? "Unassigned"}</TableCell>
                     <TableCell>
                       <Badge variant={row.booked ? "default" : "secondary"}>
                         {row.booked ? "Booked" : "Not booked"}
                       </Badge>
                     </TableCell>
                     <TableCell>{row.sourceAccount}</TableCell>
-                    <TableCell>{row.campaign ?? "—"}</TableCell>
-                    <TableCell>{row.adGroup ?? "—"}</TableCell>
-                    <TableCell>{row.ad ?? "—"}</TableCell>
-                    <TableCell className="pr-6">
-                      {row.phoneNumber ?? "—"}
+                    <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">
+                      {formatClientDateTime(row.occurredAt, row.timezone)}
+                    </TableCell>
+                    <TableCell>{row.timezone}</TableCell>
+                    <TableCell className="text-muted-foreground pr-6 whitespace-nowrap tabular-nums">
+                      {row.occurredAt.toISOString()}
                     </TableCell>
                   </TableRow>
                 ))}
