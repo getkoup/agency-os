@@ -50,14 +50,24 @@ export function DashboardFilters({
   const searchParams = useSearchParams();
   const controlCount =
     1 + Number(showClient) + Number(showPlatform) + Number(showCampaign);
-  const gridColumns =
+  const dateColumnClass =
     controlCount === 4
-      ? "lg:grid-cols-4"
+      ? "sm:col-span-2 xl:col-span-4"
       : controlCount === 3
-        ? "lg:grid-cols-3"
+        ? "sm:col-span-2 xl:col-span-6"
         : controlCount === 2
-          ? "lg:grid-cols-2"
-          : "lg:grid-cols-1";
+          ? "sm:col-span-1 xl:col-span-6"
+          : "sm:col-span-2 xl:col-span-12";
+  const standardColumnClass =
+    controlCount === 4
+      ? "xl:col-span-3"
+      : controlCount === 3
+        ? "xl:col-span-3"
+        : controlCount === 2
+          ? "xl:col-span-6"
+          : "xl:col-span-12";
+  const platformColumnClass =
+    controlCount === 4 ? "xl:col-span-2" : standardColumnClass;
   const datePreset = (searchParams.get("range") ??
     (!searchParams.has("from") && !searchParams.has("to")
       ? "last7"
@@ -88,39 +98,47 @@ export function DashboardFilters({
   }
 
   return (
-    <div className="shadow-sage border-border/80 from-secondary/55 via-card to-card space-y-4 rounded-[1.4rem] border bg-gradient-to-br p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+    <div className="shadow-sage border-border/80 bg-card overflow-hidden rounded-[1.4rem] border">
+      <div className="border-border/70 from-primary/[0.07] via-secondary/35 to-card flex flex-wrap items-center justify-between gap-3 border-b bg-gradient-to-r px-5 py-4">
         <div className="flex items-center gap-3">
-          <span className="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-xl">
-            <SlidersHorizontal className="size-4" aria-hidden="true" />
+          <span className="bg-primary/10 text-primary ring-primary/10 flex size-10 items-center justify-center rounded-xl ring-1">
+            <SlidersHorizontal className="size-[1.125rem]" aria-hidden="true" />
           </span>
-          <div>
-            <p className="text-sm font-semibold">Reporting controls</p>
-            <p className="text-muted-foreground text-xs">
-              Dates are applied in the client&apos;s local timezone.
+          <div className="space-y-0.5">
+            <p className="text-foreground text-sm font-semibold tracking-[-0.01em]">
+              Reporting controls
+            </p>
+            <p className="text-muted-foreground text-[0.8125rem]">
+              Dates follow each client&apos;s local timezone.
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="bg-card gap-1.5 rounded-full px-3">
-          <Clock3 className="size-3.5" aria-hidden="true" />
+        <Badge
+          variant="outline"
+          className="border-primary/15 bg-background/75 text-foreground gap-1.5 rounded-full px-3 py-1 font-medium shadow-xs"
+        >
+          <Clock3 className="text-primary size-3.5" aria-hidden="true" />
           {timezoneLabel}
         </Badge>
       </div>
-      <div className={`grid gap-3 sm:grid-cols-2 ${gridColumns}`}>
+      <div className="grid items-end gap-x-4 gap-y-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-12">
         <DateRangeFilter
           from={values.from}
           to={values.to}
           preset={datePreset}
           onChange={updateDateRange}
+          className={dateColumnClass}
         />
         {showClient ? (
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground px-1 text-xs">Client</Label>
+          <div className={`space-y-2 ${standardColumnClass}`}>
+            <Label className="text-foreground/75 px-0.5 text-xs font-medium">
+              Client
+            </Label>
             <Select
               value={values.clientId ?? "all"}
               onValueChange={(value) => updateFilter("clientId", value)}
             >
-              <SelectTrigger className="bg-card h-11 w-full rounded-xl">
+              <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-md shadow-xs transition-colors data-[size=default]:h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -140,15 +158,15 @@ export function DashboardFilters({
           </div>
         ) : null}
         {showPlatform ? (
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground px-1 text-xs">
+          <div className={`space-y-2 ${platformColumnClass}`}>
+            <Label className="text-foreground/75 px-0.5 text-xs font-medium">
               Platform
             </Label>
             <Select
               value={values.platform ?? "all"}
               onValueChange={(value) => updateFilter("platform", value)}
             >
-              <SelectTrigger className="bg-card h-11 w-full rounded-xl">
+              <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-md shadow-xs transition-colors data-[size=default]:h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -163,15 +181,15 @@ export function DashboardFilters({
           </div>
         ) : null}
         {showCampaign ? (
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground px-1 text-xs">
+          <div className={`space-y-2 ${standardColumnClass}`}>
+            <Label className="text-foreground/75 px-0.5 text-xs font-medium">
               Campaign
             </Label>
             <Select
               value={values.campaignId ?? "all"}
               onValueChange={(value) => updateFilter("campaignId", value)}
             >
-              <SelectTrigger className="bg-card h-11 w-full rounded-xl">
+              <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-md shadow-xs transition-colors data-[size=default]:h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
