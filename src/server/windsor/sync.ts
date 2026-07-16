@@ -335,6 +335,195 @@ async function upsertLeadBatch(
   });
 }
 
+export interface WindsorDiscoverySummary {
+  discoveredAccountCount: number;
+}
+
+export interface WindsorDataSummary {
+  performanceRowCount: number;
+  leadRowCount: number;
+}
+
+export class WindsorDataSyncError extends Error {
+  constructor(
+    readonly summary: WindsorDataSummary,
+    options?: ErrorOptions,
+  ) {
+    super("Scoped Windsor synchronization failed", options);
+    this.name = "WindsorDataSyncError";
+  }
+}
+
+export async function discoverWindsorSourceAccounts(
+  client: WindsorClient,
+  options: { provisionMappedClients: boolean },
+): Promise<WindsorDiscoverySummary> {
+  const discovered = (await client.discoverAccounts()).filter(
+    (account) =>
+      account.datasource === "facebook" ||
+      account.datasource === "facebook_leads",
+  );
+  const clientIds = new Map<string, string>();
+  for (const mapping of CLIENT_MAPPINGS) {
+    if (options.provisionMappedClients) {
+      await db
+        .insert(clients)
+        .values({ slug: mapping.slug, name: mapping.name })
+        .onConflictDoNothing({ target: clients.slug });
+    }
+    const [clientRow] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.slug, mapping.slug))
+      .limit(1);
+    if (clientRow) clientIds.set(mapping.slug, clientRow.id);
+  }
+
+  const seenConnectorAccounts: string[] = [];
+  for (const account of discovered) {
+    const parsed = parseConnectorAccountId(account.account_id);
+    if (parsed.connector !== account.datasource) {
+      throw new Error("Discovery datasource did not match account selector");
+    }
+    seenConnectorAccounts.push(account.account_id);
+    const mapping = findClientMapping(account.account_id);
+    const mappedClientId = mapping ? clientIds.get(mapping.slug) : undefined;
+    const [existing] = await db
+      .select({
+        id: sourceAccounts.id,
+        clientId: sourceAccounts.clientId,
+        status: sourceAccounts.status,
+      })
+      .from(sourceAccounts)
+      .where(
+        and(
+          eq(sourceAccounts.dataProvider, "windsor"),
+          eq(sourceAccounts.connectorAccountId, account.account_id),
+        ),
+      )
+      .limit(1);
+    const displayName =
+      account.account_name
+        .replace(new RegExp(`^${account.datasource}__`), "")
+        .trim() || parsed.externalAccountId;
+    if (existing) {
+      await db
+        .update(sourceAccounts)
+        .set({
+          externalAccountId: parsed.externalAccountId,
+          externalAccountName: displayName,
+          normalizedName: normalizeSuggestionKey(displayName),
+          status: existing.status === "ignored" ? "ignored" : "active",
+          lastSeenAt: new Date(),
+        })
+        .where(eq(sourceAccounts.id, existing.id));
+    } else {
+      await db.transaction(async (tx) => {
+        if (mappedClientId) {
+          await tx.execute(
+            sql`select "id" from ${clients} where "id" = ${mappedClientId} order by "id" for update`,
+          );
+        }
+        const [alreadyInserted] = await tx
+          .select({ id: sourceAccounts.id })
+          .from(sourceAccounts)
+          .where(
+            and(
+              eq(sourceAccounts.dataProvider, "windsor"),
+              eq(sourceAccounts.connectorAccountId, account.account_id),
+            ),
+          )
+          .limit(1);
+        if (alreadyInserted) return;
+        const [mappedClient] = mappedClientId
+          ? await tx
+              .select({ status: clients.status })
+              .from(clients)
+              .where(eq(clients.id, mappedClientId))
+              .limit(1)
+          : [];
+        await tx.insert(sourceAccounts).values({
+          clientId:
+            mappedClientId && mappedClient?.status === "active"
+              ? mappedClientId
+              : null,
+          dataProvider: "windsor",
+          platform: "facebook",
+          connector: parsed.connector,
+          connectorAccountId: account.account_id,
+          externalAccountId: parsed.externalAccountId,
+          externalAccountName: displayName,
+          normalizedName: normalizeSuggestionKey(displayName),
+        });
+      });
+    }
+  }
+  if (seenConnectorAccounts.length > 0) {
+    await db
+      .update(sourceAccounts)
+      .set({ status: "disconnected" })
+      .where(
+        and(
+          eq(sourceAccounts.dataProvider, "windsor"),
+          inArray(sourceAccounts.connector, ["facebook", "facebook_leads"]),
+          ne(sourceAccounts.status, "ignored"),
+          ne(sourceAccounts.connectorAccountId, seenConnectorAccounts[0]!),
+          ...seenConnectorAccounts
+            .slice(1)
+            .map((id) => ne(sourceAccounts.connectorAccountId, id)),
+        ),
+      );
+  }
+  return { discoveredAccountCount: discovered.length };
+}
+
+export async function syncWindsorData(
+  client: WindsorClient,
+  scope: { kind: "all-active" } | { kind: "client"; clientId: string },
+): Promise<WindsorDataSummary> {
+  let performanceRowCount = 0;
+  let leadRowCount = 0;
+  try {
+    const activeAccounts = await db
+      .select({
+        connector: sourceAccounts.connector,
+        connectorAccountId: sourceAccounts.connectorAccountId,
+      })
+      .from(sourceAccounts)
+      .where(
+        and(
+          eq(sourceAccounts.dataProvider, "windsor"),
+          eq(sourceAccounts.status, "active"),
+          scope.kind === "client"
+            ? eq(sourceAccounts.clientId, scope.clientId)
+            : undefined,
+        ),
+      );
+    const performanceAccounts = activeAccounts
+      .filter((account) => account.connector === "facebook")
+      .map((account) => account.connectorAccountId);
+    const leadAccounts = activeAccounts
+      .filter((account) => account.connector === "facebook_leads")
+      .map((account) => account.connectorAccountId);
+    for (const batch of chunkValues(performanceAccounts, 20)) {
+      const rows = await client.fetchPerformance(batch);
+      await upsertPerformanceBatch(rows, batch);
+      performanceRowCount += rows.length;
+    }
+    for (const batch of chunkValues(leadAccounts, 20)) {
+      const rows = await client.fetchLeads(batch);
+      await upsertLeadBatch(rows, batch);
+      leadRowCount += rows.length;
+    }
+    return { performanceRowCount, leadRowCount };
+  } catch (error) {
+    throw new WindsorDataSyncError(
+      { performanceRowCount, leadRowCount },
+      { cause: error },
+    );
+  }
+}
+
 export async function syncWindsor(
   client: WindsorClient = new WindsorClient(),
 ): Promise<SyncSummary> {
@@ -347,156 +536,13 @@ export async function syncWindsor(
   let discoveredAccountCount = 0;
   let performanceRowCount = 0;
   let leadRowCount = 0;
-
   try {
-    const discovered = (await client.discoverAccounts()).filter(
-      (account) =>
-        account.datasource === "facebook" ||
-        account.datasource === "facebook_leads",
-    );
-    discoveredAccountCount = discovered.length;
-
-    const clientIds = new Map<string, string>();
-    for (const mapping of CLIENT_MAPPINGS) {
-      await db
-        .insert(clients)
-        .values({ slug: mapping.slug, name: mapping.name })
-        .onConflictDoNothing({ target: clients.slug });
-      const [clientRow] = await db
-        .select({ id: clients.id })
-        .from(clients)
-        .where(eq(clients.slug, mapping.slug))
-        .limit(1);
-      if (!clientRow) throw new Error("Client mapping insert failed");
-      clientIds.set(mapping.slug, clientRow.id);
-    }
-
-    const seenConnectorAccounts: string[] = [];
-    for (const account of discovered) {
-      const parsed = parseConnectorAccountId(account.account_id);
-      if (parsed.connector !== account.datasource) {
-        throw new Error("Discovery datasource did not match account selector");
-      }
-      seenConnectorAccounts.push(account.account_id);
-      const mapping = findClientMapping(account.account_id);
-      const mappedClientId = mapping ? clientIds.get(mapping.slug) : undefined;
-      const [existing] = await db
-        .select({
-          id: sourceAccounts.id,
-          clientId: sourceAccounts.clientId,
-          status: sourceAccounts.status,
-        })
-        .from(sourceAccounts)
-        .where(
-          and(
-            eq(sourceAccounts.dataProvider, "windsor"),
-            eq(sourceAccounts.connectorAccountId, account.account_id),
-          ),
-        )
-        .limit(1);
-      const displayName =
-        account.account_name
-          .replace(new RegExp(`^${account.datasource}__`), "")
-          .trim() || parsed.externalAccountId;
-      if (existing) {
-        await db
-          .update(sourceAccounts)
-          .set({
-            externalAccountId: parsed.externalAccountId,
-            externalAccountName: displayName,
-            normalizedName: normalizeSuggestionKey(displayName),
-            status: existing.status === "ignored" ? "ignored" : "active",
-            lastSeenAt: new Date(),
-          })
-          .where(eq(sourceAccounts.id, existing.id));
-      } else {
-        await db.transaction(async (tx) => {
-          if (mappedClientId) {
-            await tx.execute(
-              sql`select "id" from ${clients} where "id" = ${mappedClientId} order by "id" for update`,
-            );
-          }
-          const [alreadyInserted] = await tx
-            .select({ id: sourceAccounts.id })
-            .from(sourceAccounts)
-            .where(
-              and(
-                eq(sourceAccounts.dataProvider, "windsor"),
-                eq(sourceAccounts.connectorAccountId, account.account_id),
-              ),
-            )
-            .limit(1);
-          if (alreadyInserted) return;
-          const [mappedClient] = mappedClientId
-            ? await tx
-                .select({ status: clients.status })
-                .from(clients)
-                .where(eq(clients.id, mappedClientId))
-                .limit(1)
-            : [];
-          await tx.insert(sourceAccounts).values({
-            clientId:
-              mappedClientId && mappedClient?.status === "active"
-                ? mappedClientId
-                : null,
-            dataProvider: "windsor",
-            platform: "facebook",
-            connector: parsed.connector,
-            connectorAccountId: account.account_id,
-            externalAccountId: parsed.externalAccountId,
-            externalAccountName: displayName,
-            normalizedName: normalizeSuggestionKey(displayName),
-          });
-        });
-      }
-    }
-    if (seenConnectorAccounts.length > 0) {
-      await db
-        .update(sourceAccounts)
-        .set({ status: "disconnected" })
-        .where(
-          and(
-            eq(sourceAccounts.dataProvider, "windsor"),
-            inArray(sourceAccounts.connector, ["facebook", "facebook_leads"]),
-            ne(sourceAccounts.status, "ignored"),
-            ne(sourceAccounts.connectorAccountId, seenConnectorAccounts[0]!),
-            ...seenConnectorAccounts
-              .slice(1)
-              .map((id) => ne(sourceAccounts.connectorAccountId, id)),
-          ),
-        );
-    }
-
-    const activeAccounts = await db
-      .select({
-        connector: sourceAccounts.connector,
-        connectorAccountId: sourceAccounts.connectorAccountId,
-      })
-      .from(sourceAccounts)
-      .where(
-        and(
-          eq(sourceAccounts.dataProvider, "windsor"),
-          eq(sourceAccounts.status, "active"),
-        ),
-      );
-    const performanceAccounts = activeAccounts
-      .filter((account) => account.connector === "facebook")
-      .map((account) => account.connectorAccountId);
-    const leadAccounts = activeAccounts
-      .filter((account) => account.connector === "facebook_leads")
-      .map((account) => account.connectorAccountId);
-
-    for (const batch of chunkValues(performanceAccounts, 20)) {
-      const rows = await client.fetchPerformance(batch);
-      await upsertPerformanceBatch(rows, batch);
-      performanceRowCount += rows.length;
-    }
-    for (const batch of chunkValues(leadAccounts, 20)) {
-      const rows = await client.fetchLeads(batch);
-      await upsertLeadBatch(rows, batch);
-      leadRowCount += rows.length;
-    }
-
+    ({ discoveredAccountCount } = await discoverWindsorSourceAccounts(client, {
+      provisionMappedClients: true,
+    }));
+    ({ performanceRowCount, leadRowCount } = await syncWindsorData(client, {
+      kind: "all-active",
+    }));
     const completedAt = new Date();
     await db
       .update(syncRuns)
@@ -517,6 +563,9 @@ export async function syncWindsor(
       durationMs: completedAt.getTime() - startedAt.getTime(),
     };
   } catch (error) {
+    if (error instanceof WindsorDataSyncError) {
+      ({ performanceRowCount, leadRowCount } = error.summary);
+    }
     const completedAt = new Date();
     await db
       .update(syncRuns)

@@ -1,9 +1,12 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  check,
+  foreignKey,
   index,
   pgEnum,
   pgTableCreator,
   primaryKey,
+  unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { type AdapterAccount } from "next-auth/adapters";
@@ -29,6 +32,26 @@ export const syncStatus = pgEnum("agency_os_sync_status", [
   "succeeded",
   "failed",
 ]);
+export const integrationProvider = pgEnum("agency_os_integration_provider", [
+  "ghl",
+]);
+export const allClientSyncStatus = pgEnum("agency_os_all_client_sync_status", [
+  "running",
+  "succeeded",
+  "failed",
+]);
+export const allClientSyncTargetStatus = pgEnum(
+  "agency_os_all_client_sync_target_status",
+  ["running", "succeeded", "failed", "skipped"],
+);
+export const opportunityMatchStatus = pgEnum(
+  "agency_os_opportunity_match_status",
+  ["matched", "unmatched", "ambiguous"],
+);
+export const opportunityMatchMethod = pgEnum(
+  "agency_os_opportunity_match_method",
+  ["email", "phone", "email_phone"],
+);
 
 export const users = createTable(
   "user",
@@ -343,6 +366,197 @@ export const syncRuns = createTable("sync_run", (d) => ({
   leadRowCount: d.integer().default(0).notNull(),
   errorMessage: d.text(),
 }));
+
+export const integrationMappings = createTable(
+  "integration_mapping",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    provider: integrationProvider().notNull(),
+    externalLocationId: d.varchar({ length: 255 }).notNull(),
+    syncFromAt: d.timestamp({ withTimezone: true }).notNull(),
+    lastSuccessfulSyncAt: d.timestamp({ withTimezone: true }),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("integration_mapping_client_provider_idx").on(
+      t.clientId,
+      t.provider,
+    ),
+    uniqueIndex("integration_mapping_provider_location_idx").on(
+      t.provider,
+      t.externalLocationId,
+    ),
+  ],
+);
+
+export const ghlContacts = createTable(
+  "ghl_contact",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    integrationMappingId: d
+      .uuid()
+      .notNull()
+      .references(() => integrationMappings.id, { onDelete: "cascade" }),
+    externalId: d.varchar({ length: 255 }).notNull(),
+    fullName: d.varchar({ length: 500 }),
+    email: d.varchar({ length: 500 }),
+    normalizedEmail: d.varchar({ length: 500 }),
+    phoneNumber: d.varchar({ length: 100 }),
+    normalizedPhone: d.varchar({ length: 100 }),
+    providerUpdatedAt: d.timestamp({ withTimezone: true }).notNull(),
+    rawPayload: d.jsonb().$type<Record<string, unknown>>().notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("ghl_contact_mapping_external_idx").on(
+      t.integrationMappingId,
+      t.externalId,
+    ),
+    unique("ghl_contact_id_mapping_unique").on(t.id, t.integrationMappingId),
+    index("ghl_contact_mapping_email_idx").on(
+      t.integrationMappingId,
+      t.normalizedEmail,
+    ),
+    index("ghl_contact_mapping_phone_idx").on(
+      t.integrationMappingId,
+      t.normalizedPhone,
+    ),
+  ],
+);
+
+export const ghlOpportunities = createTable(
+  "ghl_opportunity",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    integrationMappingId: d.uuid().notNull(),
+    contactId: d.uuid().notNull(),
+    externalId: d.varchar({ length: 255 }).notNull(),
+    status: d.varchar({ length: 50 }).notNull(),
+    name: d.varchar({ length: 500 }),
+    pipelineId: d.varchar({ length: 255 }),
+    pipelineStageId: d.varchar({ length: 255 }),
+    monetaryValue: d.numeric({ precision: 14, scale: 2 }),
+    currency: d.varchar({ length: 10 }),
+    wonAt: d.timestamp({ withTimezone: true }).notNull(),
+    providerUpdatedAt: d.timestamp({ withTimezone: true }).notNull(),
+    rawPayload: d.jsonb().$type<Record<string, unknown>>().notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("ghl_opportunity_mapping_external_idx").on(
+      t.integrationMappingId,
+      t.externalId,
+    ),
+    uniqueIndex("ghl_opportunity_id_mapping_idx").on(
+      t.id,
+      t.integrationMappingId,
+    ),
+    index("ghl_opportunity_mapping_won_idx").on(
+      t.integrationMappingId,
+      t.wonAt,
+    ),
+    foreignKey({
+      columns: [t.contactId, t.integrationMappingId],
+      foreignColumns: [ghlContacts.id, ghlContacts.integrationMappingId],
+      name: "ghl_opportunity_contact_mapping_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const ghlOpportunityMatches = createTable(
+  "ghl_opportunity_match",
+  (d) => ({
+    opportunityId: d
+      .uuid()
+      .notNull()
+      .primaryKey()
+      .references(() => ghlOpportunities.id, { onDelete: "cascade" }),
+    leadId: d.uuid().references(() => leads.id, { onDelete: "restrict" }),
+    status: opportunityMatchStatus().notNull(),
+    method: opportunityMatchMethod(),
+    candidateCount: d.integer().notNull(),
+    matchedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    check(
+      "ghl_opportunity_match_consistency",
+      sql`(${t.status} = 'matched' AND ${t.leadId} IS NOT NULL AND ${t.method} IS NOT NULL AND ${t.candidateCount} = 1) OR (${t.status} <> 'matched' AND ${t.leadId} IS NULL AND ${t.method} IS NULL)`,
+    ),
+  ],
+);
+
+export const allClientSyncRuns = createTable(
+  "all_client_sync_run",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    requestedByUserId: d
+      .varchar({ length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: allClientSyncStatus().default("running").notNull(),
+    startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    heartbeatAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    completedAt: d.timestamp({ withTimezone: true }),
+    windsorSyncRunId: d
+      .uuid()
+      .references(() => syncRuns.id, { onDelete: "set null" }),
+    discoveredAccountCount: d.integer().default(0).notNull(),
+    performanceRowCount: d.integer().default(0).notNull(),
+    leadRowCount: d.integer().default(0).notNull(),
+    contactRowCount: d.integer().default(0).notNull(),
+    opportunityRowCount: d.integer().default(0).notNull(),
+    matchedOpportunityCount: d.integer().default(0).notNull(),
+    errorMessage: d.text(),
+  }),
+  (t) => [
+    uniqueIndex("all_client_sync_one_running_idx")
+      .on(t.status)
+      .where(sql`${t.status} = 'running'`),
+  ],
+);
+
+export const allClientSyncTargets = createTable(
+  "all_client_sync_target",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    runId: d
+      .uuid()
+      .notNull()
+      .references(() => allClientSyncRuns.id, { onDelete: "cascade" }),
+    clientId: d.uuid().references(() => clients.id, { onDelete: "set null" }),
+    integrationMappingId: d
+      .uuid()
+      .references(() => integrationMappings.id, { onDelete: "set null" }),
+    clientSlug: d.varchar({ length: 100 }).notNull(),
+    clientName: d.varchar({ length: 255 }).notNull(),
+    provider: d.varchar({ length: 50 }).notNull(),
+    status: allClientSyncTargetStatus().default("running").notNull(),
+    startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    completedAt: d.timestamp({ withTimezone: true }),
+    sourceAccountCount: d.integer().default(0).notNull(),
+    performanceRowCount: d.integer().default(0).notNull(),
+    leadRowCount: d.integer().default(0).notNull(),
+    contactRowCount: d.integer().default(0).notNull(),
+    opportunityRowCount: d.integer().default(0).notNull(),
+    matchedOpportunityCount: d.integer().default(0).notNull(),
+    errorMessage: d.text(),
+  }),
+  (t) => [
+    uniqueIndex("all_client_sync_target_run_slug_provider_idx").on(
+      t.runId,
+      t.clientSlug,
+      t.provider,
+    ),
+    index("all_client_sync_target_run_idx").on(t.runId),
+  ],
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),

@@ -24,6 +24,18 @@ async function applyMigration(
   }
 }
 
+async function expectConstraintViolation(
+  operation: () => Promise<unknown>,
+  label: string,
+) {
+  try {
+    await operation();
+  } catch {
+    return;
+  }
+  throw new Error(`${label} constraint was not enforced`);
+}
+
 try {
   await admin.unsafe(
     'drop database if exists "agency_os_migration_test" with (force)',
@@ -37,6 +49,7 @@ try {
       ('legacy-client', 'legacy-client@example.com', 'client_viewer')
   `;
   await applyMigration(test, "drizzle/0001_proper_dashboard_rbac.sql");
+  await applyMigration(test, "drizzle/0002_nifty_roland_deschain.sql");
   const rows =
     await test`select "id", "email", "role", "status" from "agency_os_user" order by "id"`;
   const enumRows = await test`
@@ -83,7 +96,39 @@ try {
     throw new Error("Role default is not client");
   if (!String(byColumn.get("status")).includes("'active'"))
     throw new Error("Status default is not active");
-  console.info("Role migration verified successfully.");
+  const [client] = await test`
+    insert into "agency_os_client" ("slug", "name")
+    values ('migration-client', 'Migration Client')
+    returning "id"
+  `;
+  if (!client) throw new Error("Migration client was not created");
+  await test`
+    insert into "agency_os_integration_mapping"
+      ("clientId", "provider", "externalLocationId", "syncFromAt")
+    values (${client.id}, 'ghl', 'migration-location', now())
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_integration_mapping"
+          ("clientId", "provider", "externalLocationId", "syncFromAt")
+        values (${client.id}, 'ghl', 'other-location', now())
+      `,
+    "one provider mapping per client",
+  );
+  await test`
+    insert into "agency_os_all_client_sync_run" ("requestedByUserId")
+    values ('legacy-owner')
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_all_client_sync_run" ("requestedByUserId")
+        values ('legacy-owner')
+      `,
+    "one running all-client sync",
+  );
+  console.info("All migrations verified successfully.");
 } finally {
   if (test) await test.end();
   await admin.unsafe(

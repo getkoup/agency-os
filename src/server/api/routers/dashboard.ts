@@ -1,11 +1,7 @@
-import {
-  agencyReadProcedure,
-  createTRPCRouter,
-  protectedProcedure,
-} from "~/server/api/trpc";
-import { resolveAccessibleClientScope } from "~/features/dashboard/server/client-scope";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { resolveAccessibleClientScope } from "~/features/dashboard/server/client-scope";
 import {
   getAccountSummary,
   getClientAnalytics,
@@ -23,6 +19,16 @@ import {
   dashboardListInputSchema,
   filterOptionsInputSchema,
 } from "~/features/dashboard/server/schemas";
+import { getAllClientSyncRuns } from "~/features/synchronization/server/queries";
+import {
+  agencyProcedure,
+  createTRPCRouter,
+  protectedProcedure,
+} from "~/server/api/trpc";
+import {
+  syncAllClients,
+  SyncAlreadyRunningError,
+} from "~/server/sync/sync-all-clients";
 
 export const dashboardRouter = createTRPCRouter({
   currentUser: protectedProcedure.query(({ ctx }) => ctx.currentUser),
@@ -109,7 +115,7 @@ export const dashboardRouter = createTRPCRouter({
       );
       return getSourceAccountRows(input, scope, input.page, input.pageSize);
     }),
-  syncRuns: agencyReadProcedure
+  syncRuns: agencyProcedure
     .input(
       z.object({
         page: z.number().int().positive().default(1),
@@ -117,7 +123,25 @@ export const dashboardRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => getSyncRuns(input.page, input.pageSize)),
-  clients: agencyReadProcedure
+  allClientSyncRuns: agencyProcedure.query(() => getAllClientSyncRuns()),
+  syncAllClients: agencyProcedure.mutation(async ({ ctx }) => {
+    try {
+      return await syncAllClients(ctx.currentUser.id);
+    } catch (error) {
+      if (error instanceof SyncAlreadyRunningError) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: error.message,
+          cause: error,
+        });
+      }
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Synchronization could not start. Check server configuration.",
+      });
+    }
+  }),
+  clients: agencyProcedure
     .input(
       z.object({
         from: z.string().date(),
