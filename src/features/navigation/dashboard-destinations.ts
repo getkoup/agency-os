@@ -1,9 +1,11 @@
 import {
   BarChart3,
   Building2,
+  CircleDollarSign,
   DatabaseZap,
   LayoutDashboard,
   ListFilter,
+  Settings,
   Users,
   WalletCards,
   type LucideIcon,
@@ -29,7 +31,7 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
   },
   {
     href: "/dashboard/performance",
-    label: "Performance",
+    label: "Creatives",
     icon: BarChart3,
     roles: ["owner", "admin", "client"],
     group: "Workspace",
@@ -49,6 +51,13 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     group: "Workspace",
   },
   {
+    href: "/dashboard/revenue",
+    label: "Revenue",
+    icon: CircleDollarSign,
+    roles: ["owner", "admin"],
+    group: "Workspace",
+  },
+  {
     href: "/dashboard/clients",
     label: "Clients",
     icon: Building2,
@@ -59,6 +68,13 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     href: "/dashboard/synchronization",
     label: "Synchronization",
     icon: DatabaseZap,
+    roles: ["owner", "admin"],
+    group: "Administration",
+  },
+  {
+    href: "/dashboard/settings",
+    label: "Settings",
+    icon: Settings,
     roles: ["owner", "admin"],
     group: "Administration",
   },

@@ -15,6 +15,18 @@ import type { GhlClient, GhlOpportunity } from "~/server/ghl/client";
 import { normalizeEmail, normalizePhone } from "~/server/windsor/normalize";
 
 const REPLAY_OVERLAP_MS = 5 * 60 * 1000;
+export function normalizeGhlTags(
+  tags: readonly string[] | undefined,
+): string[] {
+  const normalized = new Map<string, string>();
+  for (const tag of tags ?? []) {
+    const trimmed = tag.trim();
+    if (trimmed.length === 0) continue;
+    const key = trimmed.toLowerCase();
+    if (!normalized.has(key)) normalized.set(key, trimmed);
+  }
+  return [...normalized.values()];
+}
 
 export interface GhlSyncSummary {
   contactRowCount: number;
@@ -33,6 +45,7 @@ function safeRawOpportunity(row: GhlOpportunity): Record<string, unknown> {
     pipelineStageId: row.pipelineStageId ?? null,
     monetaryValue: row.monetaryValue ?? null,
     currency: row.currency ?? null,
+    tags: row.tags ?? [],
     lastStatusChangeAt: row.lastStatusChangeAt,
     updatedAt: row.updatedAt,
   };
@@ -122,6 +135,11 @@ async function upsertOpportunity(input: {
   clientId: string;
   row: GhlOpportunity;
 }) {
+  const contactTags = normalizeGhlTags(input.row.contact.tags);
+  const opportunityTags = normalizeGhlTags([
+    ...(input.row.tags ?? []),
+    ...contactTags,
+  ]);
   const email = normalizeEmail(input.row.contact.email ?? undefined);
   const phone = normalizePhone(input.row.contact.phone ?? undefined);
   const now = new Date();
@@ -138,12 +156,14 @@ async function upsertOpportunity(input: {
         normalizedEmail: email,
         phoneNumber: input.row.contact.phone ?? null,
         normalizedPhone: phone,
+        tags: contactTags,
         providerUpdatedAt,
         rawPayload: {
           id: input.row.contact.id,
           name: input.row.contact.name ?? null,
           email: input.row.contact.email ?? null,
           phone: input.row.contact.phone ?? null,
+          tags: input.row.contact.tags ?? [],
         },
       })
       .onConflictDoUpdate({
@@ -154,6 +174,7 @@ async function upsertOpportunity(input: {
           normalizedEmail: email,
           phoneNumber: input.row.contact.phone ?? null,
           normalizedPhone: phone,
+          tags: contactTags,
           providerUpdatedAt,
           updatedAt: now,
         },
@@ -176,6 +197,7 @@ async function upsertOpportunity(input: {
             ? null
             : input.row.monetaryValue.toFixed(2),
         currency: input.row.currency ?? null,
+        tags: opportunityTags,
         wonAt,
         providerUpdatedAt,
         rawPayload: safeRawOpportunity(input.row),
@@ -196,6 +218,7 @@ async function upsertOpportunity(input: {
               ? null
               : input.row.monetaryValue.toFixed(2),
           currency: input.row.currency ?? null,
+          tags: opportunityTags,
           wonAt,
           providerUpdatedAt,
           rawPayload: safeRawOpportunity(input.row),
@@ -224,17 +247,22 @@ export async function syncGhlLocation(input: {
   runStartedAt: Date;
   onPage?: () => Promise<void>;
 }): Promise<GhlSyncSummary & { mappingId: string }> {
+  const timezone = await input.client.locationTimezone({
+    locationId: input.locationId,
+    token: input.token,
+  });
   const [mapping] = await db
     .insert(integrationMappings)
     .values({
       clientId: input.clientId,
       provider: "ghl",
       externalLocationId: input.locationId,
-      syncFromAt: input.runStartedAt,
+      timezone,
+      syncFromAt: new Date(0),
     })
     .onConflictDoUpdate({
       target: [integrationMappings.clientId, integrationMappings.provider],
-      set: { updatedAt: new Date() },
+      set: { timezone, updatedAt: new Date() },
     })
     .returning({
       id: integrationMappings.id,

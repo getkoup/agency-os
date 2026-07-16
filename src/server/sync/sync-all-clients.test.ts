@@ -45,11 +45,17 @@ const emptyWindsor = new WindsorClient(
 );
 const emptyGhl = new GhlClient(
   ghlConfig.baseUrl,
-  vi
-    .fn<typeof fetch>()
-    .mockImplementation(() =>
-      Promise.resolve(Response.json({ opportunities: [], meta: {} })),
-    ),
+  vi.fn<typeof fetch>().mockImplementation((request) => {
+    const url = new URL(String(request));
+    const locationId = url.pathname.split("/").at(-1);
+    return Promise.resolve(
+      url.pathname.startsWith("/locations/")
+        ? Response.json({
+            location: { id: locationId, timezone: "America/New_York" },
+          })
+        : Response.json({ opportunities: [], meta: {} }),
+    );
+  }),
 );
 
 describe("syncAllClients", () => {

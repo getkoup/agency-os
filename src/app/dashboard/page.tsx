@@ -1,11 +1,15 @@
 import Link from "next/link";
 import {
   BarChart3,
+  CalendarCheck,
+  CircleDollarSign,
   MessageCircle,
   MousePointerClick,
+  Gauge,
   Receipt,
   Megaphone,
   UserRoundSearch,
+  Percent,
   Users,
 } from "lucide-react";
 
@@ -24,6 +28,8 @@ import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { OverviewChart } from "~/features/dashboard/overview-chart";
 import { PageHeader } from "~/features/dashboard/page-header";
+import { SyncAllClientsButton } from "~/features/synchronization/sync-all-clients-button";
+import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { api } from "~/trpc/server";
 
@@ -32,6 +38,9 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const user = await getAuthenticatedUser();
+  const aggregateRuns =
+    user.role === "client" ? [] : await api.dashboard.allClientSyncRuns();
   const search = resolveDashboardPageSearch(await searchParams);
   const filters = {
     from: search.from,
@@ -40,41 +49,95 @@ export default async function DashboardPage({
     platform: search.platform,
     campaignId: search.campaignId,
   };
-  const [options, overview, trend, campaigns, accounts, recentLeads] =
-    await Promise.all([
-      api.dashboard.filterOptions({
-        from: search.from,
-        to: search.to,
-        clientId: search.clientId,
-        platform: search.platform,
-      }),
-      api.dashboard.overview(filters),
-      api.dashboard.trend(filters),
-      api.dashboard.topCampaigns(filters),
-      api.dashboard.accountSummary({
-        clientId: search.clientId,
-        platform: search.platform,
-      }),
-      api.dashboard.recentLeads(filters),
-    ]);
+  const [
+    options,
+    overview,
+    trend,
+    campaigns,
+    accounts,
+    recentLeads,
+    clientHealth,
+    creativeRows,
+  ] = await Promise.all([
+    api.dashboard.filterOptions({
+      from: search.from,
+      to: search.to,
+      clientId: search.clientId,
+      platform: search.platform,
+    }),
+    api.dashboard.overview(filters),
+    api.dashboard.trend(filters),
+    api.dashboard.topCampaigns(filters),
+    api.dashboard.accountSummary({
+      clientId: search.clientId,
+      platform: search.platform,
+    }),
+    api.dashboard.recentLeads(filters),
+    api.dashboard.clientHealth(filters),
+    api.dashboard.performance({ ...filters, page: 1, pageSize: 5 }),
+  ]);
   const kpis = [
     {
-      title: "Spend",
+      title: "Total Clients",
+      value: overview.activeClientCount.toLocaleString(),
+      detail: "Active in scope",
+      icon: Users,
+    },
+    {
+      title: "Total Spend",
       value: `$${overview.spend}`,
-      detail: overview.cpl ? `CPL $${overview.cpl}` : "CPL —",
+      detail: "Selected local date range",
       icon: Receipt,
     },
+    {
+      title: "Total Leads",
+      value: overview.capturedLeads.toLocaleString(),
+      detail: "Captured lead events",
+      icon: UserRoundSearch,
+    },
+    {
+      title: "Total Bookings",
+      value: overview.bookings.toLocaleString(),
+      detail: "Won GHL opportunities",
+      icon: CalendarCheck,
+    },
+    {
+      title: "Conversion Rate",
+      value:
+        overview.capturedLeads === 0
+          ? "—"
+          : `${(overview.conversion * 100).toFixed(1)}%`,
+      detail: "Bookings / captured leads",
+      icon: Percent,
+    },
+    {
+      title: "Estimated Revenue",
+      value: `$${overview.estimatedRevenue}`,
+      detail:
+        overview.missingRuleCount === 0
+          ? "All bookings matched"
+          : `${overview.missingRuleCount} missing rules`,
+      icon: CircleDollarSign,
+    },
+    {
+      title: "Average CPC",
+      value: overview.cpc ? `$${overview.cpc}` : "—",
+      detail: "Spend / link clicks",
+      icon: MousePointerClick,
+    },
+    {
+      title: "CPL",
+      value: overview.cpl ? `$${overview.cpl}` : "—",
+      detail: "Spend / captured leads",
+      icon: Gauge,
+    },
+  ];
+  const secondaryKpis = [
     {
       title: "Platform Leads",
       value: overview.platformLeads.toLocaleString(),
       detail: "Reported conversions",
       icon: BarChart3,
-    },
-    {
-      title: "Captured Leads",
-      value: overview.capturedLeads.toLocaleString(),
-      detail: "Individual lead events",
-      icon: Users,
     },
     {
       title: "Messaging Conversations",
@@ -85,7 +148,7 @@ export default async function DashboardPage({
     {
       title: "Link Clicks",
       value: overview.linkClicks.toLocaleString(),
-      detail: overview.cpc ? `CPC $${overview.cpc}` : "CPC —",
+      detail: "Tracked link clicks",
       icon: MousePointerClick,
     },
   ];
@@ -103,7 +166,7 @@ export default async function DashboardPage({
         meta={
           <>
             <Badge variant="secondary" className="rounded-full">
-              {search.from} through {search.to} · inclusive UTC
+              {search.from} through {search.to} · client-local dates
             </Badge>
             {overview.latestSync ? (
               <Badge variant="outline" className="rounded-full capitalize">
@@ -112,9 +175,18 @@ export default async function DashboardPage({
             ) : null}
           </>
         }
+        actions={
+          user.role === "client" ? null : (
+            <SyncAllClientsButton
+              serverRunIsActive={aggregateRuns.some(
+                (run) => run.status === "running",
+              )}
+            />
+          )
+        }
       />
       <DashboardFilters values={filters} options={options} />
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ title, value, detail, icon }) => (
           <MetricCard
             key={title}
@@ -122,7 +194,18 @@ export default async function DashboardPage({
             value={value}
             supporting={detail}
             icon={icon}
-            highlighted={title === "Captured Leads"}
+            highlighted={title === "Estimated Revenue"}
+          />
+        ))}
+      </section>
+      <section className="grid gap-4 sm:grid-cols-3">
+        {secondaryKpis.map(({ title, value, detail, icon }) => (
+          <MetricCard
+            key={title}
+            label={title}
+            value={value}
+            supporting={detail}
+            icon={icon}
           />
         ))}
       </section>
@@ -131,7 +214,7 @@ export default async function DashboardPage({
           <CardHeader>
             <CardTitle className="tracking-tight">Daily performance</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Spend and lead activity across the selected UTC range.
+              Spend and lead activity across each client&apos;s local dates.
             </p>
           </CardHeader>
           <CardContent>
@@ -187,6 +270,137 @@ export default async function DashboardPage({
                 </div>
               ))}
             </dl>
+          </CardContent>
+        </Card>
+      </section>
+      <section className="grid gap-6 2xl:grid-cols-2">
+        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
+          <CardHeader>
+            <CardTitle className="tracking-tight">Client health</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Trend, volume, and booking conversion across active clients.
+            </p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto px-0">
+            {clientHealth.length ? (
+              <Table className="min-w-[42rem]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Client</TableHead>
+                    <TableHead>Health</TableHead>
+                    <TableHead className="text-right">Spend</TableHead>
+                    <TableHead className="text-right">Leads</TableHead>
+                    <TableHead className="text-right">Bookings</TableHead>
+                    <TableHead className="text-right">Conversion</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="pr-6 text-right">Score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clientHealth.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="pl-6 font-medium">
+                        {row.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            row.health.status === "healthy"
+                              ? "default"
+                              : row.health.status === "critical"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                          className="capitalize"
+                        >
+                          {row.health.status.replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        ${row.spend}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.capturedLeads}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.bookings}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.capturedLeads === 0
+                          ? "—"
+                          : `${(row.conversion * 100).toFixed(1)}%`}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        ${row.estimatedRevenue}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {row.health.score}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                icon={Gauge}
+                title="No client health data"
+                description="No active clients are available in the selected scope."
+              />
+            )}
+          </CardContent>
+        </Card>
+        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="tracking-tight">Recent creatives</CardTitle>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Latest ad performance rows in the selected range.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/performance"
+              className="text-primary text-sm font-medium hover:underline"
+            >
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent className="overflow-x-auto px-0">
+            {creativeRows.rows.length ? (
+              <Table className="min-w-[36rem]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Creative / Ad</TableHead>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead className="text-right">Spend</TableHead>
+                    <TableHead className="pr-6 text-right">Leads</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {creativeRows.rows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="pl-6 font-medium">
+                        {row.ad}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.campaign}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        ${row.spend}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {row.capturedLeads}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                icon={Megaphone}
+                title="No creative data"
+                description="No ads match the selected filters and date range."
+              />
+            )}
           </CardContent>
         </Card>
       </section>

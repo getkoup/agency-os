@@ -46,11 +46,11 @@ export default async function PerformancePage({
     <div className="mx-auto max-w-[96rem] space-y-7">
       <PageHeader
         eyebrow="Analytics"
-        title="Performance"
-        description="Daily ad-level results across every account you can access."
+        title="Creatives"
+        description="Daily creative and ad-level results across every account you can access."
         meta={
           <span className="text-muted-foreground text-xs">
-            {search.from} through {search.to} · inclusive UTC
+            {search.from} through {search.to} · client-local dates
           </span>
         }
       />
@@ -62,24 +62,28 @@ export default async function PerformancePage({
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
           <CardTitle className="tracking-tight">
-            Daily performance ({performance.total})
+            Creative performance ({performance.total})
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {performance.rows.length ? (
-            <Table>
+            <Table className="min-w-[86rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Date</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Account</TableHead>
+                  <TableHead>Creative / Ad</TableHead>
                   <TableHead>Campaign</TableHead>
                   <TableHead>Ad group</TableHead>
-                  <TableHead>Ad</TableHead>
                   <TableHead className="text-right">Spend</TableHead>
-                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Captured leads</TableHead>
+                  <TableHead className="text-right">Platform leads</TableHead>
                   <TableHead className="text-right">Messages</TableHead>
-                  <TableHead className="pr-6 text-right">Clicks</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
+                  <TableHead className="text-right">CTR</TableHead>
+                  <TableHead className="text-right">CPC</TableHead>
+                  <TableHead className="pr-6 text-right">CPL</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -92,13 +96,14 @@ export default async function PerformancePage({
                       {row.client ?? "Unassigned"}
                     </TableCell>
                     <TableCell>{row.sourceAccount}</TableCell>
-                    <TableCell className="font-medium">
-                      {row.campaign}
-                    </TableCell>
+                    <TableCell className="font-medium">{row.ad}</TableCell>
+                    <TableCell>{row.campaign}</TableCell>
                     <TableCell>{row.adGroup}</TableCell>
-                    <TableCell>{row.ad}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       ${row.spend}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.capturedLeads}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.platformLeads}
@@ -106,8 +111,17 @@ export default async function PerformancePage({
                     <TableCell className="text-right tabular-nums">
                       {row.messagingConversations}
                     </TableCell>
-                    <TableCell className="pr-6 text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums">
                       {row.linkClicks}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.ctr ? `${row.ctr}%` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.cpc ? `$${row.cpc}` : "—"}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right tabular-nums">
+                      {row.cpl ? `$${row.cpl}` : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -116,8 +130,8 @@ export default async function PerformancePage({
           ) : (
             <EmptyState
               icon={ChartNoAxesCombined}
-              title="No performance data"
-              description="No daily performance rows match these filters."
+              title="No creative data"
+              description="No creative performance rows match these filters."
             />
           )}
         </CardContent>

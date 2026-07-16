@@ -8,6 +8,7 @@ const contactSchema = z
     name: z.string().nullish(),
     email: z.string().nullish(),
     phone: z.string().nullish(),
+    tags: z.array(z.string()).optional(),
   })
   .strip();
 
@@ -22,6 +23,7 @@ const opportunitySchema = z
     pipelineStageId: z.string().nullish(),
     monetaryValue: z.number().finite().nullish(),
     currency: z.string().max(10).nullish(),
+    tags: z.array(z.string()).optional(),
     lastStatusChangeAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
     contact: contactSchema,
@@ -36,6 +38,30 @@ const opportunitySchema = z
       });
     }
   });
+
+const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .superRefine((timezone, context) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "Location timezone must be a valid IANA timezone",
+      });
+    }
+  });
+
+const locationSchema = z.object({
+  location: z
+    .object({
+      id: z.string().min(1),
+      timezone: timezoneSchema,
+    })
+    .strip(),
+});
 
 const pageSchema = z.object({
   opportunities: z.array(opportunitySchema),
@@ -52,6 +78,33 @@ export class GhlClient {
     private readonly baseUrl: URL,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
+
+  async locationTimezone(input: {
+    locationId: string;
+    token: string;
+  }): Promise<string> {
+    const url = new URL(
+      `/locations/${encodeURIComponent(input.locationId)}`,
+      this.baseUrl,
+    );
+    const response = await this.fetcher(url, {
+      headers: {
+        Authorization: `Bearer ${input.token}`,
+        Version: "v3",
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `GHL location request failed with status ${response.status}`,
+      );
+    }
+    const result = locationSchema.parse(await response.json());
+    if (result.location.id !== input.locationId) {
+      throw new Error("GHL location identity mismatch");
+    }
+    return result.location.timezone;
+  }
 
   async *wonOpportunities(input: {
     locationId: string;

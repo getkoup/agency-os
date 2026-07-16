@@ -1,0 +1,1 @@
+ALTER TABLE "agency_os_integration_mapping" ADD COLUMN "timezone" varchar(100) DEFAULT 'UTC' NOT NULL;

@@ -17,7 +17,12 @@ import { syncGhlLocation } from "~/server/ghl/sync";
 const clientSlug = "ghl-sync-test-client";
 let clientId = "";
 
-function opportunity(input: { id: string; wonAt: string }) {
+function opportunity(input: {
+  id: string;
+  wonAt: string;
+  tags?: string[];
+  contactTags?: string[];
+}) {
   return {
     id: input.id,
     locationId: "test-location",
@@ -28,6 +33,7 @@ function opportunity(input: { id: string; wonAt: string }) {
     pipelineStageId: "won-stage",
     monetaryValue: 450,
     currency: "USD",
+    tags: input.tags,
     lastStatusChangeAt: input.wonAt,
     updatedAt: input.wonAt,
     contact: {
@@ -35,16 +41,25 @@ function opportunity(input: { id: string; wonAt: string }) {
       name: "Matched Customer",
       email: "matched@example.com",
       phone: null,
+      tags: input.contactTags,
     },
   };
 }
 
 function clientReturning(rows: unknown[]) {
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockImplementation(() =>
-      Promise.resolve(Response.json({ opportunities: rows, meta: {} })),
+  const fetcher = vi.fn<typeof fetch>().mockImplementation((request) => {
+    const url = new URL(String(request));
+    return Promise.resolve(
+      url.pathname.startsWith("/locations/")
+        ? Response.json({
+            location: {
+              id: "test-location",
+              timezone: "America/New_York",
+            },
+          })
+        : Response.json({ opportunities: rows, meta: {} }),
     );
+  });
   return {
     client: new GhlClient(new URL("https://ghl.example"), fetcher),
     fetcher,
@@ -95,7 +110,7 @@ describe("syncGhlLocation", () => {
     }
   });
 
-  it("establishes a no-backfill cutoff, then idempotently matches later wins", async () => {
+  it("backfills first sync, then idempotently matches later wins", async () => {
     const firstStartedAt = new Date("2026-07-15T10:02:00.000Z");
     const first = clientReturning([
       opportunity({ id: "historical-win", wonAt: "2026-07-15T09:00:00.000Z" }),
@@ -107,12 +122,17 @@ describe("syncGhlLocation", () => {
       token: "test-token",
       runStartedAt: firstStartedAt,
     });
-    expect(first.fetcher).toHaveBeenCalledOnce();
-    expect(firstSummary.opportunityRowCount).toBe(0);
+    expect(first.fetcher).toHaveBeenCalledTimes(2);
+    expect(firstSummary.opportunityRowCount).toBe(1);
 
     const secondStartedAt = new Date("2026-07-15T10:10:00.000Z");
     const second = clientReturning([
-      opportunity({ id: "new-win", wonAt: "2026-07-15T10:05:00.000Z" }),
+      opportunity({
+        id: "new-win",
+        wonAt: "2026-07-15T10:05:00.000Z",
+        tags: [" Premium ", "premium", ""],
+        contactTags: ["Qualified", " qualified "],
+      }),
       opportunity({ id: "historical-win", wonAt: "2026-07-15T09:00:00.000Z" }),
     ]);
     const secondSummary = await syncGhlLocation({
@@ -160,17 +180,40 @@ describe("syncGhlLocation", () => {
           eq(integrationMappings.provider, "ghl"),
         ),
       );
-    expect(counts).toEqual({ contacts: 1, opportunities: 1, matches: 1 });
+    expect(counts).toEqual({ contacts: 1, opportunities: 2, matches: 2 });
+    const [storedTags] = await db
+      .select({
+        contactTags: ghlContacts.tags,
+        opportunityTags: ghlOpportunities.tags,
+      })
+      .from(ghlOpportunities)
+      .innerJoin(ghlContacts, eq(ghlOpportunities.contactId, ghlContacts.id))
+      .innerJoin(
+        integrationMappings,
+        eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+      )
+      .where(
+        and(
+          eq(integrationMappings.clientId, clientId),
+          eq(ghlOpportunities.externalId, "new-win"),
+        ),
+      );
+    expect(storedTags).toEqual({
+      contactTags: ["Qualified"],
+      opportunityTags: ["Premium", "Qualified"],
+    });
 
     const [mapping] = await db
       .select({
         syncFromAt: integrationMappings.syncFromAt,
         lastSuccessfulSyncAt: integrationMappings.lastSuccessfulSyncAt,
+        timezone: integrationMappings.timezone,
       })
       .from(integrationMappings)
       .where(eq(integrationMappings.clientId, clientId));
-    expect(mapping?.syncFromAt).toEqual(firstStartedAt);
+    expect(mapping?.syncFromAt).toEqual(new Date(0));
     expect(mapping?.lastSuccessfulSyncAt).toEqual(secondStartedAt);
+    expect(mapping?.timezone).toBe("America/New_York");
   });
 
   it("does not advance the watermark after a provider validation failure", async () => {

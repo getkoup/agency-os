@@ -377,6 +377,7 @@ export const integrationMappings = createTable(
       .references(() => clients.id, { onDelete: "cascade" }),
     provider: integrationProvider().notNull(),
     externalLocationId: d.varchar({ length: 255 }).notNull(),
+    timezone: d.varchar({ length: 100 }).default("UTC").notNull(),
     syncFromAt: d.timestamp({ withTimezone: true }).notNull(),
     lastSuccessfulSyncAt: d.timestamp({ withTimezone: true }),
     createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -408,6 +409,11 @@ export const ghlContacts = createTable(
     normalizedEmail: d.varchar({ length: 500 }),
     phoneNumber: d.varchar({ length: 100 }),
     normalizedPhone: d.varchar({ length: 100 }),
+    tags: d
+      .text()
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
     providerUpdatedAt: d.timestamp({ withTimezone: true }).notNull(),
     rawPayload: d.jsonb().$type<Record<string, unknown>>().notNull(),
     createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -443,6 +449,11 @@ export const ghlOpportunities = createTable(
     pipelineStageId: d.varchar({ length: 255 }),
     monetaryValue: d.numeric({ precision: 14, scale: 2 }),
     currency: d.varchar({ length: 10 }),
+    tags: d
+      .text()
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
     wonAt: d.timestamp({ withTimezone: true }).notNull(),
     providerUpdatedAt: d.timestamp({ withTimezone: true }).notNull(),
     rawPayload: d.jsonb().$type<Record<string, unknown>>().notNull(),
@@ -467,6 +478,30 @@ export const ghlOpportunities = createTable(
       foreignColumns: [ghlContacts.id, ghlContacts.integrationMappingId],
       name: "ghl_opportunity_contact_mapping_fk",
     }).onDelete("cascade"),
+  ],
+);
+export const revenueRules = createTable(
+  "revenue_rule",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    tagName: d.varchar({ length: 255 }).notNull(),
+    revenueValue: d.numeric({ precision: 14, scale: 2 }).notNull(),
+    serviceName: d.varchar({ length: 255 }),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("revenue_rule_client_tag_lower_idx").on(
+      t.clientId,
+      sql`lower(${t.tagName})`,
+    ),
+    index("revenue_rule_client_status_idx").on(t.clientId, t.status),
+    check("revenue_rule_value_non_negative", sql`${t.revenueValue} >= 0`),
   ],
 );
 
@@ -572,6 +607,7 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 export const clientsRelations = relations(clients, ({ many }) => ({
   memberships: many(clientMemberships),
   sourceAccounts: many(sourceAccounts),
+  revenueRules: many(revenueRules),
 }));
 export const clientMembershipsRelations = relations(
   clientMemberships,
@@ -586,6 +622,13 @@ export const clientMembershipsRelations = relations(
     }),
   }),
 );
+export const revenueRulesRelations = relations(revenueRules, ({ one }) => ({
+  client: one(clients, {
+    fields: [revenueRules.clientId],
+    references: [clients.id],
+  }),
+}));
+
 export const sourceAccountsRelations = relations(
   sourceAccounts,
   ({ one, many }) => ({

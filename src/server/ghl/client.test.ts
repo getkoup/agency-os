@@ -36,6 +36,48 @@ async function collect(client: GhlClient) {
 }
 
 describe("GhlClient", () => {
+  it("loads and validates the location timezone", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        location: { id: "location-1", timezone: "America/New_York" },
+      }),
+    );
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+    );
+
+    await expect(
+      client.locationTimezone({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).resolves.toBe("America/New_York");
+    const [request] = fetcher.mock.calls[0]!;
+    expect(String(request)).toBe(
+      "https://services.leadconnectorhq.com/locations/location-1",
+    );
+  });
+
+  it("rejects an invalid provider timezone", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        location: { id: "location-1", timezone: "not/a-timezone" },
+      }),
+    );
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+    );
+
+    await expect(
+      client.locationTimezone({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).rejects.toThrow("valid IANA timezone");
+  });
+
   it("uses the v3 bearer contract and exact won query", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -64,6 +106,21 @@ describe("GhlClient", () => {
       Authorization: "Bearer private-token",
       Version: "v3",
     });
+  });
+  it("accepts optional opportunity and embedded contact tags", async () => {
+    const tagged = {
+      ...opportunity,
+      tags: ["Premium", " Qualified "],
+      contact: { ...opportunity.contact, tags: ["Customer"] },
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ opportunities: [tagged], meta: {} }));
+    const rows = await collect(
+      new GhlClient(new URL("https://services.leadconnectorhq.com"), fetcher),
+    );
+    expect(rows[0]?.tags).toEqual(["Premium", " Qualified "]);
+    expect(rows[0]?.contact.tags).toEqual(["Customer"]);
   });
 
   it("rejects cross-origin cursors before forwarding credentials", async () => {
