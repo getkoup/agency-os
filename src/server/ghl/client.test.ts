@@ -12,6 +12,7 @@ const opportunity = {
   pipelineStageId: "stage-won",
   monetaryValue: 500,
   currency: "USD",
+  createdAt: "2026-07-15T08:55:00.000Z",
   lastStatusChangeAt: "2026-07-15T09:00:00.000Z",
   updatedAt: "2026-07-15T09:01:00.000Z",
   contact: {

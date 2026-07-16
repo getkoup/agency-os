@@ -24,6 +24,7 @@ const opportunitySchema = z
     monetaryValue: z.number().finite().nullish(),
     currency: z.string().max(10).nullish(),
     tags: z.array(z.string()).optional(),
+    createdAt: z.string().datetime({ offset: true }),
     lastStatusChangeAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
     contact: contactSchema,

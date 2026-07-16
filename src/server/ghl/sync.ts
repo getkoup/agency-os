@@ -144,7 +144,7 @@ async function upsertOpportunity(input: {
   const phone = normalizePhone(input.row.contact.phone ?? undefined);
   const now = new Date();
   const providerUpdatedAt = new Date(input.row.updatedAt);
-  const wonAt = new Date(input.row.lastStatusChangeAt);
+  const wonAt = new Date(input.row.createdAt);
   const contact = await db.transaction(async (tx) => {
     const [value] = await tx
       .insert(ghlContacts)

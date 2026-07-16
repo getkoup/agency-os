@@ -17,7 +17,7 @@ export function PageHeader({
         <p className="text-primary text-xs font-semibold tracking-[0.18em] uppercase">
           {eyebrow}
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
+        <h1 className="font-heading mt-2 text-4xl leading-[0.95] font-medium tracking-[-0.04em] sm:text-5xl">
           {title}
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6 sm:text-base">
