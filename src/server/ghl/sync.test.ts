@@ -20,6 +20,7 @@ let clientId = "";
 function opportunity(input: {
   id: string;
   wonAt: string;
+  createdAt?: string;
   tags?: string[];
   contactTags?: string[];
 }) {
@@ -34,6 +35,7 @@ function opportunity(input: {
     monetaryValue: 450,
     currency: "USD",
     tags: input.tags,
+    createdAt: input.createdAt ?? input.wonAt,
     lastStatusChangeAt: input.wonAt,
     updatedAt: input.wonAt,
     contact: {
@@ -129,6 +131,7 @@ describe("syncGhlLocation", () => {
     const second = clientReturning([
       opportunity({
         id: "new-win",
+        createdAt: "2026-07-15T10:01:00.000Z",
         wonAt: "2026-07-15T10:05:00.000Z",
         tags: [" Premium ", "premium", ""],
         contactTags: ["Qualified", " qualified "],
@@ -181,10 +184,11 @@ describe("syncGhlLocation", () => {
         ),
       );
     expect(counts).toEqual({ contacts: 1, opportunities: 2, matches: 2 });
-    const [storedTags] = await db
+    const [storedOpportunity] = await db
       .select({
         contactTags: ghlContacts.tags,
         opportunityTags: ghlOpportunities.tags,
+        wonAt: ghlOpportunities.wonAt,
       })
       .from(ghlOpportunities)
       .innerJoin(ghlContacts, eq(ghlOpportunities.contactId, ghlContacts.id))
@@ -198,9 +202,10 @@ describe("syncGhlLocation", () => {
           eq(ghlOpportunities.externalId, "new-win"),
         ),
       );
-    expect(storedTags).toEqual({
+    expect(storedOpportunity).toEqual({
       contactTags: ["Qualified"],
       opportunityTags: ["Premium", "Qualified"],
+      wonAt: new Date("2026-07-15T10:01:00.000Z"),
     });
 
     const [mapping] = await db

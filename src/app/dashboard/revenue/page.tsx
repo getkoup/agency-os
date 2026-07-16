@@ -109,7 +109,7 @@ export default async function RevenuePage({
             <Table className="min-w-[72rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Won locally</TableHead>
+                  <TableHead className="pl-6">Created locally</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Opportunity / Contact</TableHead>
                   <TableHead>Tags</TableHead>

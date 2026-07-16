@@ -4,7 +4,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Clock3, SlidersHorizontal } from "lucide-react";
 
 import { Badge } from "~/components/ui/badge";
-import { Input } from "~/components/ui/input";
+import {
+  DateRangeFilter,
+  type DatePreset,
+} from "~/features/dashboard/date-range-filter";
 import { Label } from "~/components/ui/label";
 import {
   Select,
@@ -46,15 +49,19 @@ export function DashboardFilters({
   const router = useRouter();
   const searchParams = useSearchParams();
   const controlCount =
-    2 + Number(showClient) + Number(showPlatform) + Number(showCampaign);
+    1 + Number(showClient) + Number(showPlatform) + Number(showCampaign);
   const gridColumns =
-    controlCount === 5
-      ? "lg:grid-cols-5"
-      : controlCount === 4
-        ? "lg:grid-cols-4"
-        : controlCount === 3
-          ? "lg:grid-cols-3"
-          : "lg:grid-cols-2";
+    controlCount === 4
+      ? "lg:grid-cols-4"
+      : controlCount === 3
+        ? "lg:grid-cols-3"
+        : controlCount === 2
+          ? "lg:grid-cols-2"
+          : "lg:grid-cols-1";
+  const datePreset = (searchParams.get("range") ??
+    (!searchParams.has("from") && !searchParams.has("to")
+      ? "last7"
+      : "custom")) as DatePreset;
   const selectedClient = options.clients.find(
     (client) => client.id === values.clientId,
   );
@@ -67,6 +74,15 @@ export function DashboardFilters({
     const next = new URLSearchParams(searchParams);
     if (value === "all") next.delete(key);
     else next.set(key, value);
+    for (const pageKey of resetPageKeys) next.set(pageKey, "1");
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
+  function updateDateRange(from: string, to: string, preset: DatePreset) {
+    const next = new URLSearchParams(searchParams);
+    next.set("from", from);
+    next.set("to", to);
+    next.set("range", preset);
     for (const pageKey of resetPageKeys) next.set(pageKey, "1");
     router.push(`${pathname}?${next.toString()}`);
   }
@@ -91,30 +107,12 @@ export function DashboardFilters({
         </Badge>
       </div>
       <div className={`grid gap-3 sm:grid-cols-2 ${gridColumns}`}>
-        <div className="space-y-1.5">
-          <Label htmlFor="from" className="text-muted-foreground px-1 text-xs">
-            From
-          </Label>
-          <Input
-            id="from"
-            type="date"
-            value={values.from}
-            className="bg-card h-11 rounded-xl"
-            onChange={(event) => updateFilter("from", event.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="to" className="text-muted-foreground px-1 text-xs">
-            To
-          </Label>
-          <Input
-            id="to"
-            type="date"
-            value={values.to}
-            className="bg-card h-11 rounded-xl"
-            onChange={(event) => updateFilter("to", event.target.value)}
-          />
-        </div>
+        <DateRangeFilter
+          from={values.from}
+          to={values.to}
+          preset={datePreset}
+          onChange={updateDateRange}
+        />
         {showClient ? (
           <div className="space-y-1.5">
             <Label className="text-muted-foreground px-1 text-xs">Client</Label>

@@ -132,13 +132,16 @@ function rowsFromPayload(payload: unknown): unknown[] {
 export class WindsorClient {
   readonly #environment: WindsorEnvironment;
   readonly #fetch: typeof fetch;
+  readonly #now: () => Date;
 
   constructor(
     environment: WindsorEnvironment = parseWindsorEnvironment(),
     fetchImplementation: typeof fetch = fetch,
+    now: () => Date = () => new Date(),
   ) {
     this.#environment = environment;
     this.#fetch = fetchImplementation;
+    this.#now = now;
   }
 
   async #request(url: URL): Promise<unknown> {
@@ -194,7 +197,11 @@ export class WindsorClient {
   ): Promise<unknown[]> {
     const url = new URL("/all", this.#environment.WINDSOR_DATA_BASE_URL);
     url.searchParams.set("api_key", this.#environment.WINDSOR_API_KEY);
-    url.searchParams.set("date_preset", "last_7d");
+    const through = this.#now();
+    const from = new Date(through);
+    from.setUTCDate(from.getUTCDate() - 8);
+    url.searchParams.set("date_from", from.toISOString().slice(0, 10));
+    url.searchParams.set("date_to", through.toISOString().slice(0, 10));
     url.searchParams.set("fields", fields);
     url.searchParams.set("select_accounts", selectAccounts.join(","));
     url.searchParams.set("connector", connector);

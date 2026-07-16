@@ -31,7 +31,7 @@ export function MetricCard({
           <Icon className="size-4" />
         </span>
       </div>
-      <p className="text-3xl font-semibold tracking-[-0.04em] tabular-nums">
+      <p className="font-heading text-4xl leading-none font-medium tracking-[-0.04em] tabular-nums">
         {value}
       </p>
       <div className="text-muted-foreground text-sm">{supporting}</div>

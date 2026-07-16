@@ -30,6 +30,24 @@ describe("WindsorClient", () => {
     expect(requestedUrl.pathname).toBe("/api/common/ds-accounts");
   });
 
+  it("includes the current UTC day for localized reporting boundaries", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({ data: [] }),
+    );
+    const client = new WindsorClient(
+      environment,
+      fetchMock,
+      () => new Date("2026-07-16T06:00:00.000Z"),
+    );
+    await client.fetchLeads(["facebook_leads__123"]);
+    const requestedUrl = fetchMock.mock.calls[0]?.[0];
+    expect(requestedUrl).toBeInstanceOf(URL);
+    if (!(requestedUrl instanceof URL)) throw new Error("Expected URL request");
+    expect(requestedUrl.searchParams.get("date_from")).toBe("2026-07-08");
+    expect(requestedUrl.searchParams.get("date_to")).toBe("2026-07-16");
+    expect(requestedUrl.searchParams.has("date_preset")).toBe(false);
+  });
+
   it("redacts API keys from request failures", async () => {
     const client = new WindsorClient(
       environment,

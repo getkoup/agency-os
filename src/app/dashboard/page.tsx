@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
+import { formatClientDate } from "~/features/dashboard/date-format";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { OverviewChart } from "~/features/dashboard/overview-chart";
@@ -495,7 +496,7 @@ export default async function DashboardPage({
                       </p>
                     </div>
                     <span className="text-muted-foreground shrink-0 self-start text-[0.7rem] tabular-nums sm:self-center sm:text-xs">
-                      {lead.occurredAt.toISOString().slice(0, 10)}
+                      {formatClientDate(lead.occurredAt, lead.timezone)}
                     </span>
                   </div>
                 );
