@@ -36,7 +36,7 @@ export default async function DashboardPage({
   const filters = {
     from: search.from,
     to: search.to,
-    clientId: undefined,
+    clientId: search.clientId,
     platform: undefined,
     campaignId: undefined,
   };
@@ -44,6 +44,7 @@ export default async function DashboardPage({
     api.dashboard.filterOptions({
       from: search.from,
       to: search.to,
+      clientId: search.clientId,
     }),
     api.dashboard.overview(filters),
     api.dashboard.trend(filters),
@@ -108,7 +109,7 @@ export default async function DashboardPage({
       <PageHeader
         eyebrow="Portfolio intelligence"
         title="Agency Overview"
-        description="Internal performance snapshot across all clients."
+        description="Internal performance snapshot across the clients you can access."
         meta={
           <Badge variant="secondary" className="rounded-full">
             {search.from} through {search.to} · client-local dates
@@ -118,7 +119,6 @@ export default async function DashboardPage({
       <DashboardFilters
         values={filters}
         options={options}
-        showClient={false}
         showPlatform={false}
         showCampaign={false}
       />
