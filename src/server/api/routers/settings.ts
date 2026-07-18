@@ -1,14 +1,21 @@
 import { z } from "zod";
 
 import {
+  createLeadClassificationRule,
   createRevenueRule,
+  updateLeadClassificationRule,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
 import {
   getGhlConfigurationStatus,
+  listLeadClassificationRules,
   listRevenueRules,
 } from "~/features/settings/server/queries";
-import { agencyProcedure, createTRPCRouter } from "~/server/api/trpc";
+import {
+  agencyProcedure,
+  createTRPCRouter,
+  ownerProcedure,
+} from "~/server/api/trpc";
 
 const clientId = z.string().uuid();
 const tagName = z.string().trim().min(1).max(255);
@@ -18,8 +25,44 @@ const revenueValue = z
   .regex(/^\d+(?:\.\d{1,2})?$/, "Use a non-negative USD value");
 const serviceName = z.string().trim().max(255).optional();
 const status = z.enum(["active", "inactive"]);
+const categoryName = z.string().trim().min(1).max(100);
+const keywords = z.array(z.string().trim().min(1).max(100)).min(1).max(20);
+const matchMode = z.enum(["any", "all"]);
+const priority = z.number().int().min(0).max(1_000);
 
 export const settingsRouter = createTRPCRouter({
+  leadClassificationRules: agencyProcedure
+    .input(
+      z.object({
+        clientId: clientId.optional(),
+        limit: z.number().int().positive().max(100).default(100),
+      }),
+    )
+    .query(({ input }) => listLeadClassificationRules(input)),
+  createLeadClassificationRule: ownerProcedure
+    .input(
+      z.object({
+        clientId,
+        categoryName,
+        keywords,
+        matchMode,
+        priority,
+      }),
+    )
+    .mutation(({ input }) => createLeadClassificationRule(input)),
+  updateLeadClassificationRule: ownerProcedure
+    .input(
+      z.object({
+        ruleId: z.string().uuid(),
+        clientId,
+        categoryName,
+        keywords,
+        matchMode,
+        priority,
+        status,
+      }),
+    )
+    .mutation(({ input }) => updateLeadClassificationRule(input)),
   revenueRules: agencyProcedure
     .input(
       z.object({

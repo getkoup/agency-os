@@ -26,12 +26,17 @@ import {
   ghlOpportunities,
   ghlOpportunityMatches,
   integrationMappings,
+  leadClassificationRules,
   leadForms,
   leads,
   revenueRules,
   sourceAccounts,
   syncRuns,
 } from "~/server/db/schema";
+import {
+  classifyCampaign,
+  type LeadClassificationRule,
+} from "~/features/dashboard/lead-classification";
 import { type DashboardFilters } from "~/features/dashboard/server/schemas";
 import { calculateClientHealth } from "~/features/dashboard/health";
 
@@ -432,6 +437,115 @@ export async function getLeadAnalytics(
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(bookingWhere)
     .groupBy(sql`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`);
+  const [formCampaignRows, dmCampaignRows] = await Promise.all([
+    db
+      .select({
+        clientId: sourceAccounts.clientId,
+        campaignName: campaigns.name,
+        leads: count(),
+      })
+      .from(leads)
+      .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+      .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+      .where(leadWhere)
+      .groupBy(sourceAccounts.clientId, campaigns.name),
+    db
+      .select({
+        clientId: sourceAccounts.clientId,
+        campaignName: campaigns.name,
+        leads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
+      })
+      .from(adPerformanceDaily)
+      .innerJoin(
+        sourceAccounts,
+        eq(adPerformanceDaily.sourceAccountId, sourceAccounts.id),
+      )
+      .innerJoin(campaigns, eq(adPerformanceDaily.campaignId, campaigns.id))
+      .where(performanceWhere)
+      .groupBy(sourceAccounts.clientId, campaigns.name),
+  ]);
+  const classificationClientIds = [
+    ...new Set(
+      [...formCampaignRows, ...dmCampaignRows].flatMap(({ clientId }) =>
+        clientId ? [clientId] : [],
+      ),
+    ),
+  ];
+  const storedClassificationRules = classificationClientIds.length
+    ? await db
+        .select({
+          id: leadClassificationRules.id,
+          clientId: leadClassificationRules.clientId,
+          categoryName: leadClassificationRules.categoryName,
+          keywords: leadClassificationRules.keywords,
+          matchMode: leadClassificationRules.matchMode,
+          priority: leadClassificationRules.priority,
+        })
+        .from(leadClassificationRules)
+        .where(
+          and(
+            eq(leadClassificationRules.status, "active"),
+            inArray(leadClassificationRules.clientId, classificationClientIds),
+          ),
+        )
+    : [];
+  const classificationRulesByClient = new Map<
+    string,
+    LeadClassificationRule[]
+  >();
+  for (const rule of storedClassificationRules) {
+    const rules = classificationRulesByClient.get(rule.clientId) ?? [];
+    rules.push(rule);
+    classificationRulesByClient.set(rule.clientId, rules);
+  }
+  const serviceCategoryMap = new Map<
+    string,
+    {
+      categoryName: string;
+      facebookLeadFormLeads: number;
+      dmLeads: number;
+    }
+  >();
+  function addServiceLeads(
+    clientId: string | null,
+    campaignName: string | null,
+    type: "facebookLeadFormLeads" | "dmLeads",
+    leadCount: number,
+  ) {
+    const categoryName = classifyCampaign(
+      campaignName,
+      clientId ? (classificationRulesByClient.get(clientId) ?? []) : [],
+    );
+    const categoryKey = categoryName.toLowerCase();
+    const current = serviceCategoryMap.get(categoryKey) ?? {
+      categoryName,
+      facebookLeadFormLeads: 0,
+      dmLeads: 0,
+    };
+    current[type] += leadCount;
+    serviceCategoryMap.set(categoryKey, current);
+  }
+  for (const row of formCampaignRows) {
+    addServiceLeads(
+      row.clientId,
+      row.campaignName,
+      "facebookLeadFormLeads",
+      row.leads,
+    );
+  }
+  for (const row of dmCampaignRows) {
+    addServiceLeads(row.clientId, row.campaignName, "dmLeads", row.leads);
+  }
+  const serviceCategories = [...serviceCategoryMap.values()]
+    .map((row) => ({
+      ...row,
+      totalLeads: row.facebookLeadFormLeads + row.dmLeads,
+    }))
+    .sort(
+      (left, right) =>
+        right.totalLeads - left.totalLeads ||
+        left.categoryName.localeCompare(right.categoryName),
+    );
 
   const facebookLeadFormLeads = leadTotal?.count ?? 0;
   const dmLeads = dmTotal?.count ?? 0;
@@ -474,6 +588,7 @@ export async function getLeadAnalytics(
     totalBookings,
     conversion: totalLeads === 0 ? 0 : totalBookings / totalLeads,
     leadTypes,
+    serviceCategories,
     daily,
   };
 }

@@ -16,6 +16,7 @@ import {
   campaigns,
   clients,
   integrationMappings,
+  leadClassificationRules,
   leads,
   sourceAccounts,
 } from "~/server/db/schema";
@@ -86,18 +87,12 @@ describe("dashboard queries", () => {
       timezone: "America/New_York",
       syncFromAt: new Date("2026-07-01T00:00:00.000Z"),
     });
-    await db.insert(leads).values({
-      sourceAccountId: leadSource.id,
-      externalId: `${slug}-lead`,
-      occurredAt: new Date("2026-07-07T03:30:00.000Z"),
-      rawPayload: {},
-    });
     const [campaign] = await db
       .insert(campaigns)
       .values({
         sourceAccountId: performanceSource.id,
         externalId: `${slug}-campaign`,
-        name: "Client Analytics Query Test Campaign",
+        name: "Ceramic Tint Campaign",
       })
       .returning({ id: campaigns.id });
     if (!campaign) throw new Error("Could not create analytics test campaign");
@@ -119,6 +114,31 @@ describe("dashboard queries", () => {
       })
       .returning({ id: ads.id });
     if (!ad) throw new Error("Could not create analytics test ad");
+    await db.insert(leads).values({
+      sourceAccountId: leadSource.id,
+      externalId: `${slug}-lead`,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      adId: ad.id,
+      occurredAt: new Date("2026-07-07T03:30:00.000Z"),
+      rawPayload: {},
+    });
+    await db.insert(leadClassificationRules).values([
+      {
+        clientId,
+        categoryName: "Tint",
+        keywords: ["tint"],
+        matchMode: "any",
+        priority: 100,
+      },
+      {
+        clientId,
+        categoryName: "Ceramic Coating",
+        keywords: ["ceramic", "coating"],
+        matchMode: "any",
+        priority: 80,
+      },
+    ]);
     await db.insert(adPerformanceDaily).values({
       sourceAccountId: performanceSource.id,
       campaignId: campaign.id,
@@ -211,6 +231,14 @@ describe("dashboard queries", () => {
         { type: "Facebook Lead Forms", leads: 1 },
         { type: "DM Conversations", leads: 2 },
       ],
+      serviceCategories: [
+        {
+          categoryName: "Tint",
+          facebookLeadFormLeads: 1,
+          dmLeads: 2,
+          totalLeads: 3,
+        },
+      ],
     });
     expect(leadAnalytics.daily).toEqual([
       {
@@ -234,9 +262,9 @@ describe("dashboard queries", () => {
     ]);
     expect(performance.rows).toEqual([
       expect.objectContaining({
-        facebookLeadFormLeads: 0,
+        facebookLeadFormLeads: 1,
         dmLeads: 2,
-        totalLeads: 2,
+        totalLeads: 3,
       }),
     ]);
   });

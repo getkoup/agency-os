@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Building2,
+  ListFilter,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -23,6 +24,7 @@ import {
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
+import { LeadClassificationManager } from "~/features/settings/lead-classification-manager";
 import { RevenueRuleManager } from "~/features/settings/revenue-rule-manager";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
@@ -45,9 +47,21 @@ export default async function SettingsPage({
   const rawStatus = Array.isArray(rawSearch.ruleStatus)
     ? rawSearch.ruleStatus[0]
     : rawSearch.ruleStatus;
+  const rawClassificationClientId = Array.isArray(
+    rawSearch.classificationClientId,
+  )
+    ? rawSearch.classificationClientId[0]
+    : rawSearch.classificationClientId;
   const clientId = optionalUuid.safeParse(rawClientId).data;
+  const classificationClientId = optionalUuid.safeParse(
+    rawClassificationClientId,
+  ).data;
   const status = optionalStatus.safeParse(rawStatus).data;
-  const [rules, ghlStatus] = await Promise.all([
+  const [classificationRules, rules, ghlStatus] = await Promise.all([
+    api.settings.leadClassificationRules({
+      clientId: classificationClientId,
+      limit: 100,
+    }),
     api.settings.revenueRules({
       clientId,
       status,
@@ -123,6 +137,28 @@ export default async function SettingsPage({
           );
         })}
       </section>
+      <Card className="shadow-sage border-border/80 gap-3 rounded-[1.25rem] py-5">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <ListFilter className="text-primary size-5" />
+            <div>
+              <CardTitle className="tracking-tight">
+                Lead classification
+              </CardTitle>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Per-client campaign keyword priorities for form and DM lead
+                reporting.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <LeadClassificationManager
+            result={classificationRules}
+            canManage={user.role === "owner"}
+          />
+        </CardContent>
+      </Card>
       <Card className="shadow-sage border-border/80 gap-3 rounded-[1.25rem] py-5">
         <CardHeader>
           <div className="flex items-center gap-3">
