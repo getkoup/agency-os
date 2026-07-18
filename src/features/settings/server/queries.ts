@@ -2,8 +2,133 @@ import "server-only";
 
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 
+import {
+  classifyCampaign,
+  type LeadClassificationRule,
+} from "~/features/dashboard/lead-classification";
 import { db } from "~/server/db";
-import { clients, integrationMappings, revenueRules } from "~/server/db/schema";
+import {
+  adPerformanceDaily,
+  campaigns,
+  clients,
+  integrationMappings,
+  leadClassificationRules,
+  leads,
+  revenueRules,
+  sourceAccounts,
+} from "~/server/db/schema";
+
+export async function listLeadClassificationRules(input: {
+  clientId?: string;
+  limit: number;
+}) {
+  const where = input.clientId
+    ? eq(leadClassificationRules.clientId, input.clientId)
+    : undefined;
+  const rows = await db
+    .select({
+      id: leadClassificationRules.id,
+      clientId: leadClassificationRules.clientId,
+      client: clients.name,
+      categoryName: leadClassificationRules.categoryName,
+      keywords: leadClassificationRules.keywords,
+      matchMode: leadClassificationRules.matchMode,
+      priority: leadClassificationRules.priority,
+      status: leadClassificationRules.status,
+      updatedAt: leadClassificationRules.updatedAt,
+    })
+    .from(leadClassificationRules)
+    .innerJoin(clients, eq(leadClassificationRules.clientId, clients.id))
+    .where(where)
+    .orderBy(
+      asc(clients.name),
+      desc(leadClassificationRules.priority),
+      asc(leadClassificationRules.categoryName),
+      asc(leadClassificationRules.id),
+    )
+    .limit(input.limit);
+  const clientOptions = await db
+    .select({ id: clients.id, name: clients.name, status: clients.status })
+    .from(clients)
+    .orderBy(asc(clients.name));
+
+  if (!input.clientId) {
+    return { rows, clientOptions, preview: [] };
+  }
+  const [formCampaigns, dmCampaigns] = await Promise.all([
+    db
+      .select({
+        campaignName: campaigns.name,
+        leads: count(),
+      })
+      .from(leads)
+      .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+      .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+      .where(eq(sourceAccounts.clientId, input.clientId))
+      .groupBy(campaigns.name),
+    db
+      .select({
+        campaignName: campaigns.name,
+        leads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
+      })
+      .from(adPerformanceDaily)
+      .innerJoin(
+        sourceAccounts,
+        eq(adPerformanceDaily.sourceAccountId, sourceAccounts.id),
+      )
+      .innerJoin(campaigns, eq(adPerformanceDaily.campaignId, campaigns.id))
+      .where(eq(sourceAccounts.clientId, input.clientId))
+      .groupBy(campaigns.name),
+  ]);
+  const activeRules: LeadClassificationRule[] = rows
+    .filter((row) => row.status === "active")
+    .map((row) => ({
+      id: row.id,
+      categoryName: row.categoryName,
+      keywords: row.keywords,
+      matchMode: row.matchMode,
+      priority: row.priority,
+    }));
+  const previewByCampaign = new Map<
+    string,
+    {
+      campaignName: string;
+      categoryName: string;
+      facebookLeadFormLeads: number;
+      dmLeads: number;
+    }
+  >();
+  function previewRow(campaignName: string | null) {
+    let name = campaignName?.trim() ?? "Unattributed";
+    if (name === "") name = "Unattributed";
+    const current = previewByCampaign.get(name) ?? {
+      campaignName: name,
+      categoryName: classifyCampaign(campaignName, activeRules),
+      facebookLeadFormLeads: 0,
+      dmLeads: 0,
+    };
+    previewByCampaign.set(name, current);
+    return current;
+  }
+  for (const row of formCampaigns) {
+    previewRow(row.campaignName).facebookLeadFormLeads += row.leads;
+  }
+  for (const row of dmCampaigns) {
+    previewRow(row.campaignName).dmLeads += row.leads;
+  }
+  const preview = [...previewByCampaign.values()]
+    .map((row) => ({
+      ...row,
+      totalLeads: row.facebookLeadFormLeads + row.dmLeads,
+    }))
+    .sort(
+      (left, right) =>
+        right.totalLeads - left.totalLeads ||
+        left.campaignName.localeCompare(right.campaignName),
+    )
+    .slice(0, 50);
+  return { rows, clientOptions, preview };
+}
 
 export async function listRevenueRules(input: {
   clientId?: string;

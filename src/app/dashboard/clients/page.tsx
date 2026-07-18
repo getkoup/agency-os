@@ -72,13 +72,15 @@ export default async function ClientsPage({
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {result.rows.length ? (
-            <Table className="min-w-[42rem]">
+            <Table className="min-w-[54rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Client</TableHead>
                   <TableHead>Health</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Total leads</TableHead>
+                  <TableHead>Facebook forms</TableHead>
+                  <TableHead>DM leads</TableHead>
                   <TableHead>Bookings</TableHead>
                   <TableHead className="pr-6">Estimated revenue</TableHead>
                 </TableRow>
@@ -115,7 +117,13 @@ export default async function ClientsPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="tabular-nums">
-                      {row.capturedLeads}
+                      {row.totalLeads}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {row.facebookLeadFormLeads}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {row.dmLeads}
                     </TableCell>
                     <TableCell className="tabular-nums">
                       {row.bookings}

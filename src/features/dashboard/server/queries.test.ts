@@ -1,23 +1,41 @@
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { getClientAnalytics } from "~/features/dashboard/server/queries";
+import {
+  getClientAnalytics,
+  getDashboardOverview,
+  getLeadAnalytics,
+  getPerformanceRows,
+  getTrend,
+} from "~/features/dashboard/server/queries";
 import { db } from "~/server/db";
 import {
+  adGroups,
+  adPerformanceDaily,
+  ads,
+  campaigns,
   clients,
   integrationMappings,
+  leadClassificationRules,
   leads,
   sourceAccounts,
 } from "~/server/db/schema";
-import { eq } from "drizzle-orm";
 
 const slug = "client-analytics-query-test";
+const leadConnectorAccountId = `facebook_leads__${slug}`;
+const performanceConnectorAccountId = `facebook__${slug}`;
 let clientId = "";
 
-describe("getClientAnalytics", () => {
+describe("dashboard queries", () => {
   beforeAll(async () => {
     await db
       .delete(sourceAccounts)
-      .where(eq(sourceAccounts.connectorAccountId, `facebook_leads__${slug}`));
+      .where(
+        inArray(sourceAccounts.connectorAccountId, [
+          leadConnectorAccountId,
+          performanceConnectorAccountId,
+        ]),
+      );
     await db.delete(clients).where(eq(clients.slug, slug));
     const [client] = await db
       .insert(clients)
@@ -25,20 +43,43 @@ describe("getClientAnalytics", () => {
       .returning({ id: clients.id });
     if (!client) throw new Error("Could not create analytics test client");
     clientId = client.id;
-    const [source] = await db
+    const storedSources = await db
       .insert(sourceAccounts)
-      .values({
-        clientId,
-        dataProvider: "windsor",
-        platform: "facebook",
-        connector: "facebook_leads",
-        connectorAccountId: `facebook_leads__${slug}`,
-        externalAccountId: slug,
-        externalAccountName: "Client Analytics Query Test",
-        normalizedName: "client analytics query test",
-      })
-      .returning({ id: sourceAccounts.id });
-    if (!source) throw new Error("Could not create analytics test source");
+      .values([
+        {
+          clientId,
+          dataProvider: "windsor",
+          platform: "facebook",
+          connector: "facebook_leads",
+          connectorAccountId: leadConnectorAccountId,
+          externalAccountId: `${slug}-leads`,
+          externalAccountName: "Client Analytics Query Test Leads",
+          normalizedName: "clientanalyticsquerytestleads",
+        },
+        {
+          clientId,
+          dataProvider: "windsor",
+          platform: "facebook",
+          connector: "facebook",
+          connectorAccountId: performanceConnectorAccountId,
+          externalAccountId: `${slug}-performance`,
+          externalAccountName: "Client Analytics Query Test Performance",
+          normalizedName: "clientanalyticsquerytestperformance",
+        },
+      ])
+      .returning({
+        id: sourceAccounts.id,
+        connector: sourceAccounts.connector,
+      });
+    const leadSource = storedSources.find(
+      ({ connector }) => connector === "facebook_leads",
+    );
+    const performanceSource = storedSources.find(
+      ({ connector }) => connector === "facebook",
+    );
+    if (!leadSource || !performanceSource) {
+      throw new Error("Could not create analytics test sources");
+    }
     await db.insert(integrationMappings).values({
       clientId,
       provider: "ghl",
@@ -46,10 +87,66 @@ describe("getClientAnalytics", () => {
       timezone: "America/New_York",
       syncFromAt: new Date("2026-07-01T00:00:00.000Z"),
     });
+    const [campaign] = await db
+      .insert(campaigns)
+      .values({
+        sourceAccountId: performanceSource.id,
+        externalId: `${slug}-campaign`,
+        name: "Ceramic Tint Campaign",
+      })
+      .returning({ id: campaigns.id });
+    if (!campaign) throw new Error("Could not create analytics test campaign");
+    const [adGroup] = await db
+      .insert(adGroups)
+      .values({
+        campaignId: campaign.id,
+        externalId: `${slug}-ad-group`,
+        name: "Client Analytics Query Test Ad Group",
+      })
+      .returning({ id: adGroups.id });
+    if (!adGroup) throw new Error("Could not create analytics test ad group");
+    const [ad] = await db
+      .insert(ads)
+      .values({
+        adGroupId: adGroup.id,
+        externalId: `${slug}-ad`,
+        name: "Client Analytics Query Test Ad",
+      })
+      .returning({ id: ads.id });
+    if (!ad) throw new Error("Could not create analytics test ad");
     await db.insert(leads).values({
-      sourceAccountId: source.id,
+      sourceAccountId: leadSource.id,
       externalId: `${slug}-lead`,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      adId: ad.id,
       occurredAt: new Date("2026-07-07T03:30:00.000Z"),
+      rawPayload: {},
+    });
+    await db.insert(leadClassificationRules).values([
+      {
+        clientId,
+        categoryName: "Tint",
+        keywords: ["tint"],
+        matchMode: "any",
+        priority: 100,
+      },
+      {
+        clientId,
+        categoryName: "Ceramic Coating",
+        keywords: ["ceramic", "coating"],
+        matchMode: "any",
+        priority: 80,
+      },
+    ]);
+    await db.insert(adPerformanceDaily).values({
+      sourceAccountId: performanceSource.id,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      adId: ad.id,
+      date: "2026-07-06",
+      messagingConversations: 2,
+      providerMetrics: {},
       rawPayload: {},
     });
   });
@@ -57,11 +154,16 @@ describe("getClientAnalytics", () => {
   afterAll(async () => {
     await db
       .delete(sourceAccounts)
-      .where(eq(sourceAccounts.connectorAccountId, `facebook_leads__${slug}`));
-    await db.delete(clients).where(eq(clients.slug, slug));
+      .where(
+        inArray(sourceAccounts.connectorAccountId, [
+          leadConnectorAccountId,
+          performanceConnectorAccountId,
+        ]),
+      );
+    await db.delete(clients).where(eq(clients.id, clientId));
   });
 
-  it("qualifies correlated client IDs and applies client-local dates", async () => {
+  it("qualifies correlated client IDs and combines both lead types", async () => {
     const result = await getClientAnalytics({
       from: "2026-07-06",
       to: "2026-08-01",
@@ -74,14 +176,16 @@ describe("getClientAnalytics", () => {
     expect(result.rows).toEqual([
       expect.objectContaining({
         id: clientId,
-        capturedLeads: 1,
+        facebookLeadFormLeads: 1,
+        dmLeads: 2,
+        totalLeads: 3,
         bookings: 0,
         estimatedRevenue: "0.00",
       }),
     ]);
   });
 
-  it("includes a UTC-next-day lead on the prior New York date", async () => {
+  it("includes UTC-next-day lead forms on the prior New York date", async () => {
     const result = await getClientAnalytics({
       from: "2026-07-06",
       to: "2026-07-06",
@@ -90,7 +194,78 @@ describe("getClientAnalytics", () => {
       clientIds: [clientId],
     });
 
-    expect(result.rows[0]?.capturedLeads).toBe(1);
-    expect(result.rows[0]?.timezone).toBe("America/New_York");
+    expect(result.rows[0]).toMatchObject({
+      facebookLeadFormLeads: 1,
+      dmLeads: 2,
+      totalLeads: 3,
+      timezone: "America/New_York",
+    });
+  });
+
+  it("uses the combined lead total across dashboard views", async () => {
+    const filters = {
+      from: "2026-07-06",
+      to: "2026-07-06",
+      clientId: undefined,
+      platform: undefined,
+      campaignId: undefined,
+    };
+    const scope = { includeUnassigned: false, clientIds: [clientId] };
+    const [overview, leadAnalytics, trend, performance] = await Promise.all([
+      getDashboardOverview(filters, scope),
+      getLeadAnalytics(filters, scope),
+      getTrend(filters, scope),
+      getPerformanceRows(filters, scope, 1, 25),
+    ]);
+
+    expect(overview).toMatchObject({
+      facebookLeadFormLeads: 1,
+      dmLeads: 2,
+      totalLeads: 3,
+    });
+    expect(leadAnalytics).toMatchObject({
+      facebookLeadFormLeads: 1,
+      dmLeads: 2,
+      totalLeads: 3,
+      leadTypes: [
+        { type: "Facebook Lead Forms", leads: 1 },
+        { type: "DM Conversations", leads: 2 },
+      ],
+      serviceCategories: [
+        {
+          categoryName: "Tint",
+          facebookLeadFormLeads: 1,
+          dmLeads: 2,
+          totalLeads: 3,
+        },
+      ],
+    });
+    expect(leadAnalytics.daily).toEqual([
+      {
+        date: "2026-07-06",
+        facebookLeadFormLeads: 1,
+        dmLeads: 2,
+        totalLeads: 3,
+        bookings: 0,
+        conversion: 0,
+      },
+    ]);
+    expect(trend).toEqual([
+      {
+        date: "2026-07-06",
+        spend: "0.00",
+        facebookLeadFormLeads: 1,
+        dmLeads: 2,
+        totalLeads: 3,
+        wonOpportunities: 0,
+      },
+    ]);
+    expect(performance.rows).toEqual([
+      expect.objectContaining({
+        facebookLeadFormLeads: 1,
+        dmLeads: 2,
+        totalLeads: 3,
+      }),
+    ]);
   });
 });

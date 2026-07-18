@@ -52,6 +52,42 @@ try {
   await applyMigration(test, "drizzle/0002_nifty_roland_deschain.sql");
   await applyMigration(test, "drizzle/0003_glamorous_vulture.sql");
   await applyMigration(test, "drizzle/0004_mute_northstar.sql");
+  await applyMigration(test, "drizzle/0005_use-opportunity-created-at.sql");
+  await test`
+    insert into "agency_os_client" ("slug", "name")
+    values ('tint-lab', 'Tint Lab')
+  `;
+  await applyMigration(test, "drizzle/0006_tranquil_alex_wilder.sql");
+  const seededClassificationRules = await test`
+    select "categoryName", "keywords", "matchMode", "priority"
+    from "agency_os_lead_classification_rule"
+    order by "priority" desc
+  `;
+  if (
+    JSON.stringify(seededClassificationRules) !==
+    JSON.stringify([
+      {
+        categoryName: "Tint",
+        keywords: ["tint"],
+        matchMode: "any",
+        priority: 100,
+      },
+      {
+        categoryName: "PPF",
+        keywords: ["ppf", "paint protection film"],
+        matchMode: "any",
+        priority: 90,
+      },
+      {
+        categoryName: "Ceramic Coating",
+        keywords: ["coating", "ceramic"],
+        matchMode: "any",
+        priority: 80,
+      },
+    ])
+  ) {
+    throw new Error("Tint Lab lead classification defaults are incorrect");
+  }
   const rows =
     await test`select "id", "email", "role", "status" from "agency_os_user" order by "id"`;
   const enumRows = await test`
@@ -156,6 +192,38 @@ try {
         values (${client.id}, 'Invalid', -0.01)
       `,
     "non-negative revenue value",
+  );
+  await test`
+    insert into "agency_os_lead_classification_rule"
+      ("clientId", "categoryName", "keywords", "priority")
+    values (${client.id}, 'Detailing', array['detailing'], 70)
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_lead_classification_rule"
+          ("clientId", "categoryName", "keywords", "priority")
+        values (${client.id}, 'detailing', array['detail'], 60)
+      `,
+    "case-insensitive lead category uniqueness",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_lead_classification_rule"
+          ("clientId", "categoryName", "keywords", "priority")
+        values (${client.id}, 'Empty', array[]::text[], 50)
+      `,
+    "non-empty lead category keywords",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_lead_classification_rule"
+          ("clientId", "categoryName", "keywords", "priority")
+        values (${client.id}, 'Negative', array['negative'], -1)
+      `,
+    "non-negative lead category priority",
   );
   await expectConstraintViolation(
     () =>

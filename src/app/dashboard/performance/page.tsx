@@ -58,7 +58,6 @@ export default async function PerformancePage({
         values={filters}
         options={options}
         resetPageKeys={["performancePage"]}
-        showClient={false}
         showPlatform={false}
         showCampaign={false}
       />
@@ -70,7 +69,7 @@ export default async function PerformancePage({
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {performance.rows.length ? (
-            <Table className="min-w-[64rem]">
+            <Table className="min-w-[76rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Date</TableHead>
@@ -79,7 +78,9 @@ export default async function PerformancePage({
                   <TableHead>Campaign</TableHead>
                   <TableHead className="text-right">Clicks</TableHead>
                   <TableHead className="text-right">Spend</TableHead>
-                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Total leads</TableHead>
+                  <TableHead className="text-right">Facebook forms</TableHead>
+                  <TableHead className="text-right">DM leads</TableHead>
                   <TableHead className="text-right">CTR</TableHead>
                   <TableHead className="text-right">CPC</TableHead>
                   <TableHead className="pr-6 text-right">CPL</TableHead>
@@ -103,7 +104,13 @@ export default async function PerformancePage({
                       ${row.spend}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.platformLeads}
+                      {row.totalLeads}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.facebookLeadFormLeads}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.dmLeads}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.ctr ? `${row.ctr}%` : "—"}
