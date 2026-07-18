@@ -55,9 +55,66 @@ describe("GhlClient", () => {
       }),
     ).resolves.toBe("America/New_York");
     const [request] = fetcher.mock.calls[0]!;
-    expect(String(request)).toBe(
+    const requestedUrl =
+      request instanceof URL
+        ? request.href
+        : typeof request === "string"
+          ? request
+          : request.url;
+    expect(requestedUrl).toBe(
       "https://services.leadconnectorhq.com/locations/location-1",
     );
+  });
+
+  it("retries transient provider failures", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValue(
+        Response.json({
+          location: { id: "location-1", timezone: "America/New_York" },
+        }),
+      );
+    const wait = vi
+      .fn<(delayMs: number) => Promise<void>>()
+      .mockResolvedValue();
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+      wait,
+    );
+
+    await expect(
+      client.locationTimezone({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).resolves.toBe("America/New_York");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(250);
+  });
+
+  it("does not retry authentication failures", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    const wait = vi
+      .fn<(delayMs: number) => Promise<void>>()
+      .mockResolvedValue();
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+      wait,
+    );
+
+    await expect(
+      client.locationTimezone({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).rejects.toThrow("status 401");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid provider timezone", async () => {

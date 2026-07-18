@@ -1,242 +1,18 @@
 import "server-only";
 
-import { and, eq, lte, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { db } from "~/server/db";
-import {
-  ghlContacts,
-  ghlOpportunities,
-  ghlOpportunityMatches,
-  integrationMappings,
-  leads,
-  sourceAccounts,
-} from "~/server/db/schema";
-import type { GhlClient, GhlOpportunity } from "~/server/ghl/client";
-import { normalizeEmail, normalizePhone } from "~/server/windsor/normalize";
+import { integrationMappings } from "~/server/db/schema";
+import type { GhlClient } from "~/server/ghl/client";
+import { upsertGhlOpportunityPage } from "~/server/ghl/persistence";
 
 const REPLAY_OVERLAP_MS = 5 * 60 * 1000;
-export function normalizeGhlTags(
-  tags: readonly string[] | undefined,
-): string[] {
-  const normalized = new Map<string, string>();
-  for (const tag of tags ?? []) {
-    const trimmed = tag.trim();
-    if (trimmed.length === 0) continue;
-    const key = trimmed.toLowerCase();
-    if (!normalized.has(key)) normalized.set(key, trimmed);
-  }
-  return [...normalized.values()];
-}
 
 export interface GhlSyncSummary {
   contactRowCount: number;
   opportunityRowCount: number;
   matchedOpportunityCount: number;
-}
-
-function safeRawOpportunity(row: GhlOpportunity): Record<string, unknown> {
-  return {
-    id: row.id,
-    locationId: row.locationId,
-    contactId: row.contactId,
-    status: row.status,
-    name: row.name ?? null,
-    pipelineId: row.pipelineId ?? null,
-    pipelineStageId: row.pipelineStageId ?? null,
-    monetaryValue: row.monetaryValue ?? null,
-    currency: row.currency ?? null,
-    tags: row.tags ?? [],
-    lastStatusChangeAt: row.lastStatusChangeAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-async function matchOpportunity(input: {
-  opportunityId: string;
-  clientId: string;
-  wonAt: Date;
-  email: string | null;
-  phone: string | null;
-}) {
-  const keys = [
-    input.email ? eq(leads.email, input.email) : undefined,
-    input.phone ? eq(leads.phoneNumber, input.phone) : undefined,
-  ].filter((value) => value !== undefined);
-  const candidates =
-    keys.length === 0
-      ? []
-      : await db
-          .select({
-            id: leads.id,
-            email: leads.email,
-            phone: leads.phoneNumber,
-          })
-          .from(leads)
-          .innerJoin(
-            sourceAccounts,
-            eq(leads.sourceAccountId, sourceAccounts.id),
-          )
-          .where(
-            and(
-              eq(sourceAccounts.clientId, input.clientId),
-              lte(leads.occurredAt, input.wonAt),
-              or(...keys),
-            ),
-          );
-  const candidateIds = new Set(candidates.map(({ id }) => id));
-  const emailIds = new Set(
-    candidates
-      .filter(({ email }) => input.email !== null && email === input.email)
-      .map(({ id }) => id),
-  );
-  const phoneIds = new Set(
-    candidates
-      .filter(({ phone }) => input.phone !== null && phone === input.phone)
-      .map(({ id }) => id),
-  );
-  const matched = candidateIds.size === 1 ? candidates[0] : undefined;
-  const method = matched
-    ? emailIds.has(matched.id) && phoneIds.has(matched.id)
-      ? "email_phone"
-      : emailIds.has(matched.id)
-        ? "email"
-        : "phone"
-    : null;
-  const status = matched
-    ? "matched"
-    : candidateIds.size === 0
-      ? "unmatched"
-      : "ambiguous";
-
-  await db
-    .insert(ghlOpportunityMatches)
-    .values({
-      opportunityId: input.opportunityId,
-      leadId: matched?.id ?? null,
-      status,
-      method,
-      candidateCount: candidateIds.size,
-    })
-    .onConflictDoUpdate({
-      target: ghlOpportunityMatches.opportunityId,
-      set: {
-        leadId: matched?.id ?? null,
-        status,
-        method,
-        candidateCount: candidateIds.size,
-        matchedAt: new Date(),
-      },
-    });
-  return status === "matched";
-}
-
-async function upsertOpportunity(input: {
-  mappingId: string;
-  clientId: string;
-  row: GhlOpportunity;
-}) {
-  const contactTags = normalizeGhlTags(input.row.contact.tags);
-  const opportunityTags = normalizeGhlTags([
-    ...(input.row.tags ?? []),
-    ...contactTags,
-  ]);
-  const email = normalizeEmail(input.row.contact.email ?? undefined);
-  const phone = normalizePhone(input.row.contact.phone ?? undefined);
-  const now = new Date();
-  const providerUpdatedAt = new Date(input.row.updatedAt);
-  const wonAt = new Date(input.row.createdAt);
-  const contact = await db.transaction(async (tx) => {
-    const [value] = await tx
-      .insert(ghlContacts)
-      .values({
-        integrationMappingId: input.mappingId,
-        externalId: input.row.contact.id,
-        fullName: input.row.contact.name ?? null,
-        email: input.row.contact.email ?? null,
-        normalizedEmail: email,
-        phoneNumber: input.row.contact.phone ?? null,
-        normalizedPhone: phone,
-        tags: contactTags,
-        providerUpdatedAt,
-        rawPayload: {
-          id: input.row.contact.id,
-          name: input.row.contact.name ?? null,
-          email: input.row.contact.email ?? null,
-          phone: input.row.contact.phone ?? null,
-          tags: input.row.contact.tags ?? [],
-        },
-      })
-      .onConflictDoUpdate({
-        target: [ghlContacts.integrationMappingId, ghlContacts.externalId],
-        set: {
-          fullName: input.row.contact.name ?? null,
-          email: input.row.contact.email ?? null,
-          normalizedEmail: email,
-          phoneNumber: input.row.contact.phone ?? null,
-          normalizedPhone: phone,
-          tags: contactTags,
-          providerUpdatedAt,
-          updatedAt: now,
-        },
-      })
-      .returning({ id: ghlContacts.id });
-    if (!value) throw new Error("GHL contact upsert failed");
-    const [opportunity] = await tx
-      .insert(ghlOpportunities)
-      .values({
-        integrationMappingId: input.mappingId,
-        contactId: value.id,
-        externalId: input.row.id,
-        status: input.row.status,
-        name: input.row.name ?? null,
-        pipelineId: input.row.pipelineId ?? null,
-        pipelineStageId: input.row.pipelineStageId ?? null,
-        monetaryValue:
-          input.row.monetaryValue === null ||
-          input.row.monetaryValue === undefined
-            ? null
-            : input.row.monetaryValue.toFixed(2),
-        currency: input.row.currency ?? null,
-        tags: opportunityTags,
-        wonAt,
-        providerUpdatedAt,
-        rawPayload: safeRawOpportunity(input.row),
-      })
-      .onConflictDoUpdate({
-        target: [
-          ghlOpportunities.integrationMappingId,
-          ghlOpportunities.externalId,
-        ],
-        set: {
-          contactId: value.id,
-          name: input.row.name ?? null,
-          pipelineId: input.row.pipelineId ?? null,
-          pipelineStageId: input.row.pipelineStageId ?? null,
-          monetaryValue:
-            input.row.monetaryValue === null ||
-            input.row.monetaryValue === undefined
-              ? null
-              : input.row.monetaryValue.toFixed(2),
-          currency: input.row.currency ?? null,
-          tags: opportunityTags,
-          wonAt,
-          providerUpdatedAt,
-          rawPayload: safeRawOpportunity(input.row),
-          updatedAt: now,
-        },
-      })
-      .returning({ id: ghlOpportunities.id });
-    if (!opportunity) throw new Error("GHL opportunity upsert failed");
-    return { opportunityId: opportunity.id };
-  });
-  const matched = await matchOpportunity({
-    opportunityId: contact.opportunityId,
-    clientId: input.clientId,
-    wonAt,
-    email,
-    phone,
-  });
-  return matched;
 }
 
 export async function syncGhlLocation(input: {
@@ -290,16 +66,14 @@ export async function syncGhlLocation(input: {
     through: input.runStartedAt,
     onPage: input.onPage,
   })) {
-    for (const row of page) {
-      const matched = await upsertOpportunity({
-        mappingId: mapping.id,
-        clientId: input.clientId,
-        row,
-      });
-      summary.contactRowCount += 1;
-      summary.opportunityRowCount += 1;
-      if (matched) summary.matchedOpportunityCount += 1;
-    }
+    const pageSummary = await upsertGhlOpportunityPage({
+      mappingId: mapping.id,
+      clientId: input.clientId,
+      rows: page,
+    });
+    summary.contactRowCount += pageSummary.contactRowCount;
+    summary.opportunityRowCount += pageSummary.opportunityRowCount;
+    summary.matchedOpportunityCount += pageSummary.matchedOpportunityCount;
   }
   await db
     .update(integrationMappings)

@@ -31,9 +31,9 @@ describe("WindsorClient", () => {
   });
 
   it("includes the current UTC day for localized reporting boundaries", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json({ data: [] }),
-    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ data: [] }));
     const client = new WindsorClient(
       environment,
       fetchMock,
