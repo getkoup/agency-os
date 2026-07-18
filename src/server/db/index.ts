@@ -20,6 +20,7 @@ const conn =
     env.NODE_ENV === "production"
       ? {
           max: 1,
+          prepare: false,
           idle_timeout: 10,
           connect_timeout: 10,
           max_lifetime: 5 * 60,
