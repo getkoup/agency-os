@@ -74,11 +74,62 @@ const pageSchema = z.object({
 
 export type GhlOpportunity = z.infer<typeof opportunitySchema>;
 
+const MAX_REQUEST_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 30_000;
+
+function defaultWait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function retryDelayMs(response: Response | null, attempt: number): number {
+  const retryAfter = response?.headers.get("retry-after");
+  const retryAfterSeconds = retryAfter ? Number(retryAfter) : Number.NaN;
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return Math.min(retryAfterSeconds * 1_000, 5_000);
+  }
+  return 250 * 2 ** attempt;
+}
+
 export class GhlClient {
   constructor(
     private readonly baseUrl: URL,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly wait: (delayMs: number) => Promise<void> = defaultWait,
   ) {}
+
+  async #request(
+    url: URL,
+    init: RequestInit,
+    operation: string,
+  ): Promise<Response> {
+    for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
+      let response: Response | null = null;
+      try {
+        const requestSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+        const signal = init.signal
+          ? AbortSignal.any([init.signal, requestSignal])
+          : requestSignal;
+        response = await this.fetcher(url, { ...init, signal });
+        if (
+          response.ok ||
+          !isRetryableStatus(response.status) ||
+          attempt === MAX_REQUEST_ATTEMPTS - 1
+        ) {
+          return response;
+        }
+      } catch (error) {
+        if (attempt === MAX_REQUEST_ATTEMPTS - 1) {
+          throw new Error(`${operation} failed`, { cause: error });
+        }
+      }
+      await this.wait(retryDelayMs(response, attempt));
+    }
+    throw new Error(`${operation} failed`);
+  }
 
   async locationTimezone(input: {
     locationId: string;
@@ -88,13 +139,17 @@ export class GhlClient {
       `/locations/${encodeURIComponent(input.locationId)}`,
       this.baseUrl,
     );
-    const response = await this.fetcher(url, {
-      headers: {
-        Authorization: `Bearer ${input.token}`,
-        Version: "v3",
-        Accept: "application/json",
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "v3",
+          Accept: "application/json",
+        },
       },
-    });
+      "GHL location request",
+    );
     if (!response.ok) {
       throw new Error(
         `GHL location request failed with status ${response.status}`,
@@ -126,13 +181,17 @@ export class GhlClient {
         throw new Error("GHL returned an unsafe pagination cursor");
       }
       seen.add(nextUrl.href);
-      const response = await this.fetcher(nextUrl, {
-        headers: {
-          Authorization: `Bearer ${input.token}`,
-          Version: "v3",
-          Accept: "application/json",
+      const response = await this.#request(
+        nextUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${input.token}`,
+            Version: "v3",
+            Accept: "application/json",
+          },
         },
-      });
+        "GHL opportunity request",
+      );
       if (!response.ok) {
         throw new Error(`GHL request failed with status ${response.status}`);
       }

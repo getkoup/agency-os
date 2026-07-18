@@ -46,7 +46,13 @@ const emptyWindsor = new WindsorClient(
 const emptyGhl = new GhlClient(
   ghlConfig.baseUrl,
   vi.fn<typeof fetch>().mockImplementation((request) => {
-    const url = new URL(String(request));
+    const url = new URL(
+      request instanceof URL
+        ? request.href
+        : typeof request === "string"
+          ? request
+          : request.url,
+    );
     const locationId = url.pathname.split("/").at(-1);
     return Promise.resolve(
       url.pathname.startsWith("/locations/")

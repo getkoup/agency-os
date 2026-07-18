@@ -50,7 +50,13 @@ function opportunity(input: {
 
 function clientReturning(rows: unknown[]) {
   const fetcher = vi.fn<typeof fetch>().mockImplementation((request) => {
-    const url = new URL(String(request));
+    const url = new URL(
+      request instanceof URL
+        ? request.href
+        : typeof request === "string"
+          ? request
+          : request.url,
+    );
     return Promise.resolve(
       url.pathname.startsWith("/locations/")
         ? Response.json({
@@ -116,6 +122,12 @@ describe("syncGhlLocation", () => {
     const firstStartedAt = new Date("2026-07-15T10:02:00.000Z");
     const first = clientReturning([
       opportunity({ id: "historical-win", wonAt: "2026-07-15T09:00:00.000Z" }),
+      ...Array.from({ length: 99 }, (_, index) =>
+        opportunity({
+          id: `historical-win-${index + 2}`,
+          wonAt: "2026-07-15T09:30:00.000Z",
+        }),
+      ),
     ]);
     const firstSummary = await syncGhlLocation({
       client: first.client,
@@ -125,7 +137,11 @@ describe("syncGhlLocation", () => {
       runStartedAt: firstStartedAt,
     });
     expect(first.fetcher).toHaveBeenCalledTimes(2);
-    expect(firstSummary.opportunityRowCount).toBe(1);
+    expect(firstSummary).toMatchObject({
+      contactRowCount: 100,
+      opportunityRowCount: 100,
+      matchedOpportunityCount: 0,
+    });
 
     const secondStartedAt = new Date("2026-07-15T10:10:00.000Z");
     const second = clientReturning([
@@ -183,7 +199,7 @@ describe("syncGhlLocation", () => {
           eq(integrationMappings.provider, "ghl"),
         ),
       );
-    expect(counts).toEqual({ contacts: 1, opportunities: 2, matches: 2 });
+    expect(counts).toEqual({ contacts: 1, opportunities: 101, matches: 101 });
     const [storedOpportunity] = await db
       .select({
         contactTags: ghlContacts.tags,
