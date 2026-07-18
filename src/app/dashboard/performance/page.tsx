@@ -58,7 +58,6 @@ export default async function PerformancePage({
         values={filters}
         options={options}
         resetPageKeys={["performancePage"]}
-        showClient={false}
         showPlatform={false}
         showCampaign={false}
       />
