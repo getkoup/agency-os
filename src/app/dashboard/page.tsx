@@ -64,8 +64,8 @@ export default async function DashboardPage({
     },
     {
       title: "Total Leads",
-      value: overview.capturedLeads.toLocaleString(),
-      detail: "Captured leads",
+      value: overview.totalLeads.toLocaleString(),
+      detail: `${overview.facebookLeadFormLeads.toLocaleString()} Facebook forms · ${overview.dmLeads.toLocaleString()} DM`,
       icon: UserRoundSearch,
     },
     {
@@ -77,7 +77,7 @@ export default async function DashboardPage({
     {
       title: "Conversion Rate",
       value:
-        overview.capturedLeads === 0
+        overview.totalLeads === 0
           ? "—"
           : `${(overview.conversion * 100).toFixed(1)}%`,
       detail: "Bookings / leads",
@@ -138,8 +138,9 @@ export default async function DashboardPage({
         <CardHeader>
           <CardTitle className="tracking-tight">Daily performance</CardTitle>
           <p className="text-muted-foreground text-sm">
-            Spend and captured leads by client-local date. Won opportunities use
-            GHL created-at timestamps localized to each client.
+            Spend and total lead events by client-local date. Total leads
+            combine Facebook lead forms and DM conversations. Won opportunities
+            use GHL created-at timestamps localized to each client.
           </p>
         </CardHeader>
         <CardContent>
@@ -152,13 +153,15 @@ export default async function DashboardPage({
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {clientHealth.length ? (
-            <Table className="min-w-[42rem]">
+            <Table className="min-w-[58rem]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Client</TableHead>
                   <TableHead>Health</TableHead>
                   <TableHead className="text-right">Spend</TableHead>
-                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Total leads</TableHead>
+                  <TableHead className="text-right">Facebook forms</TableHead>
+                  <TableHead className="text-right">DM leads</TableHead>
                   <TableHead className="text-right">Bookings</TableHead>
                   <TableHead className="text-right">Conversion</TableHead>
                   <TableHead className="pr-6 text-right">
@@ -190,13 +193,19 @@ export default async function DashboardPage({
                       ${row.spend}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.capturedLeads}
+                      {row.totalLeads}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.facebookLeadFormLeads}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.dmLeads}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.bookings}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.capturedLeads === 0
+                      {row.totalLeads === 0
                         ? "—"
                         : `${(row.conversion * 100).toFixed(1)}%`}
                     </TableCell>

@@ -19,14 +19,16 @@ export function OverviewChart({
   rows: Array<{
     date: string;
     spend: string;
-    capturedLeads: number;
+    facebookLeadFormLeads: number;
+    dmLeads: number;
+    totalLeads: number;
     wonOpportunities: number;
   }>;
 }) {
   const data = rows.map((row) => ({ ...row, spend: Number(row.spend) }));
   const hasActivity = data.some(
     (row) =>
-      row.spend !== 0 || row.capturedLeads !== 0 || row.wonOpportunities !== 0,
+      row.spend !== 0 || row.totalLeads !== 0 || row.wonOpportunities !== 0,
   );
   if (!hasActivity) {
     return (
@@ -40,7 +42,7 @@ export function OverviewChart({
       className="h-72 w-full sm:h-80"
       config={{
         spend: { label: "Spend", color: "var(--chart-1)" },
-        capturedLeads: { label: "Captured leads", color: "var(--chart-2)" },
+        totalLeads: { label: "Total leads", color: "var(--chart-2)" },
         wonOpportunities: {
           label: "Won opportunities",
           color: "var(--chart-3)",
@@ -89,10 +91,10 @@ export function OverviewChart({
           />
           <Line
             yAxisId="count"
-            dataKey="capturedLeads"
-            name="Captured leads"
+            dataKey="totalLeads"
+            name="Total leads"
             type="monotone"
-            stroke="var(--color-capturedLeads)"
+            stroke="var(--color-totalLeads)"
             strokeWidth={2.5}
             dot={false}
           />
