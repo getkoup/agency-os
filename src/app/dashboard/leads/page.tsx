@@ -1,6 +1,7 @@
 import {
   CalendarCheck,
   ClipboardList,
+  ListFilter,
   MessageCircle,
   UserRoundSearch,
 } from "lucide-react";
@@ -136,6 +137,57 @@ export default async function LeadsPage({
           </CardContent>
         </Card>
         <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
+          <CardHeader>
+            <CardTitle className="tracking-tight">
+              Service category breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto px-0">
+            {analytics.serviceCategories.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Category</TableHead>
+                    <TableHead className="text-right">Forms</TableHead>
+                    <TableHead className="text-right">DM</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="pr-6 text-right">Share</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analytics.serviceCategories.map((row) => (
+                    <TableRow key={row.categoryName}>
+                      <TableCell className="pl-6 font-medium">
+                        {row.categoryName}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.facebookLeadFormLeads}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.dmLeads}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.totalLeads}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {analytics.totalLeads === 0
+                          ? "—"
+                          : `${((row.totalLeads / analytics.totalLeads) * 100).toFixed(1)}%`}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                icon={ListFilter}
+                title="No classified lead events"
+                description="No campaign-attributed form or DM lead events match this range."
+              />
+            )}
+          </CardContent>
+        </Card>
+        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5 2xl:col-span-2">
           <CardHeader>
             <CardTitle className="tracking-tight">
               Daily lead conversion

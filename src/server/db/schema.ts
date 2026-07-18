@@ -35,6 +35,10 @@ export const syncStatus = pgEnum("agency_os_sync_status", [
 export const integrationProvider = pgEnum("agency_os_integration_provider", [
   "ghl",
 ]);
+export const leadRuleMatchMode = pgEnum("agency_os_lead_rule_match_mode", [
+  "any",
+  "all",
+]);
 export const allClientSyncStatus = pgEnum("agency_os_all_client_sync_status", [
   "running",
   "succeeded",
@@ -505,6 +509,40 @@ export const revenueRules = createTable(
   ],
 );
 
+export const leadClassificationRules = createTable(
+  "lead_classification_rule",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    categoryName: d.varchar({ length: 100 }).notNull(),
+    keywords: d.text().array().notNull(),
+    matchMode: leadRuleMatchMode().default("any").notNull(),
+    priority: d.integer().default(0).notNull(),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("lead_classification_client_category_lower_idx").on(
+      t.clientId,
+      sql`lower(${t.categoryName})`,
+    ),
+    index("lead_classification_client_status_priority_idx").on(
+      t.clientId,
+      t.status,
+      t.priority,
+    ),
+    check(
+      "lead_classification_keywords_not_empty",
+      sql`cardinality(${t.keywords}) > 0`,
+    ),
+    check("lead_classification_priority_non_negative", sql`${t.priority} >= 0`),
+  ],
+);
+
 export const ghlOpportunityMatches = createTable(
   "ghl_opportunity_match",
   (d) => ({
@@ -608,6 +646,7 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   memberships: many(clientMemberships),
   sourceAccounts: many(sourceAccounts),
   revenueRules: many(revenueRules),
+  leadClassificationRules: many(leadClassificationRules),
 }));
 export const clientMembershipsRelations = relations(
   clientMemberships,
@@ -628,6 +667,15 @@ export const revenueRulesRelations = relations(revenueRules, ({ one }) => ({
     references: [clients.id],
   }),
 }));
+export const leadClassificationRulesRelations = relations(
+  leadClassificationRules,
+  ({ one }) => ({
+    client: one(clients, {
+      fields: [leadClassificationRules.clientId],
+      references: [clients.id],
+    }),
+  }),
+);
 
 export const sourceAccountsRelations = relations(
   sourceAccounts,

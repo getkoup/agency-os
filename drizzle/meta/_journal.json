@@ -43,6 +43,13 @@
       "when": 1784182743023,
       "tag": "0005_use-opportunity-created-at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784401837449,
+      "tag": "0006_tranquil_alex_wilder",
+      "breakpoints": true
     }
   ]
 }
