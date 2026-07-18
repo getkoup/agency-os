@@ -22,9 +22,16 @@ import {
 } from "~/components/ui/select";
 
 export type DatePreset =
-  "last7" | "last14" | "last30" | "thisMonth" | "lastMonth" | "custom";
+  | "last3"
+  | "last7"
+  | "last14"
+  | "last30"
+  | "thisMonth"
+  | "lastMonth"
+  | "custom";
 
 const presets: Array<{ value: DatePreset; label: string }> = [
+  { value: "last3", label: "Last 3 days" },
   { value: "last7", label: "Last 7 days" },
   { value: "last14", label: "Last 14 days" },
   { value: "last30", label: "Last 30 days" },
@@ -40,6 +47,8 @@ function parseDate(value: string): Date {
 function presetRange(preset: Exclude<DatePreset, "custom">): DateRange {
   const today = new Date();
   switch (preset) {
+    case "last3":
+      return { from: subDays(today, 2), to: today };
     case "last7":
       return { from: subDays(today, 6), to: today };
     case "last14":
