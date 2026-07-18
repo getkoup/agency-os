@@ -50,6 +50,7 @@ export function AppSidebar({
       <SidebarHeader className="px-3 pt-4 pb-5">
         <Link
           href="/dashboard"
+          prefetch={false}
           className="flex items-center gap-3 font-semibold tracking-tight"
         >
           <span className="bg-sidebar-primary text-sidebar-primary-foreground grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold">
@@ -84,7 +85,7 @@ export function AppSidebar({
                           tooltip={item.label}
                           className="text-sidebar-foreground/70 data-[active=true]:text-sidebar-accent-foreground h-11 rounded-xl px-3 data-[active=true]:font-semibold"
                         >
-                          <Link href={item.href}>
+                          <Link href={item.href} prefetch={false}>
                             <item.icon className="size-[1.05rem]" />
                             <span>{item.label}</span>
                             {active ? (
