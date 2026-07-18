@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Building2,
-  CircleDollarSign,
   DatabaseZap,
   LayoutDashboard,
   ListFilter,
@@ -48,13 +47,6 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     label: "Leads",
     icon: ListFilter,
     roles: ["owner", "admin", "client"],
-    group: "Workspace",
-  },
-  {
-    href: "/dashboard/revenue",
-    label: "Revenue",
-    icon: CircleDollarSign,
-    roles: ["owner", "admin"],
     group: "Workspace",
   },
   {
