@@ -10,6 +10,7 @@ import {
   getFilterOptions,
   getLeadRows,
   getLeadAnalytics,
+  getMonitoringCampaigns,
   getPerformanceRows,
   getRevenueRows,
   getSourceAccountRows,
@@ -43,6 +44,23 @@ export const dashboardRouter = createTRPCRouter({
         resolveAccessibleClientScope(ctx.currentUser, undefined),
       ]);
       return getFilterOptions(input, scope, clientOptionScope);
+    }),
+  monitoring: protectedProcedure
+    .input(
+      z.object({
+        from: z.string().date(),
+        to: z.string().date(),
+        clientId: z
+          .union([z.string().uuid(), z.literal("unassigned")])
+          .optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const scope = await resolveAccessibleClientScope(
+        ctx.currentUser,
+        input.clientId,
+      );
+      return getMonitoringCampaigns(input, scope);
     }),
   overview: protectedProcedure
     .input(dashboardFiltersSchema)
