@@ -17,6 +17,7 @@ vi.mock("~/features/dashboard/server/queries", () => ({
   getDashboardOverview: vi.fn(),
   getFilterOptions: vi.fn(),
   getLeadRows: vi.fn(),
+  getMonitoringCampaigns: vi.fn(),
   getPerformanceRows: vi.fn(),
   getSourceAccountRows: vi.fn(),
   getSyncRuns: vi.fn(),

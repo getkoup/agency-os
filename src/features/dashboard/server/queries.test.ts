@@ -5,8 +5,10 @@ import {
   getClientAnalytics,
   getDashboardOverview,
   getLeadAnalytics,
+  getMonitoringCampaigns,
   getPerformanceRows,
   getTrend,
+  resolveMonitoringDateRange,
 } from "~/features/dashboard/server/queries";
 import { db } from "~/server/db";
 import {
@@ -145,6 +147,7 @@ describe("dashboard queries", () => {
       adGroupId: adGroup.id,
       adId: ad.id,
       date: "2026-07-06",
+      spend: "30.00",
       messagingConversations: 2,
       providerMetrics: {},
       rawPayload: {},
@@ -161,6 +164,12 @@ describe("dashboard queries", () => {
         ]),
       );
     await db.delete(clients).where(eq(clients.id, clientId));
+  });
+
+  it("resolves an inclusive three-day monitoring range", () => {
+    expect(
+      resolveMonitoringDateRange(new Date("2026-07-18T18:00:00.000Z")),
+    ).toEqual({ from: "2026-07-16", to: "2026-07-18" });
   });
 
   it("qualifies correlated client IDs and combines both lead types", async () => {
@@ -211,12 +220,14 @@ describe("dashboard queries", () => {
       campaignId: undefined,
     };
     const scope = { includeUnassigned: false, clientIds: [clientId] };
-    const [overview, leadAnalytics, trend, performance] = await Promise.all([
-      getDashboardOverview(filters, scope),
-      getLeadAnalytics(filters, scope),
-      getTrend(filters, scope),
-      getPerformanceRows(filters, scope, 1, 25),
-    ]);
+    const [overview, leadAnalytics, trend, performance, monitoring] =
+      await Promise.all([
+        getDashboardOverview(filters, scope),
+        getLeadAnalytics(filters, scope),
+        getTrend(filters, scope),
+        getPerformanceRows(filters, scope, 1, 25),
+        getMonitoringCampaigns(filters, scope),
+      ]);
 
     expect(overview).toMatchObject({
       facebookLeadFormLeads: 1,
@@ -253,7 +264,7 @@ describe("dashboard queries", () => {
     expect(trend).toEqual([
       {
         date: "2026-07-06",
-        spend: "0.00",
+        spend: "30.00",
         facebookLeadFormLeads: 1,
         dmLeads: 2,
         totalLeads: 3,
@@ -267,5 +278,33 @@ describe("dashboard queries", () => {
         totalLeads: 3,
       }),
     ]);
+    expect(monitoring).toMatchObject({
+      from: "2026-07-06",
+      to: "2026-07-06",
+      activeCampaignCount: 1,
+      activeAdCount: 1,
+      totalSpend: "30.00",
+      totalLeads: 3,
+      cpl: "10.00",
+      isTruncated: false,
+      campaigns: [
+        expect.objectContaining({
+          name: "Ceramic Tint Campaign",
+          spend: "30.00",
+          totalLeads: 3,
+          cpl: "10.00",
+          ads: [
+            expect.objectContaining({
+              name: "Client Analytics Query Test Ad",
+              spend: "30.00",
+              facebookLeadFormLeads: 1,
+              dmLeads: 2,
+              totalLeads: 3,
+              cpl: "10.00",
+            }),
+          ],
+        }),
+      ],
+    });
   });
 });

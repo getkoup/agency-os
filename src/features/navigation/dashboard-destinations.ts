@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Building2,
   DatabaseZap,
@@ -25,6 +26,13 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     href: "/dashboard",
     label: "Overview",
     icon: LayoutDashboard,
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/monitoring",
+    label: "Monitoring",
+    icon: Activity,
     roles: ["owner", "admin", "client"],
     group: "Workspace",
   },
