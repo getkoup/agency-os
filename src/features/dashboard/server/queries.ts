@@ -829,6 +829,8 @@ export async function getMonitoringCampaigns(
         clientName: clients.name,
         campaignId: campaigns.id,
         campaignName: campaigns.name,
+        adGroupId: adGroups.id,
+        adGroupName: adGroups.name,
         adId: ads.id,
         adName: ads.name,
         spend: sql<string>`coalesce(sum(${adPerformanceDaily.spend}), 0)::numeric(14,2)`,
@@ -841,6 +843,7 @@ export async function getMonitoringCampaigns(
       )
       .leftJoin(clients, eq(sourceAccounts.clientId, clients.id))
       .innerJoin(campaigns, eq(adPerformanceDaily.campaignId, campaigns.id))
+      .innerJoin(adGroups, eq(adPerformanceDaily.adGroupId, adGroups.id))
       .innerJoin(ads, eq(adPerformanceDaily.adId, ads.id))
       .where(
         and(
@@ -854,12 +857,15 @@ export async function getMonitoringCampaigns(
         clients.name,
         campaigns.id,
         campaigns.name,
+        adGroups.id,
+        adGroups.name,
         ads.id,
         ads.name,
       )
       .orderBy(
         asc(clients.name),
         asc(campaigns.name),
+        asc(adGroups.name),
         desc(sql`sum(${adPerformanceDaily.spend})`),
         asc(ads.name),
         asc(ads.id),
@@ -886,6 +892,24 @@ export async function getMonitoringCampaigns(
       row.adId ? [[row.adId, row.count] as const] : [],
     ),
   );
+  type MonitoringAd = {
+    id: string;
+    name: string;
+    spend: string;
+    facebookLeadFormLeads: number;
+    dmLeads: number;
+    totalLeads: number;
+    cpl: string | null;
+    costPerConversationStarted: string | null;
+  };
+  type MonitoringAdSet = {
+    id: string;
+    name: string;
+    spend: number;
+    facebookLeadFormLeads: number;
+    dmLeads: number;
+    ads: MonitoringAd[];
+  };
   const campaignsById = new Map<
     string,
     {
@@ -896,15 +920,7 @@ export async function getMonitoringCampaigns(
       spend: number;
       facebookLeadFormLeads: number;
       dmLeads: number;
-      ads: Array<{
-        id: string;
-        name: string;
-        spend: string;
-        facebookLeadFormLeads: number;
-        dmLeads: number;
-        totalLeads: number;
-        cpl: string | null;
-      }>;
+      adSetsById: Map<string, MonitoringAdSet>;
     }
   >();
   for (const row of rows) {
@@ -919,12 +935,17 @@ export async function getMonitoringCampaigns(
       spend: 0,
       facebookLeadFormLeads: 0,
       dmLeads: 0,
+      adSetsById: new Map<string, MonitoringAdSet>(),
+    };
+    const adSet = campaign.adSetsById.get(row.adGroupId) ?? {
+      id: row.adGroupId,
+      name: row.adGroupName,
+      spend: 0,
+      facebookLeadFormLeads: 0,
+      dmLeads: 0,
       ads: [],
     };
-    campaign.spend += spend;
-    campaign.facebookLeadFormLeads += facebookLeadFormLeads;
-    campaign.dmLeads += row.dmLeads;
-    campaign.ads.push({
+    const ad = {
       id: row.adId,
       name: row.adName,
       spend: row.spend,
@@ -932,24 +953,67 @@ export async function getMonitoringCampaigns(
       dmLeads: row.dmLeads,
       totalLeads,
       cpl: totalLeads === 0 ? null : (spend / totalLeads).toFixed(2),
-    });
+      costPerConversationStarted:
+        row.dmLeads === 0 ? null : (spend / row.dmLeads).toFixed(2),
+    };
+    adSet.spend += spend;
+    adSet.facebookLeadFormLeads += facebookLeadFormLeads;
+    adSet.dmLeads += row.dmLeads;
+    adSet.ads.push(ad);
+    campaign.spend += spend;
+    campaign.facebookLeadFormLeads += facebookLeadFormLeads;
+    campaign.dmLeads += row.dmLeads;
+    campaign.adSetsById.set(row.adGroupId, adSet);
     campaignsById.set(row.campaignId, campaign);
   }
-  const campaignRows = [...campaignsById.values()].map((campaign) => {
-    campaign.ads.sort(
-      (left, right) =>
-        Number(right.spend) - Number(left.spend) ||
-        left.name.localeCompare(right.name) ||
-        left.id.localeCompare(right.id),
-    );
-    const totalLeads = campaign.facebookLeadFormLeads + campaign.dmLeads;
-    return {
-      ...campaign,
-      spend: campaign.spend.toFixed(2),
-      totalLeads,
-      cpl: totalLeads === 0 ? null : (campaign.spend / totalLeads).toFixed(2),
-    };
-  });
+  const campaignRows = [...campaignsById.values()].map(
+    ({ adSetsById, ...campaign }) => {
+      const adSets = [...adSetsById.values()]
+        .map((adSet) => {
+          adSet.ads.sort(
+            (left, right) =>
+              Number(right.spend) - Number(left.spend) ||
+              left.name.localeCompare(right.name) ||
+              left.id.localeCompare(right.id),
+          );
+          const totalLeads = adSet.facebookLeadFormLeads + adSet.dmLeads;
+          return {
+            ...adSet,
+            spend: adSet.spend.toFixed(2),
+            totalLeads,
+            cpl:
+              totalLeads === 0 ? null : (adSet.spend / totalLeads).toFixed(2),
+            costPerConversationStarted:
+              adSet.dmLeads === 0
+                ? null
+                : (adSet.spend / adSet.dmLeads).toFixed(2),
+          };
+        })
+        .sort(
+          (left, right) =>
+            Number(right.spend) - Number(left.spend) ||
+            left.name.localeCompare(right.name) ||
+            left.id.localeCompare(right.id),
+        );
+      const totalLeads = campaign.facebookLeadFormLeads + campaign.dmLeads;
+      return {
+        ...campaign,
+        spend: campaign.spend.toFixed(2),
+        totalLeads,
+        cpl: totalLeads === 0 ? null : (campaign.spend / totalLeads).toFixed(2),
+        costPerConversationStarted:
+          campaign.dmLeads === 0
+            ? null
+            : (campaign.spend / campaign.dmLeads).toFixed(2),
+        activeAdSetCount: adSets.length,
+        activeAdCount: adSets.reduce(
+          (count, adSet) => count + adSet.ads.length,
+          0,
+        ),
+        adSets,
+      };
+    },
+  );
   const totalSpend = campaignRows.reduce(
     (sum, campaign) => sum + Number(campaign.spend),
     0,
@@ -958,15 +1022,26 @@ export async function getMonitoringCampaigns(
     (sum, campaign) => sum + campaign.totalLeads,
     0,
   );
+  const dmLeads = campaignRows.reduce(
+    (sum, campaign) => sum + campaign.dmLeads,
+    0,
+  );
   return {
     from: input.from,
     to: input.to,
     campaigns: campaignRows,
     activeCampaignCount: campaignRows.length,
+    activeAdSetCount: campaignRows.reduce(
+      (count, campaign) => count + campaign.activeAdSetCount,
+      0,
+    ),
     activeAdCount: rows.length,
     totalSpend: totalSpend.toFixed(2),
     totalLeads,
     cpl: totalLeads === 0 ? null : (totalSpend / totalLeads).toFixed(2),
+    dmLeads,
+    costPerConversationStarted:
+      dmLeads === 0 ? null : (totalSpend / dmLeads).toFixed(2),
     isTruncated,
   };
 }

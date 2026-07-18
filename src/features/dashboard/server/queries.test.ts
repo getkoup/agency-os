@@ -282,10 +282,13 @@ describe("dashboard queries", () => {
       from: "2026-07-06",
       to: "2026-07-06",
       activeCampaignCount: 1,
+      activeAdSetCount: 1,
       activeAdCount: 1,
       totalSpend: "30.00",
       totalLeads: 3,
       cpl: "10.00",
+      dmLeads: 2,
+      costPerConversationStarted: "15.00",
       isTruncated: false,
       campaigns: [
         expect.objectContaining({
@@ -293,14 +296,29 @@ describe("dashboard queries", () => {
           spend: "30.00",
           totalLeads: 3,
           cpl: "10.00",
-          ads: [
+          dmLeads: 2,
+          costPerConversationStarted: "15.00",
+          activeAdSetCount: 1,
+          activeAdCount: 1,
+          adSets: [
             expect.objectContaining({
-              name: "Client Analytics Query Test Ad",
+              name: "Client Analytics Query Test Ad Group",
               spend: "30.00",
-              facebookLeadFormLeads: 1,
-              dmLeads: 2,
               totalLeads: 3,
               cpl: "10.00",
+              dmLeads: 2,
+              costPerConversationStarted: "15.00",
+              ads: [
+                expect.objectContaining({
+                  name: "Client Analytics Query Test Ad",
+                  spend: "30.00",
+                  facebookLeadFormLeads: 1,
+                  dmLeads: 2,
+                  totalLeads: 3,
+                  cpl: "10.00",
+                  costPerConversationStarted: "15.00",
+                }),
+              ],
             }),
           ],
         }),

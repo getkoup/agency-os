@@ -2,6 +2,7 @@ import {
   Activity,
   BadgeDollarSign,
   Megaphone,
+  MessagesSquare,
   UserRoundSearch,
 } from "lucide-react";
 import { z } from "zod";
@@ -44,7 +45,7 @@ export default async function MonitoringPage({
     {
       label: "Active Campaigns",
       value: monitoring.activeCampaignCount.toLocaleString(),
-      supporting: "With activity in this window",
+      supporting: `${monitoring.activeAdSetCount} ad sets in this window`,
       icon: Megaphone,
     },
     {
@@ -67,6 +68,20 @@ export default async function MonitoringPage({
         : "No CPL yet",
       icon: UserRoundSearch,
     },
+    {
+      label: "Conversations Started",
+      value: monitoring.dmLeads.toLocaleString(),
+      supporting: "DM leads in the three-day window",
+      icon: MessagesSquare,
+    },
+    {
+      label: "Cost per Conversation",
+      value: monitoring.costPerConversationStarted
+        ? `$${monitoring.costPerConversationStarted}`
+        : "—",
+      supporting: "Spend divided by conversations started",
+      icon: BadgeDollarSign,
+    },
   ];
 
   return (
@@ -74,7 +89,7 @@ export default async function MonitoringPage({
       <PageHeader
         eyebrow="Operations"
         title="Monitoring"
-        description="Campaign and ad activity across the latest three Windsor reporting dates."
+        description="Campaign, ad set, and ad activity across the latest three Windsor reporting dates."
         meta={
           <Badge variant="secondary" className="rounded-full">
             {monitoring.from} through {monitoring.to}
@@ -82,7 +97,7 @@ export default async function MonitoringPage({
         }
       />
       <MonitoringClientFilter clients={options.clients} value={clientId} />
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => (
           <MetricCard
             key={metric.label}
@@ -116,11 +131,13 @@ export default async function MonitoringPage({
                     {campaign.name}
                   </CardTitle>
                   <p className="text-muted-foreground text-sm">
-                    {campaign.ads.length} active ad
-                    {campaign.ads.length === 1 ? "" : "s"}
+                    {campaign.activeAdSetCount} active ad set
+                    {campaign.activeAdSetCount === 1 ? "" : "s"} ·{" "}
+                    {campaign.activeAdCount} ad
+                    {campaign.activeAdCount === 1 ? "" : "s"}
                   </p>
                 </div>
-                <dl className="grid grid-cols-3 gap-5 text-right text-sm">
+                <dl className="grid grid-cols-2 gap-5 text-right text-sm sm:grid-cols-5">
                   <div>
                     <dt className="text-muted-foreground">Spend</dt>
                     <dd className="font-semibold tabular-nums">
@@ -139,40 +156,132 @@ export default async function MonitoringPage({
                       {campaign.cpl ? `$${campaign.cpl}` : "—"}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="text-muted-foreground">Conversations</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {campaign.dmLeads}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">
+                      Cost / conversation
+                    </dt>
+                    <dd className="font-semibold tabular-nums">
+                      {campaign.costPerConversationStarted
+                        ? `$${campaign.costPerConversationStarted}`
+                        : "—"}
+                    </dd>
+                  </div>
                 </dl>
               </CardHeader>
-              <CardContent className="overflow-x-auto px-0">
-                <Table className="min-w-[42rem]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-6">Ad</TableHead>
-                      <TableHead className="text-right">Spend</TableHead>
-                      <TableHead className="text-right">Leads</TableHead>
-                      <TableHead className="pr-6 text-right">CPL</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {campaign.ads.map((ad) => (
-                      <TableRow key={ad.id}>
-                        <TableCell className="pl-6 font-medium">
-                          {ad.name}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          ${ad.spend}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          <span className="font-medium">{ad.totalLeads}</span>
-                          <span className="text-muted-foreground ml-2 text-xs">
-                            {ad.facebookLeadFormLeads} forms · {ad.dmLeads} DM
-                          </span>
-                        </TableCell>
-                        <TableCell className="pr-6 text-right tabular-nums">
-                          {ad.cpl ? `$${ad.cpl}` : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <CardContent className="space-y-4 px-0">
+                {campaign.adSets.map((adSet) => (
+                  <section
+                    key={adSet.id}
+                    className="border-border/80 overflow-hidden border-y last:border-b-0"
+                  >
+                    <div className="bg-muted/30 flex flex-wrap items-start justify-between gap-4 px-6 py-4">
+                      <div className="space-y-1">
+                        <Badge variant="outline">Ad set</Badge>
+                        <h3 className="font-semibold tracking-tight">
+                          {adSet.name}
+                        </h3>
+                        <p className="text-muted-foreground text-sm">
+                          {adSet.ads.length} active ad
+                          {adSet.ads.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-5 text-right text-xs sm:grid-cols-5">
+                        <div>
+                          <dt className="text-muted-foreground">Spend</dt>
+                          <dd className="font-semibold tabular-nums">
+                            ${adSet.spend}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Leads</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {adSet.totalLeads}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">CPL</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {adSet.cpl ? `$${adSet.cpl}` : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">
+                            Conversations
+                          </dt>
+                          <dd className="font-semibold tabular-nums">
+                            {adSet.dmLeads}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">
+                            Cost / conversation
+                          </dt>
+                          <dd className="font-semibold tabular-nums">
+                            {adSet.costPerConversationStarted
+                              ? `$${adSet.costPerConversationStarted}`
+                              : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[68rem]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="pl-6">Ad</TableHead>
+                            <TableHead className="text-right">Spend</TableHead>
+                            <TableHead className="text-right">Leads</TableHead>
+                            <TableHead className="text-right">CPL</TableHead>
+                            <TableHead className="text-right">
+                              Conversations started
+                            </TableHead>
+                            <TableHead className="pr-6 text-right">
+                              Cost / conversation
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {adSet.ads.map((ad) => (
+                            <TableRow key={ad.id}>
+                              <TableCell className="pl-6 font-medium">
+                                {ad.name}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                ${ad.spend}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                <span className="font-medium">
+                                  {ad.totalLeads}
+                                </span>
+                                <span className="text-muted-foreground ml-2 text-xs">
+                                  {ad.facebookLeadFormLeads} forms ·{" "}
+                                  {ad.dmLeads} DM
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {ad.cpl ? `$${ad.cpl}` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {ad.dmLeads}
+                              </TableCell>
+                              <TableCell className="pr-6 text-right tabular-nums">
+                                {ad.costPerConversationStarted
+                                  ? `$${ad.costPerConversationStarted}`
+                                  : "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </section>
+                ))}
               </CardContent>
             </Card>
           ))
