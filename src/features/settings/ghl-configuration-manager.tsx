@@ -54,8 +54,8 @@ function GhlConfigurationDialog({ row }: { row: Configuration }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          {row.configured ? "Replace credentials" : "Configure"}
+        <Button size="sm" variant={row.configured ? "outline" : "default"}>
+          {row.configured ? "Edit GHL settings" : "Configure GHL"}
         </Button>
       </DialogTrigger>
       <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
@@ -158,12 +158,12 @@ export function GhlConfigurationManager({ rows }: { rows: Configuration[] }) {
         <TableHeader>
           <TableRow>
             <TableHead className="pl-6">Client</TableHead>
+            <TableHead>GHL settings</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Location ID</TableHead>
             <TableHead>Token</TableHead>
             <TableHead>Automatic timezone</TableHead>
-            <TableHead>Last successful sync</TableHead>
-            <TableHead className="pr-6">Action</TableHead>
+            <TableHead className="pr-6">Last successful sync</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -171,6 +171,9 @@ export function GhlConfigurationManager({ rows }: { rows: Configuration[] }) {
             <TableRow key={row.clientId}>
               <TableCell className="pl-6 font-medium">
                 {row.clientName}
+              </TableCell>
+              <TableCell>
+                <GhlConfigurationDialog row={row} />
               </TableCell>
               <TableCell>
                 <Badge
@@ -187,11 +190,8 @@ export function GhlConfigurationManager({ rows }: { rows: Configuration[] }) {
               </TableCell>
               <TableCell>{row.tokenHint ?? "—"}</TableCell>
               <TableCell>{row.timezone ?? "—"}</TableCell>
-              <TableCell className="tabular-nums">
+              <TableCell className="pr-6 tabular-nums">
                 {row.lastSuccessfulSyncAt?.toISOString() ?? "Never"}
-              </TableCell>
-              <TableCell className="pr-6">
-                <GhlConfigurationDialog row={row} />
               </TableCell>
             </TableRow>
           ))}
