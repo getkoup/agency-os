@@ -9,6 +9,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "bun src/server/db/seed.ts",
+    "db:seed:ghl": "bun scripts/seed-ghl-config.ts",
     "db:sync:windsor": "bun src/server/windsor/sync-cli.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

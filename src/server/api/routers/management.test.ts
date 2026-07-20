@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assignUnassignedSourceAccounts,
   createManagedClient,
+  deleteManagedClient,
 } from "~/features/management/server/actions";
 import {
   listAccountAssignments,
@@ -21,6 +22,7 @@ vi.mock("~/features/management/server/actions", () => ({
   assignUnassignedSourceAccounts: vi.fn(),
   createManagedClient: vi.fn(),
   createManagedUser: vi.fn(),
+  deleteManagedClient: vi.fn(),
   resetManagedUserPassword: vi.fn(),
   updateManagedClient: vi.fn(),
   updateManagedUser: vi.fn(),
@@ -68,27 +70,28 @@ describe("management client and account authorization", () => {
     vi.mocked(assignUnassignedSourceAccounts).mockResolvedValue({
       success: true,
     });
+    vi.mocked(deleteManagedClient).mockResolvedValue({ success: true });
   });
 
-  it.each(["owner", "admin"] as const)(
-    "allows %s to create clients and assign accounts",
-    async (role) => {
-      await expect(
-        callerFor(role).createClient({
-          name: "New Client",
-          sourceAccountIds: [sourceAccountId],
-        }),
-      ).resolves.toEqual({ id: clientId });
-      await expect(
-        callerFor(role).assignUnassignedSourceAccounts({
-          clientId,
-          sourceAccountIds: [sourceAccountId],
-        }),
-      ).resolves.toEqual({ success: true });
-    },
-  );
+  it("allows owners to create clients, assign accounts, and delete safely", async () => {
+    await expect(
+      callerFor("owner").createClient({
+        name: "New Client",
+        sourceAccountIds: [sourceAccountId],
+      }),
+    ).resolves.toEqual({ id: clientId });
+    await expect(
+      callerFor("owner").assignUnassignedSourceAccounts({
+        clientId,
+        sourceAccountIds: [sourceAccountId],
+      }),
+    ).resolves.toEqual({ success: true });
+    await expect(
+      callerFor("owner").deleteClient({ clientId }),
+    ).resolves.toEqual({ success: true });
+  });
 
-  it.each(["manager", "client"] as const)(
+  it.each(["admin", "manager", "client"] as const)(
     "rejects %s management access",
     async (role) => {
       await expect(

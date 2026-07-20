@@ -59,6 +59,10 @@ try {
   `;
   await applyMigration(test, "drizzle/0006_tranquil_alex_wilder.sql");
   await applyMigration(test, "drizzle/0007_campaign_daily_tracker.sql");
+  await applyMigration(
+    test,
+    "drizzle/0008_encrypted_ghl_client_configuration.sql",
+  );
   const seededClassificationRules = await test`
     select "categoryName", "keywords", "matchMode", "priority"
     from "agency_os_lead_classification_rule"

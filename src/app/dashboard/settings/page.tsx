@@ -13,17 +13,10 @@ import { z } from "zod";
 
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
+import { GhlConfigurationManager } from "~/features/settings/ghl-configuration-manager";
 import { LeadClassificationManager } from "~/features/settings/lead-classification-manager";
 import { RevenueRuleManager } from "~/features/settings/revenue-rule-manager";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
@@ -38,7 +31,7 @@ export default async function SettingsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getAuthenticatedUser();
-  if (user.role === "client") notFound();
+  if (user.role !== "owner" && user.role !== "admin") notFound();
   const rawSearch = await searchParams;
   const search = resolveDashboardPageSearch(rawSearch);
   const rawClientId = Array.isArray(rawSearch.settingsClientId)
@@ -68,7 +61,9 @@ export default async function SettingsPage({
       page: search.rulePage,
       pageSize: 25,
     }),
-    api.settings.ghlConfigurationStatus(),
+    user.role === "owner"
+      ? api.settings.ghlConfigurationStatus()
+      : Promise.resolve([]),
   ]);
   const operations = [
     {
@@ -183,63 +178,30 @@ export default async function SettingsPage({
           total={rules.total}
         />
       </Card>
-      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="text-primary size-5" />
-            <div>
-              <CardTitle className="tracking-tight">
-                GoHighLevel configuration health
-              </CardTitle>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Read-only status. Location IDs and tokens are never displayed.
-              </p>
+      {user.role === "owner" ? (
+        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="text-primary size-5" />
+              <div>
+                <CardTitle className="tracking-tight">
+                  Per-client GoHighLevel configuration
+                </CardTitle>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Owner-only Location ID and encrypted token management.
+                  Timezones are fetched automatically from GHL.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="overflow-x-auto px-0">
-          <Table className="min-w-[48rem]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-6">Client</TableHead>
-                <TableHead>Mapping</TableHead>
-                <TableHead>Location configured</TableHead>
-                <TableHead>Token configured</TableHead>
-                <TableHead className="pr-6">Last successful sync</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ghlStatus.map((row) => (
-                <TableRow key={row.clientSlug}>
-                  <TableCell className="pl-6 font-medium">
-                    {row.clientName}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        row.mappingState === "active"
-                          ? "default"
-                          : "destructive"
-                      }
-                      className="capitalize"
-                    >
-                      {row.mappingState.replaceAll("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{row.locationConfigured ? "Yes" : "No"}</TableCell>
-                  <TableCell>{row.tokenConfigured ? "Yes" : "No"}</TableCell>
-                  <TableCell className="pr-6 tabular-nums">
-                    {row.lastSuccessfulSyncAt?.toISOString() ?? "Never"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="px-0">
+            <GhlConfigurationManager rows={ghlStatus} />
+          </CardContent>
+        </Card>
+      ) : null}
       <p className="text-muted-foreground flex items-center gap-2 text-xs">
-        <Settings2 className="size-3.5" /> Secrets remain server-only and are
-        not returned by this page.
+        <Settings2 className="size-3.5" /> Integration secrets remain encrypted
+        and are never returned by this page.
       </p>
     </div>
   );

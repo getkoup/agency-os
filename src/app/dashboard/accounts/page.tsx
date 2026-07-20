@@ -38,7 +38,7 @@ export default async function AccountsPage({
   const base = resolveDashboardPageSearch(raw);
   const search = searchSchema.parse(raw);
   const user = await getAuthenticatedUser();
-  const canManage = user.role === "owner" || user.role === "admin";
+  const canManage = user.role === "owner";
   const [options, accounts, managed, clientOptions] = await Promise.all([
     api.dashboard.filterOptions({
       from: base.from,

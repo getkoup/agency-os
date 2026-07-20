@@ -57,6 +57,13 @@
       "when": 1784567050875,
       "tag": "0007_campaign_daily_tracker",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784574196696,
+      "tag": "0008_encrypted_ghl_client_configuration",
+      "breakpoints": true
     }
   ]
 }

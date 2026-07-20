@@ -16,7 +16,10 @@ import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
-import { ClientManagement } from "~/features/management/client-management";
+import {
+  ClientEditButton,
+  ClientManagement,
+} from "~/features/management/client-management";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -29,7 +32,7 @@ export default async function ClientsPage({
   if (user.role === "client") notFound();
   const rawSearch = await searchParams;
   const search = resolveDashboardPageSearch(rawSearch);
-  const canManage = user.role === "owner" || user.role === "admin";
+  const canManage = user.role === "owner";
   const [result, managed, options, unassignedAccounts] = await Promise.all([
     api.dashboard.clients({
       from: search.from,
@@ -53,6 +56,9 @@ export default async function ClientsPage({
         })
       : Promise.resolve(null),
   ]);
+  const managedById = new Map(
+    managed?.rows.map((row) => [row.id, row] as const) ?? [],
+  );
   return (
     <div className="mx-auto max-w-[96rem] space-y-7">
       <PageHeader
@@ -98,7 +104,10 @@ export default async function ClientsPage({
                   <TableHead>Facebook forms</TableHead>
                   <TableHead>DM leads</TableHead>
                   <TableHead>Bookings</TableHead>
-                  <TableHead className="pr-6">Estimated revenue</TableHead>
+                  <TableHead>Estimated revenue</TableHead>
+                  {managed ? (
+                    <TableHead className="pr-6">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -144,9 +153,16 @@ export default async function ClientsPage({
                     <TableCell className="tabular-nums">
                       {row.bookings}
                     </TableCell>
-                    <TableCell className="pr-6 tabular-nums">
+                    <TableCell className="tabular-nums">
                       ${row.estimatedRevenue}
                     </TableCell>
+                    {managed ? (
+                      <TableCell className="pr-6">
+                        {managedById.has(row.id) ? (
+                          <ClientEditButton row={managedById.get(row.id)!} />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

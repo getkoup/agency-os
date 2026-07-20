@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   assignUnassignedSourceAccounts,
   createManagedClient,
+  deleteManagedClient,
 } from "~/features/management/server/actions";
 import { db } from "~/server/db";
 import { clients, sourceAccounts } from "~/server/db/schema";
@@ -116,5 +117,20 @@ describe("client creation and unassigned account assignment", () => {
       .from(sourceAccounts)
       .where(eq(sourceAccounts.id, firstSourceAccountId));
     expect(account?.clientId).not.toBe(target.id);
+    await expect(deleteManagedClient(target.id)).resolves.toEqual({
+      success: true,
+    });
+  });
+
+  it("blocks permanent deletion when a client still owns accounts", async () => {
+    const [client] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.slug, primarySlug));
+    if (!client) throw new Error("Primary client is missing");
+
+    await expect(deleteManagedClient(client.id)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
   });
 });

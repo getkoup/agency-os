@@ -11,9 +11,14 @@ import {
 import { db } from "~/server/db";
 import {
   clients,
+  ghlClientConfigurations,
+  integrationMappings,
   leadClassificationRules,
   revenueRules,
 } from "~/server/db/schema";
+import { GhlClient } from "~/server/ghl/client";
+import { encryptGhlToken } from "~/server/ghl/credentials";
+import { parseGhlBaseUrl } from "~/server/ghl/env";
 
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(
@@ -209,4 +214,101 @@ export async function updateRevenueRule(input: {
     }
     throw error;
   }
+}
+
+export async function saveGhlClientConfiguration(input: {
+  clientId: string;
+  locationId: string;
+  token: string;
+  userId: string | null;
+}) {
+  const locationId = input.locationId.trim();
+  const token = input.token.trim();
+  const [[client], [mapping]] = await Promise.all([
+    db
+      .select({ status: clients.status })
+      .from(clients)
+      .where(eq(clients.id, input.clientId))
+      .limit(1),
+    db
+      .select({ locationId: integrationMappings.externalLocationId })
+      .from(integrationMappings)
+      .where(
+        and(
+          eq(integrationMappings.clientId, input.clientId),
+          eq(integrationMappings.provider, "ghl"),
+        ),
+      )
+      .limit(1),
+  ]);
+  if (client?.status !== "active") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "GHL can only be configured for an active client",
+    });
+  }
+  if (mapping && mapping.locationId !== locationId) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message:
+        "This client already has synchronized GHL history for a different Location ID",
+    });
+  }
+  let timezone: string;
+  try {
+    timezone = await new GhlClient(parseGhlBaseUrl()).locationTimezone({
+      locationId,
+      token,
+    });
+  } catch (error) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "GHL Location ID and token could not be verified",
+      cause: error,
+    });
+  }
+  const encrypted = encryptGhlToken({
+    clientId: input.clientId,
+    locationId,
+    token,
+  });
+  try {
+    await db
+      .insert(ghlClientConfigurations)
+      .values({
+        clientId: input.clientId,
+        locationId,
+        timezone,
+        ...encrypted,
+        createdByUserId: input.userId,
+        updatedByUserId: input.userId,
+      })
+      .onConflictDoUpdate({
+        target: ghlClientConfigurations.clientId,
+        set: {
+          locationId,
+          timezone,
+          ...encrypted,
+          updatedByUserId: input.userId,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "This GHL Location ID is already assigned to another client",
+        cause: error,
+      });
+    }
+    throw error;
+  }
+  return { success: true as const, timezone };
+}
+
+export async function removeGhlClientConfiguration(clientId: string) {
+  await db
+    .delete(ghlClientConfigurations)
+    .where(eq(ghlClientConfigurations.clientId, clientId));
+  return { success: true as const };
 }

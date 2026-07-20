@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   createLeadClassificationRule,
   createRevenueRule,
+  removeGhlClientConfiguration,
+  saveGhlClientConfiguration,
   updateLeadClassificationRule,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
@@ -88,7 +90,21 @@ export const settingsRouter = createTRPCRouter({
       }),
     )
     .mutation(({ input }) => updateRevenueRule(input)),
-  ghlConfigurationStatus: agencyProcedure.query(() =>
+  ghlConfigurationStatus: ownerProcedure.query(() =>
     getGhlConfigurationStatus(),
   ),
+  saveGhlConfiguration: ownerProcedure
+    .input(
+      z.object({
+        clientId,
+        locationId: z.string().trim().min(1).max(255),
+        token: z.string().trim().min(10).max(5_000),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      saveGhlClientConfiguration({ ...input, userId: ctx.currentUser.id }),
+    ),
+  removeGhlConfiguration: ownerProcedure
+    .input(z.object({ clientId }))
+    .mutation(({ input }) => removeGhlClientConfiguration(input.clientId)),
 });

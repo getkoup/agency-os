@@ -6,6 +6,7 @@ import {
   assignUnassignedSourceAccounts,
   createManagedClient,
   createManagedUser,
+  deleteManagedClient,
   resetManagedUserPassword,
   updateManagedClient,
   updateManagedUser,
@@ -16,11 +17,7 @@ import {
   listManagedClients,
   listManagedUsers,
 } from "~/features/management/server/queries";
-import {
-  agencyProcedure,
-  createTRPCRouter,
-  ownerProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
 
 const pageFields = {
   page: z.number().int().positive().default(1),
@@ -73,7 +70,7 @@ export const managementRouter = createTRPCRouter({
     .mutation(({ input }) =>
       resetManagedUserPassword(input.userId, input.password),
     ),
-  clients: agencyProcedure
+  clients: ownerProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -82,7 +79,7 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listManagedClients(input)),
-  clientOptions: agencyProcedure
+  clientOptions: ownerProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -90,13 +87,16 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listClientOptions(input.query, input.limit)),
-  createClient: agencyProcedure
+  createClient: ownerProcedure
     .input(z.object({ name, sourceAccountIds }))
     .mutation(({ input }) => createManagedClient(input)),
-  updateClient: agencyProcedure
+  updateClient: ownerProcedure
     .input(z.object({ clientId: z.string().uuid(), name, status }))
     .mutation(({ input }) => updateManagedClient(input)),
-  accountAssignments: agencyProcedure
+  deleteClient: ownerProcedure
+    .input(z.object({ clientId: z.string().uuid() }))
+    .mutation(({ input }) => deleteManagedClient(input.clientId)),
+  accountAssignments: ownerProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -110,7 +110,7 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listAccountAssignments(input)),
-  assignSourceAccount: agencyProcedure
+  assignSourceAccount: ownerProcedure
     .input(
       z.object({
         sourceAccountId: z.string().uuid(),
@@ -120,7 +120,7 @@ export const managementRouter = createTRPCRouter({
     .mutation(({ input }) =>
       assignManagedSourceAccount(input.sourceAccountId, input.clientId),
     ),
-  assignUnassignedSourceAccounts: agencyProcedure
+  assignUnassignedSourceAccounts: ownerProcedure
     .input(
       z.object({
         clientId: z.string().uuid(),

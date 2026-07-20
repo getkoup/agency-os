@@ -9,6 +9,8 @@ import { db } from "~/server/db";
 import {
   clientMemberships,
   clients,
+  ghlClientConfigurations,
+  integrationMappings,
   sourceAccounts,
   users,
 } from "~/server/db/schema";
@@ -322,6 +324,50 @@ export async function updateManagedClient(input: {
       throw new TRPCError({ code: "CONFLICT", cause: error });
     throw error;
   }
+}
+
+export async function deleteManagedClient(clientId: string) {
+  return db.transaction(async (tx) => {
+    const [client] = await tx
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .for("update");
+    if (!client) throw new TRPCError({ code: "NOT_FOUND" });
+    const [accountCount, membershipCount, configurationCount, mappingCount] =
+      await Promise.all([
+        tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(sourceAccounts)
+          .where(eq(sourceAccounts.clientId, clientId)),
+        tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(clientMemberships)
+          .where(eq(clientMemberships.clientId, clientId)),
+        tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(ghlClientConfigurations)
+          .where(eq(ghlClientConfigurations.clientId, clientId)),
+        tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(integrationMappings)
+          .where(eq(integrationMappings.clientId, clientId)),
+      ]);
+    const blockers = [
+      (accountCount[0]?.count ?? 0) > 0 ? "source accounts" : null,
+      (membershipCount[0]?.count ?? 0) > 0 ? "client users" : null,
+      (configurationCount[0]?.count ?? 0) > 0 ? "GHL credentials" : null,
+      (mappingCount[0]?.count ?? 0) > 0 ? "integration history" : null,
+    ].filter((value): value is string => value !== null);
+    if (blockers.length) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: `Client cannot be permanently deleted while it has ${blockers.join(", ")}. Deactivate it instead.`,
+      });
+    }
+    await tx.delete(clients).where(eq(clients.id, clientId));
+    return { success: true as const };
+  });
 }
 
 export async function assignManagedSourceAccount(

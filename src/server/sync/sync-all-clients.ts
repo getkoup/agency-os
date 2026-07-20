@@ -11,7 +11,8 @@ import {
   syncRuns,
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
-import { parseGhlConfig, type GhlConfig } from "~/server/ghl/env";
+import { loadStoredGhlConfig } from "~/server/ghl/configuration";
+import { type GhlConfig } from "~/server/ghl/env";
 import { syncGhlLocation } from "~/server/ghl/sync";
 import { WindsorClient } from "~/server/windsor/client";
 import {
@@ -120,7 +121,7 @@ export async function syncAllClients(
 ) {
   const startedAt = new Date();
   const windsorClient = dependencies.windsorClient ?? new WindsorClient();
-  const ghlConfig = dependencies.ghlConfig ?? parseGhlConfig();
+  const ghlConfig = dependencies.ghlConfig ?? (await loadStoredGhlConfig());
   const ghlClient = dependencies.ghlClient ?? new GhlClient(ghlConfig.baseUrl);
   const run = await createRun(requestedByUserId, startedAt);
   const activeClients = await db

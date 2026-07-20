@@ -1,3 +1,7 @@
+process.env.GHL_CREDENTIALS_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString(
+  "base64",
+);
+
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 

@@ -29,7 +29,7 @@ const schema = z
   });
 
 export interface GhlClientMapping {
-  clientSlug: "tint-lab" | "diamond-auto-restoration";
+  clientSlug: string;
   clientName: string;
   locationId: string;
   token: string;
@@ -40,12 +40,20 @@ export interface GhlConfig {
   mappings: readonly GhlClientMapping[];
 }
 
+export function parseGhlBaseUrl(
+  environment: Record<string, string | undefined> = process.env,
+) {
+  return httpsUrl.parse(
+    environment.GHL_API_BASE_URL ?? "https://services.leadconnectorhq.com",
+  );
+}
+
 export function parseGhlConfig(
   environment: Record<string, string | undefined> = process.env,
 ): GhlConfig {
   const value = schema.parse(environment);
   return {
-    baseUrl: value.GHL_API_BASE_URL,
+    baseUrl: parseGhlBaseUrl(environment),
     mappings: [
       {
         clientSlug: "tint-lab",

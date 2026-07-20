@@ -274,12 +274,17 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const close = () => {
+    setOpen(false);
+    setError(null);
+    router.refresh();
+  };
   const update = api.management.updateClient.useMutation({
-    onSuccess: () => {
-      setOpen(false);
-      setError(null);
-      router.refresh();
-    },
+    onSuccess: close,
+    onError: (value) => setError(value.message),
+  });
+  const remove = api.management.deleteClient.useMutation({
+    onSuccess: close,
     onError: (value) => setError(value.message),
   });
 
@@ -338,8 +343,27 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
             Deactivate only after all source accounts are unassigned.
           </p>
           {error ? <p className="text-destructive text-sm">{error}</p> : null}
-          <DialogFooter>
-            <Button className="h-11 sm:min-w-28" disabled={update.isPending}>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={update.isPending || remove.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Permanently delete ${row.name}? Clients with accounts, users, GHL credentials, or integration history cannot be deleted.`,
+                  )
+                ) {
+                  remove.mutate({ clientId: row.id });
+                }
+              }}
+            >
+              {remove.isPending ? "Deleting…" : "Delete permanently"}
+            </Button>
+            <Button
+              className="h-11 sm:min-w-28"
+              disabled={update.isPending || remove.isPending}
+            >
               {update.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

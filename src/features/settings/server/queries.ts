@@ -11,6 +11,7 @@ import {
   adPerformanceDaily,
   campaigns,
   clients,
+  ghlClientConfigurations,
   integrationMappings,
   leadClassificationRules,
   leads,
@@ -168,35 +169,25 @@ export async function listRevenueRules(input: {
   return { rows, total: totalRow?.count ?? 0, clientOptions };
 }
 
-const GHL_TARGETS = [
-  {
-    slug: "tint-lab",
-    name: "Tint Lab",
-    locationKey: "GHL_TINT_LAB_LOCATION_ID",
-    tokenKey: "GHL_TINT_LAB_PRIVATE_INTEGRATION_TOKEN",
-  },
-  {
-    slug: "diamond-auto-restoration",
-    name: "Diamond Auto Restoration",
-    locationKey: "GHL_DIAMOND_LOCATION_ID",
-    tokenKey: "GHL_DIAMOND_PRIVATE_INTEGRATION_TOKEN",
-  },
-] as const;
-
-function isConfigured(key: string): boolean {
-  return Boolean(process.env[key]?.trim());
-}
-
 export async function getGhlConfigurationStatus() {
   const rows = await db
     .select({
-      slug: clients.slug,
+      clientId: clients.id,
+      clientSlug: clients.slug,
       clientName: clients.name,
       clientStatus: clients.status,
-      mappingId: integrationMappings.id,
+      locationId: ghlClientConfigurations.locationId,
+      timezone: ghlClientConfigurations.timezone,
+      tokenLastFour: ghlClientConfigurations.tokenLastFour,
+      configurationUpdatedAt: ghlClientConfigurations.updatedAt,
+      mappingLocationId: integrationMappings.externalLocationId,
       lastSuccessfulSyncAt: integrationMappings.lastSuccessfulSyncAt,
     })
     .from(clients)
+    .leftJoin(
+      ghlClientConfigurations,
+      eq(ghlClientConfigurations.clientId, clients.id),
+    )
     .leftJoin(
       integrationMappings,
       and(
@@ -204,25 +195,30 @@ export async function getGhlConfigurationStatus() {
         eq(integrationMappings.provider, "ghl"),
       ),
     )
-    .where(sql`${clients.slug} in ('tint-lab', 'diamond-auto-restoration')`)
-    .orderBy(desc(integrationMappings.lastSuccessfulSyncAt));
-  const bySlug = new Map(rows.map((row) => [row.slug, row]));
-  return GHL_TARGETS.map((target) => {
-    const row = bySlug.get(target.slug);
-    const mappingState = !row
-      ? "missing_client"
-      : row.clientStatus !== "active"
+    .orderBy(asc(clients.name), asc(clients.id));
+  return rows.map((row) => {
+    const mappingState =
+      row.clientStatus !== "active"
         ? "inactive_client"
-        : !row.mappingId
-          ? "missing_mapping"
-          : "active";
+        : !row.locationId
+          ? "missing_configuration"
+          : !row.mappingLocationId
+            ? "pending_sync"
+            : row.mappingLocationId !== row.locationId
+              ? "identity_conflict"
+              : "active";
     return {
-      clientSlug: target.slug,
-      clientName: row?.clientName ?? target.name,
+      clientId: row.clientId,
+      clientSlug: row.clientSlug,
+      clientName: row.clientName,
+      clientStatus: row.clientStatus,
       mappingState,
-      locationConfigured: isConfigured(target.locationKey),
-      tokenConfigured: isConfigured(target.tokenKey),
-      lastSuccessfulSyncAt: row?.lastSuccessfulSyncAt ?? null,
+      configured: Boolean(row.locationId),
+      locationId: row.locationId,
+      timezone: row.timezone,
+      tokenHint: row.tokenLastFour ? `••••${row.tokenLastFour}` : null,
+      configurationUpdatedAt: row.configurationUpdatedAt,
+      lastSuccessfulSyncAt: row.lastSuccessfulSyncAt,
     };
   });
 }

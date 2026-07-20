@@ -5,6 +5,8 @@ import { type UserRole } from "~/lib/roles";
 import {
   createLeadClassificationRule,
   createRevenueRule,
+  removeGhlClientConfiguration,
+  saveGhlClientConfiguration,
   updateLeadClassificationRule,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
@@ -23,6 +25,8 @@ vi.mock("~/server/auth/current-user", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("~/features/settings/server/actions", () => ({
   createLeadClassificationRule: vi.fn(),
   createRevenueRule: vi.fn(),
+  removeGhlClientConfiguration: vi.fn(),
+  saveGhlClientConfiguration: vi.fn(),
   updateLeadClassificationRule: vi.fn(),
   updateRevenueRule: vi.fn(),
 }));
@@ -79,19 +83,16 @@ describe("settings router", () => {
     });
     vi.mocked(getGhlConfigurationStatus).mockResolvedValue([
       {
+        clientId,
         clientSlug: "tint-lab",
         clientName: "Tint Lab",
+        clientStatus: "active",
         mappingState: "active",
-        locationConfigured: true,
-        tokenConfigured: true,
-        lastSuccessfulSyncAt: null,
-      },
-      {
-        clientSlug: "diamond-auto-restoration",
-        clientName: "Diamond Auto Restoration",
-        mappingState: "missing_mapping",
-        locationConfigured: false,
-        tokenConfigured: false,
+        configured: true,
+        locationId: "location-1",
+        timezone: "America/New_York",
+        tokenHint: "••••oken",
+        configurationUpdatedAt: new Date(),
         lastSuccessfulSyncAt: null,
       },
     ]);
@@ -99,6 +100,13 @@ describe("settings router", () => {
       id: "classification-rule-1",
     });
     vi.mocked(createRevenueRule).mockResolvedValue({ id: "rule-1" });
+    vi.mocked(saveGhlClientConfiguration).mockResolvedValue({
+      success: true,
+      timezone: "America/New_York",
+    });
+    vi.mocked(removeGhlClientConfiguration).mockResolvedValue({
+      success: true,
+    });
   });
 
   it.each(["owner", "admin"] as const)(
@@ -110,11 +118,37 @@ describe("settings router", () => {
       await expect(
         callerFor(role).leadClassificationRules({ limit: 100 }),
       ).resolves.toMatchObject({ rows: [] });
-      const status = await callerFor(role).ghlConfigurationStatus();
-      expect(status).toHaveLength(2);
-      expect(JSON.stringify(status)).not.toMatch(/locationId|token\"|private/i);
     },
   );
+
+  it("keeps GHL credential management owner-only", async () => {
+    const status = await callerFor("owner").ghlConfigurationStatus();
+    expect(status).toHaveLength(1);
+    expect(JSON.stringify(status)).not.toMatch(
+      /encryptedToken|tokenIv|tokenAuthTag/i,
+    );
+    await callerFor("owner").saveGhlConfiguration({
+      clientId,
+      locationId: "location-1",
+      token: "pit-private-token",
+    });
+    expect(saveGhlClientConfiguration).toHaveBeenCalledWith({
+      clientId,
+      locationId: "location-1",
+      token: "pit-private-token",
+      userId: "user-1",
+    });
+    await expect(
+      callerFor("admin").ghlConfigurationStatus(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      callerFor("admin").saveGhlConfiguration({
+        clientId,
+        locationId: "location-1",
+        token: "pit-private-token",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 
   it.each(["manager", "client"] as const)("rejects %s access", async (role) => {
     await expect(

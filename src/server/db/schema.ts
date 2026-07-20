@@ -433,6 +433,50 @@ export const integrationMappings = createTable(
   ],
 );
 
+export const ghlClientConfigurations = createTable(
+  "ghl_client_configuration",
+  (d) => ({
+    clientId: d
+      .uuid()
+      .notNull()
+      .primaryKey()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    locationId: d.varchar({ length: 255 }).notNull(),
+    encryptedToken: d.text().notNull(),
+    tokenIv: d.varchar({ length: 255 }).notNull(),
+    tokenAuthTag: d.varchar({ length: 255 }).notNull(),
+    tokenLastFour: d.varchar({ length: 4 }).notNull(),
+    timezone: d.varchar({ length: 100 }).notNull(),
+    createdByUserId: d
+      .varchar({ length: 255 })
+      .references(() => users.id, { onDelete: "set null" }),
+    updatedByUserId: d
+      .varchar({ length: 255 })
+      .references(() => users.id, { onDelete: "set null" }),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("ghl_client_configuration_location_idx").on(t.locationId),
+    check(
+      "ghl_client_configuration_encrypted_token_not_blank",
+      sql`length(${t.encryptedToken}) > 0`,
+    ),
+    check(
+      "ghl_client_configuration_token_iv_not_blank",
+      sql`length(${t.tokenIv}) > 0`,
+    ),
+    check(
+      "ghl_client_configuration_token_auth_tag_not_blank",
+      sql`length(${t.tokenAuthTag}) > 0`,
+    ),
+    check(
+      "ghl_client_configuration_token_last_four_length",
+      sql`length(${t.tokenLastFour}) = 4`,
+    ),
+  ],
+);
+
 export const ghlContacts = createTable(
   "ghl_contact",
   (d) => ({
