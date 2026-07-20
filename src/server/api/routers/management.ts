@@ -3,6 +3,7 @@ import { z } from "zod";
 import { USER_ROLES } from "~/lib/roles";
 import {
   assignManagedSourceAccount,
+  assignUnassignedSourceAccounts,
   createManagedClient,
   createManagedUser,
   resetManagedUserPassword,
@@ -15,7 +16,11 @@ import {
   listManagedClients,
   listManagedUsers,
 } from "~/features/management/server/queries";
-import { createTRPCRouter, ownerProcedure } from "~/server/api/trpc";
+import {
+  agencyProcedure,
+  createTRPCRouter,
+  ownerProcedure,
+} from "~/server/api/trpc";
 
 const pageFields = {
   page: z.number().int().positive().default(1),
@@ -26,6 +31,15 @@ const role = z.enum(USER_ROLES);
 const status = z.enum(["active", "inactive"]);
 const clientIds = z
   .array(z.string().uuid())
+  .transform((values) => [...new Set(values)]);
+const sourceAccountIds = z
+  .array(z.string().uuid())
+  .max(100)
+  .transform((values) => [...new Set(values)]);
+const requiredSourceAccountIds = z
+  .array(z.string().uuid())
+  .min(1)
+  .max(100)
   .transform((values) => [...new Set(values)]);
 const email = z
   .string()
@@ -59,7 +73,7 @@ export const managementRouter = createTRPCRouter({
     .mutation(({ input }) =>
       resetManagedUserPassword(input.userId, input.password),
     ),
-  clients: ownerProcedure
+  clients: agencyProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -68,7 +82,7 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listManagedClients(input)),
-  clientOptions: ownerProcedure
+  clientOptions: agencyProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -76,13 +90,13 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listClientOptions(input.query, input.limit)),
-  createClient: ownerProcedure
-    .input(z.object({ name }))
-    .mutation(({ input }) => createManagedClient(input.name)),
-  updateClient: ownerProcedure
+  createClient: agencyProcedure
+    .input(z.object({ name, sourceAccountIds }))
+    .mutation(({ input }) => createManagedClient(input)),
+  updateClient: agencyProcedure
     .input(z.object({ clientId: z.string().uuid(), name, status }))
     .mutation(({ input }) => updateManagedClient(input)),
-  accountAssignments: ownerProcedure
+  accountAssignments: agencyProcedure
     .input(
       z.object({
         query: z.string().trim().optional(),
@@ -96,7 +110,7 @@ export const managementRouter = createTRPCRouter({
       }),
     )
     .query(({ input }) => listAccountAssignments(input)),
-  assignSourceAccount: ownerProcedure
+  assignSourceAccount: agencyProcedure
     .input(
       z.object({
         sourceAccountId: z.string().uuid(),
@@ -106,4 +120,12 @@ export const managementRouter = createTRPCRouter({
     .mutation(({ input }) =>
       assignManagedSourceAccount(input.sourceAccountId, input.clientId),
     ),
+  assignUnassignedSourceAccounts: agencyProcedure
+    .input(
+      z.object({
+        clientId: z.string().uuid(),
+        sourceAccountIds: requiredSourceAccountIds,
+      }),
+    )
+    .mutation(({ input }) => assignUnassignedSourceAccounts(input)),
 });

@@ -2,7 +2,7 @@ import "server-only";
 
 import { TRPCError } from "@trpc/server";
 import { hash } from "bcryptjs";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { type UserRole } from "~/lib/roles";
 import { db } from "~/server/db";
@@ -174,25 +174,110 @@ export function slugifyClientName(name: string): string {
     .replace(/-+$/, "");
 }
 
-export async function createManagedClient(name: string) {
-  const slug = slugifyClientName(name);
+type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockUnassignedSourceAccounts(
+  tx: DatabaseTransaction,
+  sourceAccountIds: string[],
+) {
+  if (!sourceAccountIds.length) return;
+  const accounts = await tx
+    .select({ id: sourceAccounts.id, clientId: sourceAccounts.clientId })
+    .from(sourceAccounts)
+    .where(inArray(sourceAccounts.id, sourceAccountIds))
+    .orderBy(asc(sourceAccounts.id))
+    .for("update");
+  if (
+    accounts.length !== sourceAccountIds.length ||
+    accounts.some(({ clientId }) => clientId !== null)
+  ) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "One or more source accounts are no longer unassigned",
+    });
+  }
+}
+
+async function assignLockedSourceAccounts(
+  tx: DatabaseTransaction,
+  clientId: string,
+  sourceAccountIds: string[],
+) {
+  if (!sourceAccountIds.length) return;
+  const assigned = await tx
+    .update(sourceAccounts)
+    .set({ clientId })
+    .where(
+      and(
+        inArray(sourceAccounts.id, sourceAccountIds),
+        isNull(sourceAccounts.clientId),
+      ),
+    )
+    .returning({ id: sourceAccounts.id });
+  if (assigned.length !== sourceAccountIds.length) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "One or more source accounts could not be assigned",
+    });
+  }
+}
+
+export async function createManagedClient(input: {
+  name: string;
+  sourceAccountIds: string[];
+}) {
+  const slug = slugifyClientName(input.name);
   if (!slug)
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Client name must contain letters or numbers",
     });
+  const sourceAccountIds = [...new Set(input.sourceAccountIds)];
   try {
-    const [client] = await db
-      .insert(clients)
-      .values({ name, slug })
-      .returning({ id: clients.id });
-    if (!client) throw new Error("Client insert returned no row");
-    return client;
+    return await db.transaction(async (tx) => {
+      const [client] = await tx
+        .insert(clients)
+        .values({ name: input.name, slug })
+        .returning({ id: clients.id });
+      if (!client) throw new Error("Client insert returned no row");
+      await lockUnassignedSourceAccounts(tx, sourceAccountIds);
+      await assignLockedSourceAccounts(tx, client.id, sourceAccountIds);
+      return client;
+    });
   } catch (error) {
     if (isUniqueViolation(error))
       throw new TRPCError({ code: "CONFLICT", cause: error });
     throw error;
   }
+}
+
+export async function assignUnassignedSourceAccounts(input: {
+  clientId: string;
+  sourceAccountIds: string[];
+}) {
+  const sourceAccountIds = [...new Set(input.sourceAccountIds)];
+  if (!sourceAccountIds.length) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Select at least one source account",
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [client] = await tx
+      .select({ status: clients.status })
+      .from(clients)
+      .where(eq(clients.id, input.clientId))
+      .for("update");
+    if (client?.status !== "active") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "The target client must be active",
+      });
+    }
+    await lockUnassignedSourceAccounts(tx, sourceAccountIds);
+    await assignLockedSourceAccounts(tx, input.clientId, sourceAccountIds);
+    return { success: true as const };
+  });
 }
 
 export async function updateManagedClient(input: {

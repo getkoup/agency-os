@@ -29,7 +29,8 @@ export default async function ClientsPage({
   if (user.role === "client") notFound();
   const rawSearch = await searchParams;
   const search = resolveDashboardPageSearch(rawSearch);
-  const [result, managed, options] = await Promise.all([
+  const canManage = user.role === "owner" || user.role === "admin";
+  const [result, managed, options, unassignedAccounts] = await Promise.all([
     api.dashboard.clients({
       from: search.from,
       to: search.to,
@@ -37,13 +38,20 @@ export default async function ClientsPage({
       page: search.clientPage,
       pageSize: 25,
     }),
-    user.role === "owner"
+    canManage
       ? api.management.clients({ page: 1, pageSize: 100 })
       : Promise.resolve(null),
     api.dashboard.filterOptions({
       from: search.from,
       to: search.to,
     }),
+    canManage
+      ? api.management.accountAssignments({
+          assignment: "unassigned",
+          page: 1,
+          pageSize: 100,
+        })
+      : Promise.resolve(null),
   ]);
   return (
     <div className="mx-auto max-w-[96rem] space-y-7">
@@ -51,7 +59,15 @@ export default async function ClientsPage({
         eyebrow="Agency"
         title="Clients"
         description="Client-level portfolio totals and access health without exposing private memberships."
-        actions={managed ? <ClientManagement /> : undefined}
+        actions={
+          managed && unassignedAccounts ? (
+            <ClientManagement
+              clients={managed.rows}
+              unassignedAccounts={unassignedAccounts.rows}
+              unassignedAccountTotal={unassignedAccounts.total}
+            />
+          ) : undefined
+        }
       />
       <DashboardFilters
         values={{

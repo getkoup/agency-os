@@ -38,6 +38,7 @@ export default async function AccountsPage({
   const base = resolveDashboardPageSearch(raw);
   const search = searchSchema.parse(raw);
   const user = await getAuthenticatedUser();
+  const canManage = user.role === "owner" || user.role === "admin";
   const [options, accounts, managed, clientOptions] = await Promise.all([
     api.dashboard.filterOptions({
       from: base.from,
@@ -54,7 +55,7 @@ export default async function AccountsPage({
       page: search.accountPage,
       pageSize: 25,
     }),
-    user.role === "owner"
+    canManage
       ? api.management.accountAssignments({
           query: search.query,
           clientId: base.clientId,
@@ -65,7 +66,7 @@ export default async function AccountsPage({
           pageSize: 25,
         })
       : Promise.resolve(null),
-    user.role === "owner"
+    canManage
       ? api.management.clientOptions({ limit: 50 })
       : Promise.resolve([]),
   ]);
