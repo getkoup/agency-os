@@ -58,6 +58,7 @@ try {
     values ('tint-lab', 'Tint Lab')
   `;
   await applyMigration(test, "drizzle/0006_tranquil_alex_wilder.sql");
+  await applyMigration(test, "drizzle/0007_campaign_daily_tracker.sql");
   const seededClassificationRules = await test`
     select "categoryName", "keywords", "matchMode", "priority"
     from "agency_os_lead_classification_rule"
@@ -121,7 +122,7 @@ try {
     );
   if (
     JSON.stringify(enumRows.map(({ value }) => value)) !==
-    JSON.stringify(["owner", "admin", "client"])
+    JSON.stringify(["owner", "admin", "manager", "client"])
   )
     throw new Error("Role enum values are incorrect");
   const byColumn = new Map(

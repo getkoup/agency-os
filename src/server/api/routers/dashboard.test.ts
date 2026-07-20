@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { type UserRole } from "~/lib/roles";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
@@ -52,7 +53,7 @@ const completedRun = {
   targets: [],
 };
 
-function callerFor(role: "owner" | "admin" | "client" | null) {
+function callerFor(role: UserRole | null) {
   const currentUser = role
     ? {
         id: "user-1",
@@ -92,12 +93,15 @@ describe("dashboard.syncAllClients authorization", () => {
     expect(syncAllClients).toHaveBeenCalledWith("user-1");
   });
 
-  it("rejects client callers", async () => {
-    await expect(callerFor("client").syncAllClients()).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
-    expect(syncAllClients).not.toHaveBeenCalled();
-  });
+  it.each(["manager", "client"] as const)(
+    "rejects %s callers",
+    async (role) => {
+      await expect(callerFor(role).syncAllClients()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      expect(syncAllClients).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects anonymous callers", async () => {
     await expect(callerFor(null).syncAllClients()).rejects.toMatchObject({

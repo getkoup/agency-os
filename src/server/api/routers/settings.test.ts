@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { type UserRole } from "~/lib/roles";
 import {
   createLeadClassificationRule,
   createRevenueRule,
@@ -33,7 +34,7 @@ vi.mock("~/features/settings/server/queries", () => ({
 
 const createCaller = createCallerFactory(settingsRouter);
 
-function callerFor(role: "owner" | "admin" | "client" | null) {
+function callerFor(role: UserRole | null) {
   const currentUser = role
     ? {
         id: "user-1",
@@ -115,9 +116,9 @@ describe("settings router", () => {
     },
   );
 
-  it("rejects client access", async () => {
+  it.each(["manager", "client"] as const)("rejects %s access", async (role) => {
     await expect(
-      callerFor("client").revenueRules({ page: 1, pageSize: 25 }),
+      callerFor(role).revenueRules({ page: 1, pageSize: 25 }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 

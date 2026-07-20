@@ -16,6 +16,7 @@ export const createTable = pgTableCreator((name) => `agency_os_${name}`);
 export const userRole = pgEnum("agency_os_user_role", [
   "owner",
   "admin",
+  "manager",
   "client",
 ]);
 export const recordStatus = pgEnum("agency_os_record_status", [
@@ -209,6 +210,39 @@ export const campaigns = createTable(
       t.externalId,
     ),
     index("campaign_source_idx").on(t.sourceAccountId),
+  ],
+);
+
+export const campaignDailyRemarks = createTable(
+  "campaign_daily_remark",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    campaignId: d
+      .uuid()
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    date: d.date().notNull(),
+    remark: d.text().notNull(),
+    createdByUserId: d
+      .varchar({ length: 255 })
+      .references(() => users.id, { onDelete: "set null" }),
+    updatedByUserId: d
+      .varchar({ length: 255 })
+      .references(() => users.id, { onDelete: "set null" }),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("campaign_daily_remark_campaign_date_idx").on(
+      t.campaignId,
+      t.date,
+    ),
+    index("campaign_daily_remark_date_idx").on(t.date),
+    check(
+      "campaign_daily_remark_not_blank",
+      sql`length(trim(${t.remark})) > 0`,
+    ),
+    check("campaign_daily_remark_max_length", sql`length(${t.remark}) <= 2000`),
   ],
 );
 
@@ -698,7 +732,17 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   adGroups: many(adGroups),
   leads: many(leads),
   performance: many(adPerformanceDaily),
+  dailyRemarks: many(campaignDailyRemarks),
 }));
+export const campaignDailyRemarksRelations = relations(
+  campaignDailyRemarks,
+  ({ one }) => ({
+    campaign: one(campaigns, {
+      fields: [campaignDailyRemarks.campaignId],
+      references: [campaigns.id],
+    }),
+  }),
+);
 export const adGroupsRelations = relations(adGroups, ({ one, many }) => ({
   campaign: one(campaigns, {
     fields: [adGroups.campaignId],

@@ -13,7 +13,11 @@ export async function resolveAccessibleClientScope(
   user: { id: string; role: UserRole },
   requestedClientId: RequestedClientScope,
 ): Promise<{ includeUnassigned: boolean; clientIds: string[] | null }> {
-  if (user.role === "owner" || user.role === "admin") {
+  if (
+    user.role === "owner" ||
+    user.role === "admin" ||
+    user.role === "manager"
+  ) {
     if (requestedClientId === undefined) {
       return { clientIds: null, includeUnassigned: true };
     }

@@ -110,6 +110,7 @@ export function UserManagement({
       >
         <option value="owner">Owner</option>
         <option value="admin">Admin</option>
+        <option value="manager">Manager</option>
         <option value="client">Client</option>
       </select>
     );
