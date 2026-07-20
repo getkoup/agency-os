@@ -88,10 +88,9 @@ export default async function CampaignTrackerPage({
       ) : null}
       {clientGroups.length ? (
         <section className="space-y-3" aria-label="Campaigns grouped by client">
-          {clientGroups.map((client, clientIndex) => (
+          {clientGroups.map((client) => (
             <details
               key={client.id}
-              open={clientIndex === 0}
               className="group/client border-border bg-card overflow-hidden rounded-xl border"
             >
               <summary className="hover:bg-muted/25 flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition-colors [&::-webkit-details-marker]:hidden">
