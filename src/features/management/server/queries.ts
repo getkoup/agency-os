@@ -29,7 +29,7 @@ export interface PageInput {
 export async function listManagedUsers(
   input: PageInput & {
     query?: string;
-    role?: "owner" | "admin" | "client";
+    role?: "owner" | "admin" | "manager" | "client";
     status?: "active" | "inactive";
     clientId?: string;
   },

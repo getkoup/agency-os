@@ -50,7 +50,7 @@ function validateMemberships(role: UserRole, clientIds: string[]) {
   if (role !== "client" && clientIds.length > 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Owner and admin users cannot have client memberships",
+      message: "Owner, admin, and manager users cannot have client memberships",
     });
   }
 }
