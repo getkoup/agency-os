@@ -187,6 +187,7 @@ export async function getCampaignTrackerRows(focusDate: string) {
     isTruncated,
     rows: activeCampaigns.map((campaign) => ({
       id: campaign.id,
+      clientId: campaign.clientId,
       clientName: campaign.clientName,
       campaignName: campaign.name,
       campaignType: classifyCampaign(
