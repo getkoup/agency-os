@@ -104,23 +104,22 @@ function RuleDialog({
         >
           <div className="space-y-2">
             <Label htmlFor={`rule-client-${row?.id ?? "new"}`}>Client</Label>
-            <select
-              id={`rule-client-${row?.id ?? "new"}`}
-              name="clientId"
-              defaultValue={row?.clientId ?? ""}
-              required
-              className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-            >
-              <option value="" disabled>
-                Select a client
-              </option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                  {client.status === "inactive" ? " (inactive)" : ""}
-                </option>
-              ))}
-            </select>
+            <Select name="clientId" defaultValue={row?.clientId} required>
+              <SelectTrigger
+                id={`rule-client-${row?.id ?? "new"}`}
+                className="w-full data-[size=default]:h-11"
+              >
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                    {client.status === "inactive" ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`rule-tag-${row?.id ?? "new"}`}>GHL tag</Label>

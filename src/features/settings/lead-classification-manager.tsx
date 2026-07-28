@@ -121,23 +121,26 @@ function ClassificationRuleDialog({
             <Label htmlFor={`classification-client-${row?.id ?? "new"}`}>
               Client
             </Label>
-            <select
-              id={`classification-client-${row?.id ?? "new"}`}
+            <Select
               name="clientId"
-              defaultValue={row?.clientId ?? defaultClientId ?? ""}
+              defaultValue={row?.clientId ?? defaultClientId}
               required
-              className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
             >
-              <option value="" disabled>
-                Select a client
-              </option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                  {client.status === "inactive" ? " (inactive)" : ""}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id={`classification-client-${row?.id ?? "new"}`}
+                className="w-full data-[size=default]:h-11"
+              >
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                    {client.status === "inactive" ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`classification-name-${row?.id ?? "new"}`}>
@@ -172,15 +175,18 @@ function ClassificationRuleDialog({
               <Label htmlFor={`classification-mode-${row?.id ?? "new"}`}>
                 Match mode
               </Label>
-              <select
-                id={`classification-mode-${row?.id ?? "new"}`}
-                name="matchMode"
-                defaultValue={row?.matchMode ?? "any"}
-                className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="any">Any keyword</option>
-                <option value="all">All keywords</option>
-              </select>
+              <Select name="matchMode" defaultValue={row?.matchMode ?? "any"}>
+                <SelectTrigger
+                  id={`classification-mode-${row?.id ?? "new"}`}
+                  className="w-full data-[size=default]:h-11"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any keyword</SelectItem>
+                  <SelectItem value="all">All keywords</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor={`classification-priority-${row?.id ?? "new"}`}>

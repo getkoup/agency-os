@@ -19,6 +19,13 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -148,16 +155,20 @@ export function UserManagement({
   });
   function roleSelect(value: string, onChange: (next: UserRole) => void) {
     return (
-      <select
-        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
+      <Select
         value={value}
-        onChange={(event) => onChange(event.target.value as UserRole)}
+        onValueChange={(next) => onChange(next as UserRole)}
       >
-        <option value="owner">Owner</option>
-        <option value="admin">Admin</option>
-        <option value="manager">Manager</option>
-        <option value="client">Client</option>
-      </select>
+        <SelectTrigger className="w-full data-[size=default]:h-11">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="owner">Owner</SelectItem>
+          <SelectItem value="admin">Admin</SelectItem>
+          <SelectItem value="manager">Manager</SelectItem>
+          <SelectItem value="client">Client</SelectItem>
+        </SelectContent>
+      </Select>
     );
   }
   return (
@@ -394,17 +405,18 @@ export function UserManagement({
                 setRole(next);
                 if (next !== "client") setSelected([]);
               })}
-              <Label>
-                Status
-                <select
-                  name="status"
-                  defaultValue={editing.status}
-                  className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 mt-2 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </Label>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select name="status" defaultValue={editing.status}>
+                  <SelectTrigger className="w-full data-[size=default]:h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Memberships
                 options={clients}
                 selected={selected}

@@ -17,6 +17,13 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { getFormString } from "~/lib/form-data";
 import { api, type RouterOutputs } from "~/trpc/react";
 
@@ -258,18 +265,21 @@ export function ClientManagement({
           <div className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="assignment-client">Client</Label>
-              <select
-                id="assignment-client"
-                value={targetClientId}
-                onChange={(event) => setTargetClientId(event.target.value)}
-                className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                {activeClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={targetClientId} onValueChange={setTargetClientId}>
+                <SelectTrigger
+                  id="assignment-client"
+                  className="w-full data-[size=default]:h-11"
+                >
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeClients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Source accounts</Label>
@@ -372,15 +382,18 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor={`client-status-${row.id}`}>Status</Label>
-            <select
-              id={`client-status-${row.id}`}
-              name="status"
-              defaultValue={row.status}
-              className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
+            <Select name="status" defaultValue={row.status}>
+              <SelectTrigger
+                id={`client-status-${row.id}`}
+                className="w-full data-[size=default]:h-11"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <p className="text-muted-foreground text-xs leading-5">
             Deactivate only after all source accounts are unassigned.
