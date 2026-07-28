@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -47,17 +47,20 @@ export function AppSidebar({
       variant="floating"
       className="md:py-[10px] md:pl-[10px]"
     >
-      <SidebarHeader className="px-3 pt-4 pb-5">
+      <SidebarHeader className="px-3 pt-4 pb-6">
         <Link
           href="/dashboard"
           prefetch={false}
           className="flex items-center gap-3 font-semibold tracking-tight"
         >
-          <span className="bg-sidebar-primary text-sidebar-primary-foreground grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold">
-            A
+          <span className="bg-sidebar-primary text-sidebar-primary-foreground grid size-9 shrink-0 place-items-center rounded-xl shadow-lg">
+            <Sparkles className="size-[1.05rem]" aria-hidden="true" />
           </span>
           <span className="group-data-[collapsible=icon]:hidden">
-            Agency OS
+            <span className="block">Agency OS</span>
+            <span className="text-sidebar-foreground/45 block text-[0.6rem] font-medium tracking-[0.14em] uppercase">
+              Operating intelligence
+            </span>
           </span>
         </Link>
       </SidebarHeader>
@@ -83,13 +86,13 @@ export function AppSidebar({
                           asChild
                           isActive={active}
                           tooltip={item.label}
-                          className="text-sidebar-foreground/70 data-[active=true]:text-sidebar-accent-foreground h-11 rounded-xl px-3 data-[active=true]:font-semibold"
+                          className="text-sidebar-foreground/68 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground relative h-11 rounded-xl px-3 data-[active=true]:font-semibold data-[active=true]:shadow-sm"
                         >
                           <Link href={item.href} prefetch={false}>
                             <item.icon className="size-[1.05rem]" />
                             <span>{item.label}</span>
                             {active ? (
-                              <Check className="ml-auto size-3.5 group-data-[collapsible=icon]:hidden" />
+                              <span className="bg-sidebar-primary ml-auto size-1.5 rounded-full group-data-[collapsible=icon]:hidden" />
                             ) : null}
                           </Link>
                         </SidebarMenuButton>

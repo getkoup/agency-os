@@ -128,7 +128,11 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-foreground;
   }
   html {
     @apply font-sans;
@@ -146,5 +150,16 @@
     box-shadow:
       0 18px 50px oklch(0.22 0.045 150 / 18%),
       0 3px 12px oklch(0.22 0.045 150 / 8%);
+  }
+
+  .surface-panel {
+    @apply border-border/75 bg-card rounded-[1.25rem] border;
+    box-shadow:
+      0 1px 2px oklch(0.3 0.04 150 / 5%),
+      0 12px 32px oklch(0.3 0.04 150 / 8%);
+  }
+
+  .section-label {
+    @apply text-primary text-xs font-semibold tracking-[0.16em] uppercase;
   }
 }

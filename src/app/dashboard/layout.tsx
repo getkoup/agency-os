@@ -34,18 +34,22 @@ export default async function DashboardLayout({
 
   return (
     <TooltipProvider>
-      <SidebarProvider className="bg-background md:p-[10px]">
+      <SidebarProvider className="bg-sidebar md:p-2.5">
         <AppSidebar role={user.role} name={user.name} email={user.email} />
-        <SidebarInset className="shadow-sage bg-card min-w-0 overflow-hidden md:rounded-[1.35rem]">
-          <header className="bg-card/95 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-3 backdrop-blur sm:px-5">
+        <SidebarInset className="shadow-sage-floating bg-background min-w-0 overflow-hidden md:rounded-[1.5rem]">
+          <header className="bg-card/88 border-border/70 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-3 backdrop-blur-xl sm:px-5">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <SidebarTrigger className="size-11 md:size-9" />
               <div className="bg-border hidden h-5 w-px sm:block" />
               <DashboardRouteContext />
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="text-muted-foreground hidden items-center gap-1.5 text-xs lg:flex">
-                <Activity className="text-chart-2 size-3.5" />
+              <div className="text-muted-foreground bg-secondary/60 hidden items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs lg:flex">
+                <span className="relative flex size-2">
+                  <span className="bg-chart-2 absolute inline-flex size-full animate-ping rounded-full opacity-50" />
+                  <span className="bg-chart-2 relative inline-flex size-2 rounded-full" />
+                </span>
+                <Activity className="sr-only size-3.5" />
                 <span>Workspace live</span>
               </div>
               <Badge
@@ -78,7 +82,7 @@ export default async function DashboardLayout({
               </form>
             </div>
           </header>
-          <div className="bg-card min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-8">
+          <div className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top_right,var(--color-accent),transparent_28rem)] p-4 sm:p-6 lg:p-8">
             {children}
           </div>
         </SidebarInset>
