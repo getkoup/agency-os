@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -42,24 +43,59 @@ function Memberships({
   setSelected: (ids: string[]) => void;
   disabled: boolean;
 }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = normalizedQuery
+    ? options.filter((client) =>
+        client.name.toLowerCase().includes(normalizedQuery),
+      )
+    : options;
+
   return (
-    <div className="border-border/80 bg-secondary/25 grid max-h-44 gap-2 overflow-auto rounded-xl border p-3">
-      {options.map((client) => (
-        <Label key={client.id} className="flex items-center gap-2 font-normal">
-          <Checkbox
-            disabled={disabled}
-            checked={selected.includes(client.id)}
-            onCheckedChange={(checked) =>
-              setSelected(
-                checked
-                  ? [...selected, client.id]
-                  : selected.filter((id) => id !== client.id),
-              )
-            }
+    <div className="border-border/80 overflow-hidden rounded-[0.625rem] border">
+      <div className="border-border bg-muted/20 border-b p-2.5">
+        <div className="relative">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
           />
-          {client.name}
-        </Label>
-      ))}
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search clients"
+            aria-label="Search client memberships"
+            className="bg-background h-9 pl-9"
+            disabled={disabled}
+          />
+        </div>
+      </div>
+      <div className="grid max-h-44 gap-1 overflow-auto p-2">
+        {visibleOptions.length ? (
+          visibleOptions.map((client) => (
+            <Label
+              key={client.id}
+              className="hover:bg-muted/60 rounded-[0.5rem] p-2 font-normal transition-colors"
+            >
+              <Checkbox
+                disabled={disabled}
+                checked={selected.includes(client.id)}
+                onCheckedChange={(checked) =>
+                  setSelected(
+                    checked
+                      ? [...selected, client.id]
+                      : selected.filter((id) => id !== client.id),
+                  )
+                }
+              />
+              {client.name}
+            </Label>
+          ))
+        ) : (
+          <p className="text-muted-foreground px-3 py-6 text-center text-sm">
+            No clients match “{query.trim()}”.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -78,6 +114,15 @@ export function UserManagement({
   const [role, setRole] = useState<UserRole>("client");
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleRows = normalizedQuery
+    ? rows.filter((user) =>
+        [user.name, user.email, user.role].some((value) =>
+          value?.toLowerCase().includes(normalizedQuery),
+        ),
+      )
+    : rows;
   const create = api.management.createUser.useMutation({
     onSuccess: () => {
       setCreateOpen(false);
@@ -117,7 +162,20 @@ export function UserManagement({
   }
   return (
     <>
-      <div className="mb-4 flex justify-end px-5">
+      <div className="mb-4 flex flex-col gap-3 px-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search users"
+            aria-label="Search users"
+            className="bg-background h-10 pl-9"
+          />
+        </div>
         <Dialog
           open={createOpen}
           onOpenChange={(open) => {
@@ -219,7 +277,7 @@ export function UserManagement({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((user) => (
+            {visibleRows.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="pl-6">
                   <div className="font-medium">{user.name ?? user.email}</div>
@@ -281,6 +339,16 @@ export function UserManagement({
                 </TableCell>
               </TableRow>
             ))}
+            {!visibleRows.length ? (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="text-muted-foreground h-28 text-center"
+                >
+                  No users match “{query.trim()}”.
+                </TableCell>
+              </TableRow>
+            ) : null}
           </TableBody>
         </Table>
       </div>
