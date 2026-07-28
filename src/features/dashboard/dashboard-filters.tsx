@@ -32,6 +32,7 @@ interface DashboardFiltersProps {
     campaigns: Array<{ id: string; name: string }>;
   };
   resetPageKeys?: string[];
+  defaultDatePreset?: DatePreset;
   showClient?: boolean;
   showPlatform?: boolean;
   showCampaign?: boolean;
@@ -41,6 +42,7 @@ export function DashboardFilters({
   values,
   options,
   resetPageKeys = [],
+  defaultDatePreset = "last7",
   showClient = true,
   showPlatform = true,
   showCampaign = true,
@@ -70,7 +72,7 @@ export function DashboardFilters({
     controlCount === 4 ? "xl:col-span-2" : standardColumnClass;
   const datePreset = (searchParams.get("range") ??
     (!searchParams.has("from") && !searchParams.has("to")
-      ? "last7"
+      ? defaultDatePreset
       : "custom")) as DatePreset;
   const selectedClient = options.clients.find(
     (client) => client.id === values.clientId,

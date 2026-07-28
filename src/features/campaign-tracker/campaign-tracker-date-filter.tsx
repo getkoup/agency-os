@@ -1,14 +1,25 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
+import { CalendarDays } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
-import { Input } from "~/components/ui/input";
+import { Button } from "~/components/ui/button";
+import { Calendar } from "~/components/ui/calendar";
 import { Label } from "~/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 
 export function CampaignTrackerDateFilter({ date }: { date: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const selectedDate = parseISO(date);
 
   function updateDate(nextDate: string) {
     if (!nextDate) return;
@@ -26,13 +37,33 @@ export function CampaignTrackerDateFilter({ date }: { date: string }) {
         </p>
       </div>
       <div className="w-full space-y-2 sm:w-56">
-        <Label htmlFor="campaign-tracker-date">Latest date</Label>
-        <Input
-          id="campaign-tracker-date"
-          type="date"
-          value={date}
-          onChange={(event) => updateDate(event.target.value)}
-        />
+        <Label>Latest date</Label>
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 w-full justify-start px-2.5 font-normal"
+              aria-label={`Latest date: ${format(selectedDate, "MMMM d, yyyy")}`}
+            >
+              <CalendarDays aria-hidden="true" />
+              <span>{format(selectedDate, "MMM d, yyyy")}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto overflow-hidden p-0">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              defaultMonth={selectedDate}
+              onSelect={(nextDate) => {
+                if (!nextDate) return;
+                updateDate(format(nextDate, "yyyy-MM-dd"));
+                setCalendarOpen(false);
+              }}
+              autoFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );

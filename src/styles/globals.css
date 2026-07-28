@@ -166,6 +166,13 @@
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  select {
+    border-radius: 0.5rem !important;
+  }
   html {
     @apply font-sans;
   }

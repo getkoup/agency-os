@@ -8,11 +8,11 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
 import { resolveMonitoringDateRange } from "~/features/dashboard/server/queries";
-import { MonitoringFilters } from "~/features/monitoring/monitoring-filters";
 import { api } from "~/trpc/server";
 
 function SummaryMetric({
@@ -136,7 +136,13 @@ export default async function MonitoringPage({
           </span>
         }
       />
-      <MonitoringFilters clients={options.clients} values={filters} />
+      <DashboardFilters
+        values={filters}
+        options={options}
+        defaultDatePreset="last3"
+        showPlatform={false}
+        showCampaign={false}
+      />
       <section
         aria-label="Monitoring summary"
         className="border-border bg-card grid overflow-hidden rounded-xl border sm:grid-cols-2 lg:grid-cols-6"
