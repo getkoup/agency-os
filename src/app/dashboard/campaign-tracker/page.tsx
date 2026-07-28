@@ -170,6 +170,13 @@ export default async function CampaignTrackerPage({
                                   {metrics.totalLeads} lead
                                   {metrics.totalLeads === 1 ? "" : "s"}
                                 </p>
+                                <p className="text-foreground/70 mt-1 text-[0.6875rem] font-medium whitespace-nowrap">
+                                  {metrics.facebookLeadFormLeads} Form
+                                  <span className="mx-1.5" aria-hidden="true">
+                                    ·
+                                  </span>
+                                  {metrics.dmLeads} DM
+                                </p>
                               </div>
                             ) : (
                               <span className="text-muted-foreground">—</span>
