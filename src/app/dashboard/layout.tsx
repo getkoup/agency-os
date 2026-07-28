@@ -23,7 +23,7 @@ export default async function DashboardLayout({
   });
   return (
     <TooltipProvider>
-      <SidebarProvider className="bg-sidebar md:p-2.5">
+      <SidebarProvider className="bg-sidebar h-svh overflow-hidden md:p-2.5">
         <AppSidebar
           role={user.role}
           name={user.name}
@@ -33,8 +33,8 @@ export default async function DashboardLayout({
             await signOut({ redirectTo: "/login" });
           }}
         />
-        <SidebarInset className="shadow-sage-floating bg-background min-w-0 overflow-hidden md:rounded-[1.5rem]">
-          <header className="bg-card/88 border-border/70 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-3 backdrop-blur-xl sm:px-5">
+        <SidebarInset className="shadow-sage-floating bg-background h-svh min-h-0 min-w-0 overflow-hidden md:h-[calc(100svh-1.25rem)] md:rounded-[1.5rem]">
+          <header className="bg-card/88 border-border/70 z-30 flex h-16 shrink-0 items-center justify-between border-b px-3 backdrop-blur-xl sm:px-5">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <SidebarTrigger className="size-11 md:size-9" />
               <div className="bg-border hidden h-5 w-px sm:block" />
@@ -49,7 +49,7 @@ export default async function DashboardLayout({
               <span>Workspace live</span>
             </div>
           </header>
-          <div className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top_right,var(--color-accent),transparent_28rem)] p-4 sm:p-6 lg:p-8">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top_right,var(--color-accent),transparent_28rem)] p-4 sm:p-6 lg:p-8">
             {children}
           </div>
         </SidebarInset>
