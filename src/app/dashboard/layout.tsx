@@ -23,7 +23,7 @@ export default async function DashboardLayout({
   });
   return (
     <TooltipProvider>
-      <SidebarProvider className="bg-sidebar h-svh overflow-hidden md:p-2.5">
+      <SidebarProvider className="h-svh overflow-hidden bg-[#244b37] md:p-2.5 dark:bg-[#173d2b]">
         <AppSidebar
           role={user.role}
           name={user.name}
