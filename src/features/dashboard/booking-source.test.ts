@@ -23,6 +23,12 @@ describe("classifyBookingLeadType", () => {
         medium: "instagram",
       }),
     ).toBe("dm");
+    expect(
+      classifyBookingLeadType(null, {
+        sessionSource: "Social media",
+        medium: "facebook",
+      }),
+    ).toBe("dm");
   });
 
   it.each([null, undefined, "", "Google", "Ceramic Coating"])(

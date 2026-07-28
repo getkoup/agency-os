@@ -27,6 +27,7 @@ export function classifyBookingLeadType(
   const identifiesForm = /\bform\b|lead form/.test(normalized);
   const identifiesDm =
     /\bdm\b|conversation/.test(normalized) ||
+    normalized.includes("social media") ||
     (normalized.includes("instagram") && !identifiesForm);
   if (identifiesDm) return "dm";
   if (identifiesForm || normalizeCampaignText(source ?? "") === "facebook") {
