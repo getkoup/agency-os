@@ -197,7 +197,7 @@ export function UserManagement({
           }}
         >
           <DialogTrigger asChild>
-            <Button className="h-11 rounded-[0.5rem] px-5">Create user</Button>
+            <Button size="lg">Create user</Button>
           </DialogTrigger>
           <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>
@@ -264,11 +264,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={create.isPending}
-                >
+                <Button size="lg" type="submit" disabled={create.isPending}>
                   {create.isPending ? "Creating…" : "Create user"}
                 </Button>
               </DialogFooter>
@@ -427,11 +423,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={update.isPending}
-                >
+                <Button size="lg" type="submit" disabled={update.isPending}>
                   {update.isPending ? "Saving…" : "Save changes"}
                 </Button>
               </DialogFooter>
@@ -478,11 +470,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={reset.isPending}
-                >
+                <Button size="lg" type="submit" disabled={reset.isPending}>
                   {reset.isPending ? "Resetting…" : "Reset password"}
                 </Button>
               </DialogFooter>

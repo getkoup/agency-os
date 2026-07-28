@@ -106,7 +106,8 @@ export function LoginForm() {
         </p>
       ) : null}
       <Button
-        className="h-11 w-full font-semibold"
+        size="lg"
+        className="w-full font-semibold"
         type="submit"
         disabled={pending}
       >

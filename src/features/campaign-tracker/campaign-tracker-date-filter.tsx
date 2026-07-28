@@ -43,7 +43,8 @@ export function CampaignTrackerDateFilter({ date }: { date: string }) {
             <Button
               type="button"
               variant="outline"
-              className="h-8 w-full justify-start px-2.5 font-normal"
+              size="sm"
+              className="w-full justify-start font-normal"
               aria-label={`Latest date: ${format(selectedDate, "MMMM d, yyyy")}`}
             >
               <CalendarDays aria-hidden="true" />

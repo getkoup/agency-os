@@ -167,7 +167,7 @@ export function ClientManagement({
     <div className="flex flex-wrap gap-2">
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogTrigger asChild>
-          <Button className="h-11 rounded-[0.5rem] px-5">Create client</Button>
+          <Button size="lg">Create client</Button>
         </DialogTrigger>
         <DialogContent className={createDialogClassName}>
           <DialogHeader className="shrink-0">
@@ -237,7 +237,7 @@ export function ClientManagement({
               ) : null}
             </div>
             <DialogFooter className="mt-5 shrink-0">
-              <Button className="h-11 sm:min-w-28" disabled={create.isPending}>
+              <Button size="lg" disabled={create.isPending}>
                 {create.isPending ? "Creating…" : "Create client"}
               </Button>
             </DialogFooter>
@@ -249,7 +249,7 @@ export function ClientManagement({
         <DialogTrigger asChild>
           <Button
             variant="outline"
-            className="h-11 rounded-[0.5rem] px-5"
+            size="lg"
             disabled={!activeClients.length || !unassignedAccounts.length}
           >
             Assign accounts
@@ -300,7 +300,7 @@ export function ClientManagement({
             ) : null}
             <DialogFooter>
               <Button
-                className="h-11 sm:min-w-32"
+                size="lg"
                 disabled={
                   assign.isPending ||
                   !targetClientId ||
@@ -344,7 +344,7 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="ghost" className="rounded-[0.5rem]">
+        <Button size="sm" variant="ghost">
           Edit
         </Button>
       </DialogTrigger>
@@ -416,10 +416,7 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
             >
               {remove.isPending ? "Deleting…" : "Delete permanently"}
             </Button>
-            <Button
-              className="h-11 sm:min-w-28"
-              disabled={update.isPending || remove.isPending}
-            >
+            <Button size="lg" disabled={update.isPending || remove.isPending}>
               {update.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

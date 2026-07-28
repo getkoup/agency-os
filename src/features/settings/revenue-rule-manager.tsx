@@ -69,7 +69,6 @@ function RuleDialog({
         <Button
           variant={row ? "ghost" : "default"}
           size={row ? "sm" : "default"}
-          className="rounded-[0.5rem]"
         >
           {row ? "Edit" : "Create rule"}
         </Button>
@@ -274,7 +273,6 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-[0.5rem]"
                       disabled={update.isPending}
                       onClick={() =>
                         update.mutate({

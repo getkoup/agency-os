@@ -139,7 +139,7 @@ export function DateRangeFilter({
               <Button
                 type="button"
                 variant="outline"
-                className="border-border/80 bg-background/70 hover:border-primary/25 h-10 w-full justify-start rounded-[0.5rem] px-3 shadow-xs transition-colors"
+                className="border-border/80 bg-background/70 hover:border-primary/25 w-full justify-start shadow-xs transition-colors"
                 aria-label={`Selected dates: ${rangeLabel({ from: parseDate(from), to: parseDate(to) })}`}
               >
                 <CalendarDays aria-hidden="true" />

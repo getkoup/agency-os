@@ -46,7 +46,7 @@ export function AccountAssignment({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="rounded-[0.5rem]">
+        <Button size="sm" variant="outline">
           {currentClientId ? "Reassign" : "Assign client"}
         </Button>
       </DialogTrigger>
@@ -74,7 +74,7 @@ export function AccountAssignment({
         <DialogFooter>
           <Button
             disabled={mutation.isPending}
-            className="h-11 sm:min-w-32"
+            size="lg"
             onClick={() =>
               mutation.mutate({
                 sourceAccountId,
