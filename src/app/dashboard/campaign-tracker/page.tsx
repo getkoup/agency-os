@@ -65,7 +65,7 @@ export default async function CampaignTrackerPage({
         title="Campaign Tracker"
         description="Daily CPL and lead movement for campaigns with activity in the four-day window."
         meta={
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-[0.35rem]">
             {result.rows.length} active campaign
             {result.rows.length === 1 ? "" : "s"}
           </Badge>

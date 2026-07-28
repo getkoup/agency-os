@@ -72,7 +72,7 @@ function ClassificationRuleDialog({
         <Button
           variant={row ? "ghost" : "default"}
           size={row ? "sm" : "default"}
-          className="rounded-full"
+          className="rounded-[0.5rem]"
         >
           {row ? "Edit" : "Create category"}
         </Button>
@@ -319,7 +319,7 @@ export function LeadClassificationManager({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full"
+                        className="rounded-[0.5rem]"
                         disabled={update.isPending}
                         onClick={() =>
                           update.mutate({

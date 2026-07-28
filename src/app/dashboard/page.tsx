@@ -111,7 +111,7 @@ export default async function DashboardPage({
         title="Agency Overview"
         description="Internal performance snapshot across the clients you can access."
         meta={
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-[0.35rem]">
             {search.from} through {search.to} · client-local dates
           </Badge>
         }

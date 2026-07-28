@@ -47,7 +47,7 @@ export default async function LoginPage() {
         </div>
 
         <div className="relative max-w-2xl py-16">
-          <div className="border-sidebar-border bg-sidebar-accent/45 mb-7 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium">
+          <div className="border-sidebar-border bg-sidebar-accent/45 mb-7 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium">
             <span className="bg-sidebar-primary size-1.5 rounded-full" />
             One workspace. Every client signal.
           </div>

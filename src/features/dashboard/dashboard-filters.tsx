@@ -115,7 +115,7 @@ export function DashboardFilters({
         </div>
         <Badge
           variant="outline"
-          className="border-primary/15 bg-background/75 text-foreground gap-1.5 rounded-full px-3 py-1 font-medium shadow-xs"
+          className="border-primary/15 bg-background/75 text-foreground gap-1.5 rounded-[0.35rem] px-3 py-1 font-medium shadow-xs"
         >
           <Clock3 className="text-primary size-3.5" aria-hidden="true" />
           {timezoneLabel}

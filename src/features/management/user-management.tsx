@@ -128,7 +128,7 @@ export function UserManagement({
           }}
         >
           <DialogTrigger asChild>
-            <Button className="h-11 rounded-full px-5">Create user</Button>
+            <Button className="h-11 rounded-[0.5rem] px-5">Create user</Button>
           </DialogTrigger>
           <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>

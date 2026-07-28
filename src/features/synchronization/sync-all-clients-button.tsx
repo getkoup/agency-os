@@ -49,7 +49,7 @@ export function SyncAllClientsButton({
     <>
       <Button
         type="button"
-        className="rounded-full shadow-sm"
+        className="rounded-[0.5rem] shadow-sm"
         disabled={running}
         onClick={() => {
           mutation.reset();

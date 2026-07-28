@@ -119,7 +119,7 @@ export function ClientManagement({
     <div className="flex flex-wrap gap-2">
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogTrigger asChild>
-          <Button className="h-11 rounded-full px-5">Create client</Button>
+          <Button className="h-11 rounded-[0.5rem] px-5">Create client</Button>
         </DialogTrigger>
         <DialogContent className={dialogClassName}>
           <DialogHeader>
@@ -199,7 +199,7 @@ export function ClientManagement({
         <DialogTrigger asChild>
           <Button
             variant="outline"
-            className="h-11 rounded-full px-5"
+            className="h-11 rounded-[0.5rem] px-5"
             disabled={!activeClients.length || !unassignedAccounts.length}
           >
             Assign accounts
@@ -291,7 +291,7 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="ghost" className="rounded-full">
+        <Button size="sm" variant="ghost" className="rounded-[0.5rem]">
           Edit
         </Button>
       </DialogTrigger>

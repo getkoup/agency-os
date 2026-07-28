@@ -39,7 +39,12 @@ export function Pagination({
         Page {page} of {pageCount}
       </p>
       <div className="flex gap-2">
-        <Button asChild variant="outline" size="sm" className="rounded-full">
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="rounded-[0.5rem]"
+        >
           <Link
             href={href(Math.max(1, page - 1))}
             aria-disabled={page <= 1}
@@ -49,7 +54,12 @@ export function Pagination({
             Previous
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm" className="rounded-full">
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="rounded-[0.5rem]"
+        >
           <Link
             href={href(Math.min(pageCount, page + 1))}
             aria-disabled={page >= pageCount}

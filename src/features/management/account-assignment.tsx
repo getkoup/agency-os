@@ -39,7 +39,7 @@ export function AccountAssignment({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="rounded-full">
+        <Button size="sm" variant="outline" className="rounded-[0.5rem]">
           {currentClientId ? "Reassign" : "Assign client"}
         </Button>
       </DialogTrigger>

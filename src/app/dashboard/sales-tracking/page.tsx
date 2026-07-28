@@ -89,7 +89,7 @@ export default async function SalesTrackingPage({
         title="Sales Tracking"
         description="Booking creation performance against each client's configured goal."
         meta={
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-[0.35rem]">
             {result.rows.length} active clients
           </Badge>
         }
