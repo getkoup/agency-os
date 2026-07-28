@@ -96,7 +96,7 @@ export function AppSidebar({
                           asChild
                           isActive={active}
                           tooltip={item.label}
-                          className="text-sidebar-foreground/68 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground relative h-11 rounded-[0.65rem] px-3 data-[active=true]:font-semibold data-[active=true]:shadow-sm"
+                          className="text-sidebar-foreground/68 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:text-sidebar-accent-foreground relative h-11 rounded-[0.65rem] px-3 data-[active=true]:bg-[linear-gradient(110deg,var(--sidebar-accent),color-mix(in_oklch,var(--sidebar-accent),white_5%))] data-[active=true]:font-semibold data-[active=true]:shadow-[inset_0_1px_0_color-mix(in_oklch,var(--sidebar-primary)_12%,transparent),0_5px_18px_rgba(0,0,0,0.12)]"
                         >
                           <Link href={item.href} prefetch={false}>
                             <item.icon className="size-[1.05rem]" />
@@ -120,7 +120,7 @@ export function AppSidebar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="hover:bg-sidebar-accent/60 focus-visible:ring-sidebar-ring flex w-full items-center gap-3 rounded-[0.65rem] p-2 text-left transition-colors group-data-[collapsible=icon]:justify-center focus-visible:ring-2 focus-visible:outline-none"
+              className="hover:bg-sidebar-accent/60 focus-visible:ring-sidebar-ring flex w-full items-center gap-3 rounded-[0.65rem] bg-white/[0.025] p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition-colors group-data-[collapsible=icon]:justify-center focus-visible:ring-2 focus-visible:outline-none"
               aria-label="Open account menu"
             >
               <span className="bg-sidebar-accent text-sidebar-accent-foreground grid size-9 shrink-0 place-items-center rounded-[0.6rem] text-xs font-semibold">

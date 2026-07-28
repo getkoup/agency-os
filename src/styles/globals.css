@@ -79,7 +79,7 @@
   --chart-4: oklch(0.72 0.12 78);
   --chart-5: oklch(0.56 0.09 187);
   --radius: 0.875rem;
-  --sidebar: #0d3021;
+  --sidebar: #061f15;
   --sidebar-foreground: #e1f0e2;
   --sidebar-primary: #a8dbae;
   --sidebar-primary-foreground: #143522;
@@ -193,5 +193,24 @@
 
   .section-label {
     @apply text-primary text-xs font-semibold tracking-[0.16em] uppercase;
+  }
+
+  .sidebar-gloss {
+    background:
+      radial-gradient(
+        circle at 12% -4%,
+        color-mix(in oklch, var(--sidebar-primary) 13%, transparent),
+        transparent 24rem
+      ),
+      linear-gradient(
+        115deg,
+        color-mix(in oklch, var(--sidebar) 96%, white) 0%,
+        var(--sidebar) 42%,
+        color-mix(in oklch, var(--sidebar) 96%, black) 100%
+      );
+    box-shadow:
+      inset -1px 0 0
+        color-mix(in oklch, var(--sidebar-primary) 10%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 4%);
   }
 }
