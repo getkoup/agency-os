@@ -248,7 +248,7 @@ export function LeadClassificationManager({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-border/70 bg-muted/20 flex flex-col gap-3 rounded-[0.75rem] border p-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="w-full space-y-1.5 sm:max-w-sm">
           <Label>Client</Label>
           <Select value={selectedClientId} onValueChange={updateClient}>
@@ -281,7 +281,7 @@ export function LeadClassificationManager({
           {error}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="border-border/70 overflow-x-auto rounded-[0.75rem] border">
         <Table className="min-w-[58rem]">
           <TableHeader>
             <TableRow>
@@ -357,7 +357,7 @@ export function LeadClassificationManager({
           No lead classification rules are configured for this view.
         </p>
       ) : null}
-      <div className="space-y-3">
+      <div className="border-border/70 space-y-3 border-t pt-6">
         <div>
           <h3 className="font-medium">Campaign preview</h3>
           <p className="text-muted-foreground text-sm">

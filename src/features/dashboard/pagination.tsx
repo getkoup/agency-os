@@ -34,7 +34,7 @@ export function Pagination({
   }
 
   return (
-    <div className="border-border/70 flex items-center justify-between gap-4 border-t px-5 pt-4">
+    <div className="border-border/70 flex items-center justify-between gap-4 border-t px-5 py-4">
       <p className="text-muted-foreground text-xs tabular-nums">
         Page {page} of {pageCount}
       </p>

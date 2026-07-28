@@ -173,6 +173,29 @@
   select {
     border-radius: 0.5rem !important;
   }
+
+  [data-slot="dialog-content"] [data-slot="input"],
+  [data-slot="dialog-content"] [data-slot="select-trigger"],
+  [data-slot="dialog-content"] select {
+    width: 100%;
+    height: 2.75rem !important;
+  }
+
+  [data-slot="dialog-content"] [data-slot="textarea"] {
+    width: 100%;
+    min-height: 6rem;
+  }
+
+  [data-slot="dialog-footer"] [data-slot="button"] {
+    min-width: 7rem;
+    height: 2.75rem;
+  }
+
+  @media (max-width: 639px) {
+    [data-slot="dialog-footer"] [data-slot="button"] {
+      width: 100%;
+    }
+  }
   html {
     @apply font-sans;
   }

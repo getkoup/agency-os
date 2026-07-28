@@ -195,7 +195,7 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-border/70 bg-muted/20 flex flex-col gap-3 rounded-[0.75rem] border p-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Client</Label>
@@ -240,7 +240,7 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
           {toggleError}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="border-border/70 overflow-x-auto rounded-[0.75rem] border">
         <Table className="min-w-[54rem]">
           <TableHeader>
             <TableRow>
