@@ -139,12 +139,17 @@ export const clients = createTable(
     slug: d.varchar({ length: 100 }).notNull(),
     name: d.varchar({ length: 255 }).notNull(),
     status: recordStatus().default("active").notNull(),
+    dailyBookingGoal: d.integer(),
     createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
   }),
   (t) => [
     uniqueIndex("client_slug_idx").on(t.slug),
     uniqueIndex("client_name_lower_idx").on(sql`lower(${t.name})`),
+    check(
+      "client_daily_booking_goal_positive",
+      sql`${t.dailyBookingGoal} is null or ${t.dailyBookingGoal} > 0`,
+    ),
   ],
 );
 

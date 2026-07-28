@@ -85,6 +85,13 @@
       "when": 1785265595469,
       "tag": "0011_nebulous_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785275098738,
+      "tag": "0012_woozy_karnak",
+      "breakpoints": true
     }
   ]
 }

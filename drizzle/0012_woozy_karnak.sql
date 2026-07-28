@@ -1,0 +1,2 @@
+ALTER TABLE "agency_os_client" ADD COLUMN "dailyBookingGoal" integer;--> statement-breakpoint
+ALTER TABLE "agency_os_client" ADD CONSTRAINT "client_daily_booking_goal_positive" CHECK ("agency_os_client"."dailyBookingGoal" is null or "agency_os_client"."dailyBookingGoal" > 0);
