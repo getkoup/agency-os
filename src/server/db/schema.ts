@@ -57,6 +57,14 @@ export const opportunityMatchMethod = pgEnum(
   "agency_os_opportunity_match_method",
   ["email", "phone", "email_phone"],
 );
+export const appointmentStatus = pgEnum("agency_os_appointment_status", [
+  "new",
+  "confirmed",
+  "showed",
+  "cancelled",
+  "noshow",
+  "invalid",
+]);
 
 export const users = createTable(
   "user",
@@ -491,6 +499,9 @@ export const ghlContacts = createTable(
     normalizedEmail: d.varchar({ length: 500 }),
     phoneNumber: d.varchar({ length: 100 }),
     normalizedPhone: d.varchar({ length: 100 }),
+    source: d.text(),
+    attributionSource: d.jsonb().$type<Record<string, unknown>>(),
+    lastAttributionSource: d.jsonb().$type<Record<string, unknown>>(),
     tags: d
       .text()
       .array()
@@ -563,6 +574,92 @@ export const ghlOpportunities = createTable(
     }).onDelete("cascade"),
   ],
 );
+export const ghlCalendars = createTable(
+  "ghl_calendar",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    integrationMappingId: d
+      .uuid()
+      .notNull()
+      .references(() => integrationMappings.id, { onDelete: "cascade" }),
+    externalId: d.varchar({ length: 255 }).notNull(),
+    name: d.varchar({ length: 500 }).notNull(),
+    isActive: d.boolean().default(true).notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("ghl_calendar_mapping_external_idx").on(
+      t.integrationMappingId,
+      t.externalId,
+    ),
+    unique("ghl_calendar_id_mapping_unique").on(t.id, t.integrationMappingId),
+  ],
+);
+
+export const ghlAppointments = createTable(
+  "ghl_appointment",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    integrationMappingId: d.uuid().notNull(),
+    calendarId: d.uuid().notNull(),
+    contactId: d.uuid().notNull(),
+    externalId: d.varchar({ length: 255 }).notNull(),
+    status: appointmentStatus().notNull(),
+    title: d.varchar({ length: 500 }),
+    startsAt: d.timestamp({ withTimezone: true }).notNull(),
+    endsAt: d.timestamp({ withTimezone: true }).notNull(),
+    providerCreatedAt: d.timestamp({ withTimezone: true }).notNull(),
+    providerUpdatedAt: d.timestamp({ withTimezone: true }).notNull(),
+    deleted: d.boolean().default(false).notNull(),
+    rawPayload: d.jsonb().$type<Record<string, unknown>>().notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("ghl_appointment_mapping_external_idx").on(
+      t.integrationMappingId,
+      t.externalId,
+    ),
+    index("ghl_appointment_mapping_start_idx").on(
+      t.integrationMappingId,
+      t.startsAt,
+    ),
+    foreignKey({
+      columns: [t.calendarId, t.integrationMappingId],
+      foreignColumns: [ghlCalendars.id, ghlCalendars.integrationMappingId],
+      name: "ghl_appointment_calendar_mapping_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.contactId, t.integrationMappingId],
+      foreignColumns: [ghlContacts.id, ghlContacts.integrationMappingId],
+      name: "ghl_appointment_contact_mapping_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const ghlAppointmentMatches = createTable(
+  "ghl_appointment_match",
+  (d) => ({
+    appointmentId: d
+      .uuid()
+      .primaryKey()
+      .references(() => ghlAppointments.id, { onDelete: "cascade" }),
+    leadId: d.uuid().references(() => leads.id, { onDelete: "restrict" }),
+    status: opportunityMatchStatus().notNull(),
+    method: opportunityMatchMethod(),
+    candidateCount: d.integer().notNull(),
+    matchedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    check(
+      "ghl_appointment_match_consistency",
+      sql`(${t.status} = 'matched' AND ${t.leadId} IS NOT NULL AND ${t.method} IS NOT NULL AND ${t.candidateCount} = 1) OR (${t.status} <> 'matched' AND ${t.leadId} IS NULL AND ${t.method} IS NULL)`,
+    ),
+    index("ghl_appointment_match_lead_idx").on(t.leadId),
+  ],
+);
+
 export const revenueRules = createTable(
   "revenue_rule",
   (d) => ({

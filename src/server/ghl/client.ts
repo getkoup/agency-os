@@ -73,7 +73,66 @@ const pageSchema = z.object({
     .default({}),
 });
 
+const calendarSchema = z
+  .object({
+    id: z.string().min(1),
+    locationId: z.string().min(1),
+    name: z.string().min(1),
+    isActive: z.boolean().default(true),
+  })
+  .strip();
+
+const calendarsSchema = z
+  .object({ calendars: z.array(calendarSchema) })
+  .strip();
+
+const appointmentStatusSchema = z.enum([
+  "new",
+  "confirmed",
+  "showed",
+  "cancelled",
+  "noshow",
+  "invalid",
+]);
+
+const calendarEventSchema = z
+  .object({
+    id: z.string().min(1),
+    locationId: z.string().min(1),
+    calendarId: z.string().min(1),
+    contactId: z.string().min(1),
+    appointmentStatus: appointmentStatusSchema,
+    startTime: z.string().datetime({ offset: true }),
+    endTime: z.string().datetime({ offset: true }),
+    dateAdded: z.string().datetime({ offset: true }),
+    dateUpdated: z.string().datetime({ offset: true }),
+    title: z.string().nullish(),
+    deleted: z.boolean().default(false),
+  })
+  .strip();
+
+const calendarEventsSchema = z
+  .object({ events: z.array(calendarEventSchema) })
+  .strip();
+
+const attributionSchema = z.record(z.string(), z.unknown()).nullish();
+
+const contactResponseSchema = z
+  .object({
+    contact: contactSchema.extend({
+      source: z.string().nullish(),
+      attributionSource: attributionSchema,
+      lastAttributionSource: attributionSchema,
+      dateAdded: z.string().datetime({ offset: true }),
+      dateUpdated: z.string().datetime({ offset: true }),
+    }),
+  })
+  .strip();
+
 export type GhlOpportunity = z.infer<typeof opportunitySchema>;
+export type GhlCalendar = z.infer<typeof calendarSchema>;
+export type GhlCalendarEvent = z.infer<typeof calendarEventSchema>;
+export type GhlContact = z.infer<typeof contactResponseSchema>["contact"];
 
 const MAX_REQUEST_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -161,6 +220,101 @@ export class GhlClient {
       throw new Error("GHL location identity mismatch");
     }
     return result.location.timezone;
+  }
+
+  async calendars(input: {
+    locationId: string;
+    token: string;
+  }): Promise<GhlCalendar[]> {
+    const url = new URL("/calendars/", this.baseUrl);
+    url.searchParams.set("locationId", input.locationId);
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "2021-04-15",
+          Accept: "application/json",
+        },
+      },
+      "GHL calendar request",
+    );
+    if (!response.ok) {
+      throw new Error(
+        `GHL calendar request failed with status ${response.status}`,
+      );
+    }
+    return calendarsSchema
+      .parse(await response.json())
+      .calendars.filter((calendar) => calendar.locationId === input.locationId);
+  }
+
+  async calendarEvents(input: {
+    locationId: string;
+    calendarId: string;
+    token: string;
+    start: Date;
+    end: Date;
+  }): Promise<GhlCalendarEvent[]> {
+    const url = new URL("/calendars/events", this.baseUrl);
+    url.searchParams.set("locationId", input.locationId);
+    url.searchParams.set("calendarId", input.calendarId);
+    url.searchParams.set("startTime", String(input.start.getTime()));
+    url.searchParams.set("endTime", String(input.end.getTime()));
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "2021-04-15",
+          Accept: "application/json",
+        },
+      },
+      "GHL calendar event request",
+    );
+    if (!response.ok) {
+      throw new Error(
+        `GHL calendar event request failed with status ${response.status}`,
+      );
+    }
+    return calendarEventsSchema
+      .parse(await response.json())
+      .events.filter(
+        (event) =>
+          event.locationId === input.locationId &&
+          event.calendarId === input.calendarId,
+      );
+  }
+
+  async contact(input: {
+    contactId: string;
+    token: string;
+  }): Promise<GhlContact> {
+    const url = new URL(
+      `/contacts/${encodeURIComponent(input.contactId)}`,
+      this.baseUrl,
+    );
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "2021-07-28",
+          Accept: "application/json",
+        },
+      },
+      "GHL contact request",
+    );
+    if (!response.ok) {
+      throw new Error(
+        `GHL contact request failed with status ${response.status}`,
+      );
+    }
+    const contact = contactResponseSchema.parse(await response.json()).contact;
+    if (contact.id !== input.contactId) {
+      throw new Error("GHL contact identity mismatch");
+    }
+    return contact;
   }
 
   async *wonOpportunities(input: {

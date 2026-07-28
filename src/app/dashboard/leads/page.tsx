@@ -92,7 +92,7 @@ export default async function LeadsPage({
           value={analytics.totalBookings.toLocaleString()}
           supporting={
             analytics.totalLeads === 0
-              ? "Won GHL opportunities"
+              ? "GHL calendar appointments"
               : `${(analytics.conversion * 100).toFixed(1)}% of total leads`
           }
           icon={CalendarCheck}
@@ -144,7 +144,7 @@ export default async function LeadsPage({
           </CardHeader>
           <CardContent className="overflow-x-auto px-0">
             {analytics.serviceCategories.length ? (
-              <Table className="min-w-[52rem]">
+              <Table className="min-w-[60rem]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="pl-6">Category</TableHead>
@@ -155,8 +155,9 @@ export default async function LeadsPage({
                     </TableHead>
                     <TableHead className="text-right">DM leads</TableHead>
                     <TableHead className="text-right">DM bookings</TableHead>
+                    <TableHead className="text-right">DM conversion</TableHead>
                     <TableHead className="pr-6 text-right">
-                      DM conversion
+                      Unknown bookings
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -183,10 +184,13 @@ export default async function LeadsPage({
                       <TableCell className="text-right tabular-nums">
                         {row.dmBookings}
                       </TableCell>
-                      <TableCell className="pr-6 text-right tabular-nums">
+                      <TableCell className="text-right tabular-nums">
                         {row.dmConversion === null
                           ? "—"
                           : `${(row.dmConversion * 100).toFixed(1)}%`}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {row.unknownBookings}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -197,6 +201,63 @@ export default async function LeadsPage({
                 icon={ListFilter}
                 title="No classified lead events"
                 description="No campaign-attributed form or DM lead events match this range."
+              />
+            )}
+          </CardContent>
+        </Card>
+        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5 2xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="tracking-tight">
+              Booking breakdown by calendar
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto px-0">
+            {analytics.bookingBreakdown.length ? (
+              <Table className="min-w-[52rem]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Calendar</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">New</TableHead>
+                    <TableHead className="text-right">Confirmed</TableHead>
+                    <TableHead className="text-right">Showed</TableHead>
+                    <TableHead className="text-right">Cancelled</TableHead>
+                    <TableHead className="pr-6 text-right">No-show</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analytics.bookingBreakdown.map((row) => (
+                    <TableRow key={row.calendar}>
+                      <TableCell className="pl-6 font-medium">
+                        {row.calendar}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.total}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.new}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.confirmed}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.showed}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.cancelled}
+                      </TableCell>
+                      <TableCell className="pr-6 text-right tabular-nums">
+                        {row.noshow}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                icon={CalendarCheck}
+                title="No calendar bookings"
+                description="No GHL calendar appointments match this range."
               />
             )}
           </CardContent>

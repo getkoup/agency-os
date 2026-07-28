@@ -284,8 +284,8 @@ export async function syncAllClients(
         status: "succeeded",
         integrationMappingId: summary.mappingId,
         contactRowCount: summary.contactRowCount,
-        opportunityRowCount: summary.opportunityRowCount,
-        matchedOpportunityCount: summary.matchedOpportunityCount,
+        opportunityRowCount: summary.appointmentRowCount,
+        matchedOpportunityCount: summary.matchedAppointmentCount,
       });
     } catch (error) {
       await finishTarget(target.id, {

@@ -10,10 +10,25 @@ describe("classifyBookingLeadType", () => {
     },
   );
 
+  it("uses GHL campaign attribution to distinguish form and DM bookings", () => {
+    expect(
+      classifyBookingLeadType(null, {
+        campaign: "Tint 299 lead form",
+        medium: "facebook",
+      }),
+    ).toBe("facebook_lead_form");
+    expect(
+      classifyBookingLeadType("Facebook", {
+        campaign: "Tint $299 DM",
+        medium: "instagram",
+      }),
+    ).toBe("dm");
+  });
+
   it.each([null, undefined, "", "Google", "Ceramic Coating"])(
-    "classifies %s as a DM booking",
+    "keeps %s as an unknown-channel booking",
     (source) => {
-      expect(classifyBookingLeadType(source)).toBe("dm");
+      expect(classifyBookingLeadType(source)).toBe("unknown");
     },
   );
 });

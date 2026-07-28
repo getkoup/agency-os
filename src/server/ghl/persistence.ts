@@ -48,7 +48,8 @@ function normalizeGhlTags(tags: readonly string[] | undefined): string[] {
 
 function normalizeGhlSource(source: string | null | undefined): string | null {
   const trimmed = source?.trim();
-  return trimmed ? trimmed : null;
+  if (!trimmed) return null;
+  return trimmed;
 }
 
 function safeRawOpportunity(row: GhlOpportunity): Record<string, unknown> {

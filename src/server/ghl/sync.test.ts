@@ -67,7 +67,9 @@ function clientReturning(rows: unknown[]) {
               timezone: "America/New_York",
             },
           })
-        : Response.json({ opportunities: rows, meta: {} }),
+        : url.pathname === "/calendars/"
+          ? Response.json({ calendars: [] })
+          : Response.json({ opportunities: rows, meta: {} }),
     );
   });
   return {
@@ -138,7 +140,7 @@ describe("syncGhlLocation", () => {
       token: "test-token",
       runStartedAt: firstStartedAt,
     });
-    expect(first.fetcher).toHaveBeenCalledTimes(2);
+    expect(first.fetcher).toHaveBeenCalledTimes(3);
     expect(firstSummary).toMatchObject({
       contactRowCount: 100,
       opportunityRowCount: 100,
@@ -223,13 +225,17 @@ describe("syncGhlLocation", () => {
           eq(ghlOpportunities.externalId, "new-win"),
         ),
       );
-    expect(storedOpportunity).toEqual({
-      contactTags: ["Qualified"],
-      opportunityTags: ["Premium", "Qualified"],
-      source: "Facebook",
-      rawPayload: expect.objectContaining({ source: "Facebook" }),
-      wonAt: new Date("2026-07-15T10:01:00.000Z"),
-    });
+    expect(storedOpportunity).toBeDefined();
+    expect(storedOpportunity?.contactTags).toEqual(["Qualified"]);
+    expect(storedOpportunity?.opportunityTags).toEqual([
+      "Premium",
+      "Qualified",
+    ]);
+    expect(storedOpportunity?.source).toBe("Facebook");
+    expect(storedOpportunity?.rawPayload).toMatchObject({ source: "Facebook" });
+    expect(storedOpportunity?.wonAt).toEqual(
+      new Date("2026-07-15T10:01:00.000Z"),
+    );
 
     const [mapping] = await db
       .select({

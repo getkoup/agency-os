@@ -73,6 +73,8 @@ try {
     values (${backfillClient.id}, 'ghl', 'backfill-location', now(), now())
   `;
   await applyMigration(test, "drizzle/0009_motionless_ben_parker.sql");
+  await applyMigration(test, "drizzle/0010_overconfident_apocalypse.sql");
+  await applyMigration(test, "drizzle/0011_nebulous_red_wolf.sql");
   const [backfillMapping] = await test`
     select "lastSuccessfulSyncAt"
     from "agency_os_integration_mapping"

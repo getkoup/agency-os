@@ -71,6 +71,20 @@
       "when": 1785188442065,
       "tag": "0009_motionless_ben_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785260626384,
+      "tag": "0010_overconfident_apocalypse",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785265595469,
+      "tag": "0011_nebulous_red_wolf",
+      "breakpoints": true
     }
   ]
 }

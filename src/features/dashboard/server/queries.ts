@@ -16,7 +16,10 @@ import {
   type SQL,
 } from "drizzle-orm";
 
-import { classifyBookingLeadType } from "~/features/dashboard/booking-source";
+import {
+  bookingServiceText,
+  classifyBookingLeadType,
+} from "~/features/dashboard/booking-source";
 import { db } from "~/server/db";
 import {
   adGroups,
@@ -24,6 +27,9 @@ import {
   ads,
   campaigns,
   clients,
+  ghlAppointmentMatches,
+  ghlAppointments,
+  ghlCalendars,
   ghlContacts,
   ghlOpportunities,
   ghlOpportunityMatches,
@@ -74,6 +80,7 @@ const sourceAccountTimezoneSql = sql<string>`coalesce((
 ), 'UTC')`;
 const leadLocalDateSql = sql<string>`timezone(${sourceAccountTimezoneSql}, ${leads.occurredAt})::date`;
 const opportunityLocalDateSql = sql<string>`timezone(${integrationMappings.timezone}, ${ghlOpportunities.wonAt})::date`;
+const appointmentLocalDateSql = sql<string>`timezone(${integrationMappings.timezone}, ${ghlAppointments.startsAt})::date`;
 const clientTimezoneSql = sql<string>`coalesce((
   select mapping."timezone"
   from ${integrationMappings} mapping
@@ -81,6 +88,22 @@ const clientTimezoneSql = sql<string>`coalesce((
     and mapping."provider" = 'ghl'
   limit 1
 ), 'UTC')`;
+
+function appointmentConditions(
+  filters: DashboardFilters,
+  scope: AccessibleScope,
+): Array<SQL | undefined> {
+  return [
+    opportunityScopeCondition(scope),
+    eq(ghlAppointments.deleted, false),
+    sql`${appointmentLocalDateSql} >= ${filters.from}::date`,
+    sql`${appointmentLocalDateSql} <= ${filters.to}::date`,
+    filters.platform
+      ? eq(sourceAccounts.platform, filters.platform)
+      : undefined,
+    filters.campaignId ? eq(campaigns.id, filters.campaignId) : undefined,
+  ];
+}
 
 function opportunityConditions(
   filters: DashboardFilters,
@@ -175,9 +198,8 @@ export async function getDashboardOverview(
     .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(and(...leadConditions(filters, scope)));
-  const [bookings] = await db
+  const [revenue] = await db
     .select({
-      count: count(),
       estimatedRevenue: sql<string>`coalesce(sum(${opportunityRevenueSql}), 0)::numeric(14,2)`,
       missingRuleCount: sql<number>`count(*) filter (where not ${opportunityHasRuleSql})::int`,
     })
@@ -194,6 +216,21 @@ export async function getDashboardOverview(
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(and(...opportunityConditions(filters, scope)));
+  const [bookings] = await db
+    .select({ count: count() })
+    .from(ghlAppointments)
+    .innerJoin(
+      integrationMappings,
+      eq(ghlAppointments.integrationMappingId, integrationMappings.id),
+    )
+    .leftJoin(
+      ghlAppointmentMatches,
+      eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
+    )
+    .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
+    .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+    .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+    .where(and(...appointmentConditions(filters, scope)));
   const [activeClients] = await db
     .select({ count: count() })
     .from(clients)
@@ -233,8 +270,8 @@ export async function getDashboardOverview(
     activeClientCount: activeClients?.count ?? 0,
     bookings: bookingCount,
     conversion: totalLeads === 0 ? 0 : bookingCount / totalLeads,
-    estimatedRevenue: bookings?.estimatedRevenue ?? "0.00",
-    missingRuleCount: bookings?.missingRuleCount ?? 0,
+    estimatedRevenue: revenue?.estimatedRevenue ?? "0.00",
+    missingRuleCount: revenue?.missingRuleCount ?? 0,
     linkClicks,
     cpl: totalLeads === 0 ? null : (Number(spend) / totalLeads).toFixed(2),
     cpc: linkClicks === 0 ? null : (Number(spend) / linkClicks).toFixed(2),
@@ -340,7 +377,7 @@ export async function getLeadRows(
       phoneNumber: leads.phoneNumber,
       booked: sql<boolean>`exists(
         select 1
-        from ${ghlOpportunityMatches} lead_match
+        from ${ghlAppointmentMatches} lead_match
         where lead_match."leadId" = ${leads.id}
           and lead_match."status" = 'matched'
       )`,
@@ -364,7 +401,7 @@ export async function getLeadAnalytics(
 ) {
   const leadWhere = and(...leadConditions(filters, scope));
   const performanceWhere = and(...performanceConditions(filters, scope));
-  const bookingWhere = and(...opportunityConditions(filters, scope));
+  const bookingWhere = and(...appointmentConditions(filters, scope));
   const [leadTotal] = await db
     .select({ count: count() })
     .from(leads)
@@ -384,16 +421,16 @@ export async function getLeadAnalytics(
     .where(performanceWhere);
   const [bookingTotal] = await db
     .select({ count: count() })
-    .from(ghlOpportunities)
+    .from(ghlAppointments)
     .innerJoin(
       integrationMappings,
-      eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+      eq(ghlAppointments.integrationMappingId, integrationMappings.id),
     )
     .leftJoin(
-      ghlOpportunityMatches,
-      eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+      ghlAppointmentMatches,
+      eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
     )
-    .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+    .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(bookingWhere);
@@ -422,23 +459,23 @@ export async function getLeadAnalytics(
     .groupBy(adPerformanceDaily.date);
   const bookingDays = await db
     .select({
-      date: sql<string>`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`,
       bookings: count(),
     })
-    .from(ghlOpportunities)
+    .from(ghlAppointments)
     .innerJoin(
       integrationMappings,
-      eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+      eq(ghlAppointments.integrationMappingId, integrationMappings.id),
     )
     .leftJoin(
-      ghlOpportunityMatches,
-      eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+      ghlAppointmentMatches,
+      eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
     )
-    .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+    .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(bookingWhere)
-    .groupBy(sql`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`);
+    .groupBy(sql`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`);
   const [formCampaignRows, dmCampaignRows, bookingCategoryRows] =
     await Promise.all([
       db
@@ -470,30 +507,101 @@ export async function getLeadAnalytics(
         .select({
           clientId: integrationMappings.clientId,
           campaignName: campaigns.name,
-          source: ghlOpportunities.source,
-          tags: ghlOpportunities.tags,
+          source: ghlContacts.source,
+          attributionSource: ghlContacts.attributionSource,
+          lastAttributionSource: ghlContacts.lastAttributionSource,
+          calendarName: ghlCalendars.name,
+          tags: ghlContacts.tags,
           bookings: count(),
         })
-        .from(ghlOpportunities)
+        .from(ghlAppointments)
         .innerJoin(
           integrationMappings,
-          eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+          eq(ghlAppointments.integrationMappingId, integrationMappings.id),
         )
+        .innerJoin(
+          ghlCalendars,
+          eq(ghlAppointments.calendarId, ghlCalendars.id),
+        )
+        .innerJoin(ghlContacts, eq(ghlAppointments.contactId, ghlContacts.id))
         .leftJoin(
-          ghlOpportunityMatches,
-          eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+          ghlAppointmentMatches,
+          eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
         )
-        .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+        .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
         .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
         .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
         .where(bookingWhere)
         .groupBy(
           integrationMappings.clientId,
           campaigns.name,
-          ghlOpportunities.source,
-          ghlOpportunities.tags,
+          ghlContacts.source,
+          ghlContacts.attributionSource,
+          ghlContacts.lastAttributionSource,
+          ghlCalendars.name,
+          ghlContacts.tags,
         ),
     ]);
+  const bookingBreakdownRows = await db
+    .select({
+      calendar: ghlCalendars.name,
+      status: ghlAppointments.status,
+      bookings: count(),
+    })
+    .from(ghlAppointments)
+    .innerJoin(
+      integrationMappings,
+      eq(ghlAppointments.integrationMappingId, integrationMappings.id),
+    )
+    .innerJoin(ghlCalendars, eq(ghlAppointments.calendarId, ghlCalendars.id))
+    .leftJoin(
+      ghlAppointmentMatches,
+      eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
+    )
+    .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
+    .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+    .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+    .where(bookingWhere)
+    .groupBy(ghlCalendars.name, ghlAppointments.status)
+    .orderBy(asc(ghlCalendars.name));
+  const bookingBreakdown = [
+    ...bookingBreakdownRows
+      .reduce(
+        (rows, row) => {
+          const current = rows.get(row.calendar) ?? {
+            calendar: row.calendar.trim(),
+            total: 0,
+            new: 0,
+            confirmed: 0,
+            showed: 0,
+            cancelled: 0,
+            noshow: 0,
+            invalid: 0,
+          };
+          current.total += row.bookings;
+          current[row.status] += row.bookings;
+          rows.set(row.calendar, current);
+          return rows;
+        },
+        new Map<
+          string,
+          {
+            calendar: string;
+            total: number;
+            new: number;
+            confirmed: number;
+            showed: number;
+            cancelled: number;
+            noshow: number;
+            invalid: number;
+          }
+        >(),
+      )
+      .values(),
+  ].sort(
+    (left, right) =>
+      right.total - left.total || left.calendar.localeCompare(right.calendar),
+  );
   const classificationClientIds = [
     ...new Set(
       [...formCampaignRows, ...dmCampaignRows, ...bookingCategoryRows].flatMap(
@@ -536,6 +644,7 @@ export async function getLeadAnalytics(
       facebookLeadFormBookings: number;
       dmLeads: number;
       dmBookings: number;
+      unknownBookings: number;
     }
   >();
   function getServiceCategory(
@@ -555,6 +664,7 @@ export async function getLeadAnalytics(
       facebookLeadFormBookings: 0,
       dmLeads: 0,
       dmBookings: 0,
+      unknownBookings: 0,
     };
     serviceCategoryMap.set(categoryKey, metric);
     return metric;
@@ -582,24 +692,33 @@ export async function getLeadAnalytics(
     addServiceLeads(row.clientId, row.campaignName, "dmLeads", row.leads);
   }
   for (const row of bookingCategoryRows) {
-    const fallbackClassificationText = [row.source, ...row.tags]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .join(" ");
     const categoryName = getServiceCategory(
       row.clientId,
-      row.campaignName?.trim() || fallbackClassificationText || null,
+      bookingServiceText({
+        campaignName: row.campaignName,
+        calendarName: row.calendarName,
+        contactTags: row.tags,
+      }),
     );
     const metric = getServiceCategoryMetric(categoryName);
-    if (classifyBookingLeadType(row.source) === "facebook_lead_form") {
+    const leadType = classifyBookingLeadType(
+      row.source,
+      row.attributionSource,
+      row.lastAttributionSource,
+    );
+    if (leadType === "facebook_lead_form") {
       metric.facebookLeadFormBookings += row.bookings;
-    } else {
+    } else if (leadType === "dm") {
       metric.dmBookings += row.bookings;
+    } else {
+      metric.unknownBookings += row.bookings;
     }
   }
   const serviceCategories = [...serviceCategoryMap.values()]
     .map((row) => {
       const totalLeads = row.facebookLeadFormLeads + row.dmLeads;
-      const totalBookings = row.facebookLeadFormBookings + row.dmBookings;
+      const totalBookings =
+        row.facebookLeadFormBookings + row.dmBookings + row.unknownBookings;
       return {
         ...row,
         totalLeads,
@@ -661,6 +780,7 @@ export async function getLeadAnalytics(
     conversion: totalLeads === 0 ? 0 : totalBookings / totalLeads,
     leadTypes,
     serviceCategories,
+    bookingBreakdown,
     daily,
   };
 }
@@ -836,23 +956,23 @@ export async function getTrend(
     .groupBy(sql`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`);
   const wonOpportunityRows = await db
     .select({
-      date: sql<string>`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`,
       wonOpportunities: count(),
     })
-    .from(ghlOpportunities)
+    .from(ghlAppointments)
     .innerJoin(
       integrationMappings,
-      eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+      eq(ghlAppointments.integrationMappingId, integrationMappings.id),
     )
     .leftJoin(
-      ghlOpportunityMatches,
-      eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+      ghlAppointmentMatches,
+      eq(ghlAppointments.id, ghlAppointmentMatches.appointmentId),
     )
-    .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+    .leftJoin(leads, eq(ghlAppointmentMatches.leadId, leads.id))
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
-    .where(and(...opportunityConditions(filters, scope)))
-    .groupBy(sql`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`);
+    .where(and(...appointmentConditions(filters, scope)))
+    .groupBy(sql`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`);
   const byDate = new Map(performanceRows.map((row) => [row.date, row]));
   const facebookLeadFormsByDate = new Map(
     capturedRows.map((row) => [row.date, row.facebookLeadFormLeads]),
@@ -1316,8 +1436,8 @@ export async function getClientAnalytics(input: {
       dmLeads: sql<number>`coalesce((select sum(p."messagingConversations")::int from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${input.from} and p."date" <= ${input.to}), 0)::int`,
       priorFacebookLeadFormLeads: sql<number>`(select count(*)::int from ${leads} l inner join ${sourceAccounts} sa on l."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and timezone(${outerClientTimezone}, l."occurredAt")::date >= ${priorFromDate}::date and timezone(${outerClientTimezone}, l."occurredAt")::date < ${input.from}::date)`,
       priorDmLeads: sql<number>`coalesce((select sum(p."messagingConversations")::int from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${priorFromDate} and p."date" < ${input.from}), 0)::int`,
-      bookings: sql<number>`(select count(*)::int from ${ghlOpportunities} o inner join ${integrationMappings} im on o."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and timezone(im."timezone", o."wonAt")::date >= ${input.from}::date and timezone(im."timezone", o."wonAt")::date <= ${input.to}::date)`,
-      priorBookings: sql<number>`(select count(*)::int from ${ghlOpportunities} o inner join ${integrationMappings} im on o."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and timezone(im."timezone", o."wonAt")::date >= ${priorFromDate}::date and timezone(im."timezone", o."wonAt")::date < ${input.from}::date)`,
+      bookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(im."timezone", a."startsAt")::date >= ${input.from}::date and timezone(im."timezone", a."startsAt")::date <= ${input.to}::date)`,
+      priorBookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(im."timezone", a."startsAt")::date >= ${priorFromDate}::date and timezone(im."timezone", a."startsAt")::date < ${input.from}::date)`,
       estimatedRevenue: sql<string>`coalesce((
         select sum(coalesce((
           select sum(rr."revenueValue")
@@ -1365,12 +1485,13 @@ export async function getClientAnalytics(input: {
       ), 0)::int`,
       bookings: sql<number>`coalesce(sum((
         select count(*)
-        from ${ghlOpportunities} benchmark_opportunity
+        from ${ghlAppointments} benchmark_appointment
         inner join ${integrationMappings} benchmark_mapping
-          on benchmark_opportunity."integrationMappingId" = benchmark_mapping."id"
+          on benchmark_appointment."integrationMappingId" = benchmark_mapping."id"
         where benchmark_mapping."clientId" = ${outerClientId}
-          and timezone(benchmark_mapping."timezone", benchmark_opportunity."wonAt")::date >= ${input.from}::date
-          and timezone(benchmark_mapping."timezone", benchmark_opportunity."wonAt")::date <= ${input.to}::date
+          and not benchmark_appointment."deleted"
+          and timezone(benchmark_mapping."timezone", benchmark_appointment."startsAt")::date >= ${input.from}::date
+          and timezone(benchmark_mapping."timezone", benchmark_appointment."startsAt")::date <= ${input.to}::date
       )), 0)::int`,
     })
     .from(clients)
