@@ -12,6 +12,7 @@ const opportunity = {
   pipelineStageId: "stage-won",
   monetaryValue: 500,
   currency: "USD",
+  source: "Facebook",
   createdAt: "2026-07-15T08:55:00.000Z",
   lastStatusChangeAt: "2026-07-15T09:00:00.000Z",
   updatedAt: "2026-07-15T09:01:00.000Z",
@@ -177,6 +178,7 @@ describe("GhlClient", () => {
     const rows = await collect(
       new GhlClient(new URL("https://services.leadconnectorhq.com"), fetcher),
     );
+    expect(rows[0]?.source).toBe("Facebook");
     expect(rows[0]?.tags).toEqual(["Premium", " Qualified "]);
     expect(rows[0]?.contact.tags).toEqual(["Customer"]);
   });

@@ -23,6 +23,7 @@ function opportunity(input: {
   createdAt?: string;
   tags?: string[];
   contactTags?: string[];
+  source?: string;
 }) {
   return {
     id: input.id,
@@ -34,6 +35,7 @@ function opportunity(input: {
     pipelineStageId: "won-stage",
     monetaryValue: 450,
     currency: "USD",
+    source: input.source,
     tags: input.tags,
     createdAt: input.createdAt ?? input.wonAt,
     lastStatusChangeAt: input.wonAt,
@@ -151,6 +153,7 @@ describe("syncGhlLocation", () => {
         wonAt: "2026-07-15T10:05:00.000Z",
         tags: [" Premium ", "premium", ""],
         contactTags: ["Qualified", " qualified "],
+        source: " Facebook ",
       }),
       opportunity({ id: "historical-win", wonAt: "2026-07-15T09:00:00.000Z" }),
     ]);
@@ -204,6 +207,8 @@ describe("syncGhlLocation", () => {
       .select({
         contactTags: ghlContacts.tags,
         opportunityTags: ghlOpportunities.tags,
+        source: ghlOpportunities.source,
+        rawPayload: ghlOpportunities.rawPayload,
         wonAt: ghlOpportunities.wonAt,
       })
       .from(ghlOpportunities)
@@ -221,6 +226,8 @@ describe("syncGhlLocation", () => {
     expect(storedOpportunity).toEqual({
       contactTags: ["Qualified"],
       opportunityTags: ["Premium", "Qualified"],
+      source: "Facebook",
+      rawPayload: expect.objectContaining({ source: "Facebook" }),
       wonAt: new Date("2026-07-15T10:01:00.000Z"),
     });
 

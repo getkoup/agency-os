@@ -16,6 +16,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { classifyBookingLeadType } from "~/features/dashboard/booking-source";
 import { db } from "~/server/db";
 import {
   adGroups,
@@ -438,37 +439,65 @@ export async function getLeadAnalytics(
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(bookingWhere)
     .groupBy(sql`to_char(${opportunityLocalDateSql}, 'YYYY-MM-DD')`);
-  const [formCampaignRows, dmCampaignRows] = await Promise.all([
-    db
-      .select({
-        clientId: sourceAccounts.clientId,
-        campaignName: campaigns.name,
-        leads: count(),
-      })
-      .from(leads)
-      .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
-      .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
-      .where(leadWhere)
-      .groupBy(sourceAccounts.clientId, campaigns.name),
-    db
-      .select({
-        clientId: sourceAccounts.clientId,
-        campaignName: campaigns.name,
-        leads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
-      })
-      .from(adPerformanceDaily)
-      .innerJoin(
-        sourceAccounts,
-        eq(adPerformanceDaily.sourceAccountId, sourceAccounts.id),
-      )
-      .innerJoin(campaigns, eq(adPerformanceDaily.campaignId, campaigns.id))
-      .where(performanceWhere)
-      .groupBy(sourceAccounts.clientId, campaigns.name),
-  ]);
+  const [formCampaignRows, dmCampaignRows, bookingCategoryRows] =
+    await Promise.all([
+      db
+        .select({
+          clientId: sourceAccounts.clientId,
+          campaignName: campaigns.name,
+          leads: count(),
+        })
+        .from(leads)
+        .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+        .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+        .where(leadWhere)
+        .groupBy(sourceAccounts.clientId, campaigns.name),
+      db
+        .select({
+          clientId: sourceAccounts.clientId,
+          campaignName: campaigns.name,
+          leads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
+        })
+        .from(adPerformanceDaily)
+        .innerJoin(
+          sourceAccounts,
+          eq(adPerformanceDaily.sourceAccountId, sourceAccounts.id),
+        )
+        .innerJoin(campaigns, eq(adPerformanceDaily.campaignId, campaigns.id))
+        .where(performanceWhere)
+        .groupBy(sourceAccounts.clientId, campaigns.name),
+      db
+        .select({
+          clientId: integrationMappings.clientId,
+          campaignName: campaigns.name,
+          source: ghlOpportunities.source,
+          tags: ghlOpportunities.tags,
+          bookings: count(),
+        })
+        .from(ghlOpportunities)
+        .innerJoin(
+          integrationMappings,
+          eq(ghlOpportunities.integrationMappingId, integrationMappings.id),
+        )
+        .leftJoin(
+          ghlOpportunityMatches,
+          eq(ghlOpportunities.id, ghlOpportunityMatches.opportunityId),
+        )
+        .leftJoin(leads, eq(ghlOpportunityMatches.leadId, leads.id))
+        .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+        .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
+        .where(bookingWhere)
+        .groupBy(
+          integrationMappings.clientId,
+          campaigns.name,
+          ghlOpportunities.source,
+          ghlOpportunities.tags,
+        ),
+    ]);
   const classificationClientIds = [
     ...new Set(
-      [...formCampaignRows, ...dmCampaignRows].flatMap(({ clientId }) =>
-        clientId ? [clientId] : [],
+      [...formCampaignRows, ...dmCampaignRows, ...bookingCategoryRows].flatMap(
+        ({ clientId }) => (clientId ? [clientId] : []),
       ),
     ),
   ];
@@ -504,27 +533,42 @@ export async function getLeadAnalytics(
     {
       categoryName: string;
       facebookLeadFormLeads: number;
+      facebookLeadFormBookings: number;
       dmLeads: number;
+      dmBookings: number;
     }
   >();
+  function getServiceCategory(
+    clientId: string | null,
+    classificationText: string | null,
+  ) {
+    return classifyCampaign(
+      classificationText,
+      clientId ? (classificationRulesByClient.get(clientId) ?? []) : [],
+    );
+  }
+  function getServiceCategoryMetric(categoryName: string) {
+    const categoryKey = categoryName.toLowerCase();
+    const metric = serviceCategoryMap.get(categoryKey) ?? {
+      categoryName,
+      facebookLeadFormLeads: 0,
+      facebookLeadFormBookings: 0,
+      dmLeads: 0,
+      dmBookings: 0,
+    };
+    serviceCategoryMap.set(categoryKey, metric);
+    return metric;
+  }
   function addServiceLeads(
     clientId: string | null,
     campaignName: string | null,
     type: "facebookLeadFormLeads" | "dmLeads",
     leadCount: number,
   ) {
-    const categoryName = classifyCampaign(
-      campaignName,
-      clientId ? (classificationRulesByClient.get(clientId) ?? []) : [],
+    const metric = getServiceCategoryMetric(
+      getServiceCategory(clientId, campaignName),
     );
-    const categoryKey = categoryName.toLowerCase();
-    const current = serviceCategoryMap.get(categoryKey) ?? {
-      categoryName,
-      facebookLeadFormLeads: 0,
-      dmLeads: 0,
-    };
-    current[type] += leadCount;
-    serviceCategoryMap.set(categoryKey, current);
+    metric[type] += leadCount;
   }
   for (const row of formCampaignRows) {
     addServiceLeads(
@@ -537,14 +581,41 @@ export async function getLeadAnalytics(
   for (const row of dmCampaignRows) {
     addServiceLeads(row.clientId, row.campaignName, "dmLeads", row.leads);
   }
+  for (const row of bookingCategoryRows) {
+    const fallbackClassificationText = [row.source, ...row.tags]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .join(" ");
+    const categoryName = getServiceCategory(
+      row.clientId,
+      row.campaignName?.trim() || fallbackClassificationText || null,
+    );
+    const metric = getServiceCategoryMetric(categoryName);
+    if (classifyBookingLeadType(row.source) === "facebook_lead_form") {
+      metric.facebookLeadFormBookings += row.bookings;
+    } else {
+      metric.dmBookings += row.bookings;
+    }
+  }
   const serviceCategories = [...serviceCategoryMap.values()]
-    .map((row) => ({
-      ...row,
-      totalLeads: row.facebookLeadFormLeads + row.dmLeads,
-    }))
+    .map((row) => {
+      const totalLeads = row.facebookLeadFormLeads + row.dmLeads;
+      const totalBookings = row.facebookLeadFormBookings + row.dmBookings;
+      return {
+        ...row,
+        totalLeads,
+        totalBookings,
+        facebookLeadFormConversion:
+          row.facebookLeadFormLeads === 0
+            ? null
+            : row.facebookLeadFormBookings / row.facebookLeadFormLeads,
+        dmConversion: row.dmLeads === 0 ? null : row.dmBookings / row.dmLeads,
+        conversion: totalLeads === 0 ? null : totalBookings / totalLeads,
+      };
+    })
     .sort(
       (left, right) =>
         right.totalLeads - left.totalLeads ||
+        right.totalBookings - left.totalBookings ||
         left.categoryName.localeCompare(right.categoryName),
     );
 

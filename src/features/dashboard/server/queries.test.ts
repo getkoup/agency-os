@@ -17,6 +17,9 @@ import {
   ads,
   campaigns,
   clients,
+  ghlContacts,
+  ghlOpportunities,
+  ghlOpportunityMatches,
   integrationMappings,
   leadClassificationRules,
   leads,
@@ -30,6 +33,7 @@ let clientId = "";
 
 describe("dashboard queries", () => {
   beforeAll(async () => {
+    await db.delete(clients).where(eq(clients.slug, slug));
     await db
       .delete(sourceAccounts)
       .where(
@@ -38,7 +42,6 @@ describe("dashboard queries", () => {
           performanceConnectorAccountId,
         ]),
       );
-    await db.delete(clients).where(eq(clients.slug, slug));
     const [client] = await db
       .insert(clients)
       .values({ slug, name: "Client Analytics Query Test" })
@@ -82,13 +85,17 @@ describe("dashboard queries", () => {
     if (!leadSource || !performanceSource) {
       throw new Error("Could not create analytics test sources");
     }
-    await db.insert(integrationMappings).values({
-      clientId,
-      provider: "ghl",
-      externalLocationId: `${slug}-location`,
-      timezone: "America/New_York",
-      syncFromAt: new Date("2026-07-01T00:00:00.000Z"),
-    });
+    const [mapping] = await db
+      .insert(integrationMappings)
+      .values({
+        clientId,
+        provider: "ghl",
+        externalLocationId: `${slug}-location`,
+        timezone: "America/New_York",
+        syncFromAt: new Date("2026-07-01T00:00:00.000Z"),
+      })
+      .returning({ id: integrationMappings.id });
+    if (!mapping) throw new Error("Could not create analytics test mapping");
     const [campaign] = await db
       .insert(campaigns)
       .values({
@@ -116,15 +123,95 @@ describe("dashboard queries", () => {
       })
       .returning({ id: ads.id });
     if (!ad) throw new Error("Could not create analytics test ad");
-    await db.insert(leads).values({
-      sourceAccountId: leadSource.id,
-      externalId: `${slug}-lead`,
-      campaignId: campaign.id,
-      adGroupId: adGroup.id,
-      adId: ad.id,
-      occurredAt: new Date("2026-07-07T03:30:00.000Z"),
-      rawPayload: {},
-    });
+    const [lead] = await db
+      .insert(leads)
+      .values({
+        sourceAccountId: leadSource.id,
+        externalId: `${slug}-lead`,
+        campaignId: campaign.id,
+        adGroupId: adGroup.id,
+        adId: ad.id,
+        occurredAt: new Date("2026-07-07T03:30:00.000Z"),
+        rawPayload: {},
+      })
+      .returning({ id: leads.id });
+    if (!lead) throw new Error("Could not create analytics test lead");
+    const storedContacts = await db
+      .insert(ghlContacts)
+      .values([
+        {
+          integrationMappingId: mapping.id,
+          externalId: `${slug}-form-contact`,
+          providerUpdatedAt: new Date("2026-07-06T16:00:00.000Z"),
+          rawPayload: {},
+        },
+        {
+          integrationMappingId: mapping.id,
+          externalId: `${slug}-dm-contact`,
+          providerUpdatedAt: new Date("2026-07-06T17:00:00.000Z"),
+          rawPayload: {},
+        },
+      ])
+      .returning({ id: ghlContacts.id, externalId: ghlContacts.externalId });
+    const formContact = storedContacts.find(({ externalId }) =>
+      externalId.endsWith("-form-contact"),
+    );
+    const dmContact = storedContacts.find(({ externalId }) =>
+      externalId.endsWith("-dm-contact"),
+    );
+    if (!formContact || !dmContact) {
+      throw new Error("Could not create analytics test contacts");
+    }
+    const storedOpportunities = await db
+      .insert(ghlOpportunities)
+      .values([
+        {
+          integrationMappingId: mapping.id,
+          contactId: formContact.id,
+          externalId: `${slug}-form-booking`,
+          status: "won",
+          source: "Facebook",
+          tags: ["tint"],
+          wonAt: new Date("2026-07-06T16:00:00.000Z"),
+          providerUpdatedAt: new Date("2026-07-06T16:00:00.000Z"),
+          rawPayload: { source: "Facebook" },
+        },
+        {
+          integrationMappingId: mapping.id,
+          contactId: dmContact.id,
+          externalId: `${slug}-dm-booking`,
+          status: "won",
+          source: null,
+          tags: ["tint"],
+          wonAt: new Date("2026-07-06T17:00:00.000Z"),
+          providerUpdatedAt: new Date("2026-07-06T17:00:00.000Z"),
+          rawPayload: { source: null },
+        },
+      ])
+      .returning({ id: ghlOpportunities.id, source: ghlOpportunities.source });
+    const formOpportunity = storedOpportunities.find(
+      ({ source }) => source === "Facebook",
+    );
+    const dmOpportunity = storedOpportunities.find(
+      ({ source }) => source === null,
+    );
+    if (!formOpportunity || !dmOpportunity) {
+      throw new Error("Could not create analytics test opportunities");
+    }
+    await db.insert(ghlOpportunityMatches).values([
+      {
+        opportunityId: formOpportunity.id,
+        leadId: lead.id,
+        status: "matched",
+        method: "email",
+        candidateCount: 1,
+      },
+      {
+        opportunityId: dmOpportunity.id,
+        status: "unmatched",
+        candidateCount: 0,
+      },
+    ]);
     await db.insert(leadClassificationRules).values([
       {
         clientId,
@@ -155,6 +242,7 @@ describe("dashboard queries", () => {
   });
 
   afterAll(async () => {
+    await db.delete(clients).where(eq(clients.id, clientId));
     await db
       .delete(sourceAccounts)
       .where(
@@ -163,7 +251,6 @@ describe("dashboard queries", () => {
           performanceConnectorAccountId,
         ]),
       );
-    await db.delete(clients).where(eq(clients.id, clientId));
   });
 
   it("resolves an inclusive three-day monitoring range", () => {
@@ -188,7 +275,7 @@ describe("dashboard queries", () => {
         facebookLeadFormLeads: 1,
         dmLeads: 2,
         totalLeads: 3,
-        bookings: 0,
+        bookings: 2,
         estimatedRevenue: "0.00",
       }),
     ]);
@@ -233,11 +320,15 @@ describe("dashboard queries", () => {
       facebookLeadFormLeads: 1,
       dmLeads: 2,
       totalLeads: 3,
+      bookings: 2,
+      conversion: 2 / 3,
     });
     expect(leadAnalytics).toMatchObject({
       facebookLeadFormLeads: 1,
       dmLeads: 2,
       totalLeads: 3,
+      totalBookings: 2,
+      conversion: 2 / 3,
       leadTypes: [
         { type: "Facebook Lead Forms", leads: 1 },
         { type: "DM Conversations", leads: 2 },
@@ -246,8 +337,14 @@ describe("dashboard queries", () => {
         {
           categoryName: "Tint",
           facebookLeadFormLeads: 1,
+          facebookLeadFormBookings: 1,
+          facebookLeadFormConversion: 1,
           dmLeads: 2,
+          dmBookings: 1,
+          dmConversion: 0.5,
           totalLeads: 3,
+          totalBookings: 2,
+          conversion: 2 / 3,
         },
       ],
     });
@@ -257,8 +354,8 @@ describe("dashboard queries", () => {
         facebookLeadFormLeads: 1,
         dmLeads: 2,
         totalLeads: 3,
-        bookings: 0,
-        conversion: 0,
+        bookings: 2,
+        conversion: 2 / 3,
       },
     ]);
     expect(trend).toEqual([
@@ -268,7 +365,7 @@ describe("dashboard queries", () => {
         facebookLeadFormLeads: 1,
         dmLeads: 2,
         totalLeads: 3,
-        wonOpportunities: 0,
+        wonOpportunities: 2,
       },
     ]);
     expect(performance.rows).toEqual([

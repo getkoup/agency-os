@@ -531,6 +531,7 @@ export const ghlOpportunities = createTable(
     pipelineStageId: d.varchar({ length: 255 }),
     monetaryValue: d.numeric({ precision: 14, scale: 2 }),
     currency: d.varchar({ length: 10 }),
+    source: d.text(),
     tags: d
       .text()
       .array()

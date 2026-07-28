@@ -98,7 +98,7 @@ export default async function LeadsPage({
           icon={CalendarCheck}
         />
       </section>
-      <section className="grid gap-6 2xl:grid-cols-2">
+      <section className="grid gap-6 2xl:grid-cols-[minmax(24rem,1fr)_minmax(52rem,2fr)]">
         <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
           <CardHeader>
             <CardTitle className="tracking-tight">
@@ -144,14 +144,20 @@ export default async function LeadsPage({
           </CardHeader>
           <CardContent className="overflow-x-auto px-0">
             {analytics.serviceCategories.length ? (
-              <Table>
+              <Table className="min-w-[52rem]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="pl-6">Category</TableHead>
-                    <TableHead className="text-right">Forms</TableHead>
-                    <TableHead className="text-right">DM</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="pr-6 text-right">Share</TableHead>
+                    <TableHead className="text-right">Form leads</TableHead>
+                    <TableHead className="text-right">Form bookings</TableHead>
+                    <TableHead className="text-right">
+                      Form conversion
+                    </TableHead>
+                    <TableHead className="text-right">DM leads</TableHead>
+                    <TableHead className="text-right">DM bookings</TableHead>
+                    <TableHead className="pr-6 text-right">
+                      DM conversion
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -164,15 +170,23 @@ export default async function LeadsPage({
                         {row.facebookLeadFormLeads}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
+                        {row.facebookLeadFormBookings}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.facebookLeadFormConversion === null
+                          ? "—"
+                          : `${(row.facebookLeadFormConversion * 100).toFixed(1)}%`}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
                         {row.dmLeads}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {row.totalLeads}
+                        {row.dmBookings}
                       </TableCell>
                       <TableCell className="pr-6 text-right tabular-nums">
-                        {analytics.totalLeads === 0
+                        {row.dmConversion === null
                           ? "—"
-                          : `${((row.totalLeads / analytics.totalLeads) * 100).toFixed(1)}%`}
+                          : `${(row.dmConversion * 100).toFixed(1)}%`}
                       </TableCell>
                     </TableRow>
                   ))}

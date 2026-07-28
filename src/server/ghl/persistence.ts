@@ -21,6 +21,7 @@ type PreparedOpportunity = {
   row: GhlOpportunity;
   contactTags: string[];
   opportunityTags: string[];
+  source: string | null;
   email: string | null;
   phone: string | null;
   wonAt: Date;
@@ -45,6 +46,11 @@ function normalizeGhlTags(tags: readonly string[] | undefined): string[] {
   return [...normalized.values()];
 }
 
+function normalizeGhlSource(source: string | null | undefined): string | null {
+  const trimmed = source?.trim();
+  return trimmed ? trimmed : null;
+}
+
 function safeRawOpportunity(row: GhlOpportunity): Record<string, unknown> {
   return {
     id: row.id,
@@ -56,6 +62,7 @@ function safeRawOpportunity(row: GhlOpportunity): Record<string, unknown> {
     pipelineStageId: row.pipelineStageId ?? null,
     monetaryValue: row.monetaryValue ?? null,
     currency: row.currency ?? null,
+    source: normalizeGhlSource(row.source),
     tags: row.tags ?? [],
     lastStatusChangeAt: row.lastStatusChangeAt,
     updatedAt: row.updatedAt,
@@ -109,6 +116,7 @@ export async function upsertGhlOpportunityPage(input: {
       row,
       contactTags,
       opportunityTags: normalizeGhlTags([...(row.tags ?? []), ...contactTags]),
+      source: normalizeGhlSource(row.source),
       email: normalizeEmail(row.contact.email ?? undefined),
       phone: normalizePhone(row.contact.phone ?? undefined),
       wonAt: new Date(row.createdAt),
@@ -179,6 +187,7 @@ export async function upsertGhlOpportunityPage(input: {
           ? null
           : value.row.monetaryValue.toFixed(2),
       currency: value.row.currency ?? null,
+      source: value.source,
       tags: value.opportunityTags,
       wonAt: value.wonAt,
       providerUpdatedAt: value.providerUpdatedAt,
@@ -199,6 +208,7 @@ export async function upsertGhlOpportunityPage(input: {
           pipelineStageId: sql`excluded."pipelineStageId"`,
           monetaryValue: sql`excluded."monetaryValue"`,
           currency: sql`excluded."currency"`,
+          source: sql`excluded."source"`,
           tags: sql`excluded."tags"`,
           wonAt: sql`excluded."wonAt"`,
           providerUpdatedAt: sql`excluded."providerUpdatedAt"`,

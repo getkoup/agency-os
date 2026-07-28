@@ -23,6 +23,7 @@ const opportunitySchema = z
     pipelineStageId: z.string().nullish(),
     monetaryValue: z.number().finite().nullish(),
     currency: z.string().max(10).nullish(),
+    source: z.string().max(2_000).nullish(),
     tags: z.array(z.string()).optional(),
     createdAt: z.string().datetime({ offset: true }),
     lastStatusChangeAt: z.string().datetime({ offset: true }),

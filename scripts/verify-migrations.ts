@@ -63,6 +63,24 @@ try {
     test,
     "drizzle/0008_encrypted_ghl_client_configuration.sql",
   );
+  const [backfillClient] =
+    await test`select "id" from "agency_os_client" where "slug" = 'tint-lab'`;
+  if (!backfillClient) throw new Error("Backfill migration client is missing");
+  await test`
+    insert into "agency_os_integration_mapping"
+      ("clientId", "provider", "externalLocationId", "syncFromAt",
+       "lastSuccessfulSyncAt")
+    values (${backfillClient.id}, 'ghl', 'backfill-location', now(), now())
+  `;
+  await applyMigration(test, "drizzle/0009_motionless_ben_parker.sql");
+  const [backfillMapping] = await test`
+    select "lastSuccessfulSyncAt"
+    from "agency_os_integration_mapping"
+    where "externalLocationId" = 'backfill-location'
+  `;
+  if (!backfillMapping || backfillMapping.lastSuccessfulSyncAt !== null) {
+    throw new Error("GHL source migration did not request a full backfill");
+  }
   const seededClassificationRules = await test`
     select "categoryName", "keywords", "matchMode", "priority"
     from "agency_os_lead_classification_rule"
@@ -166,14 +184,17 @@ try {
   }
   const [opportunity] = await test`
     insert into "agency_os_ghl_opportunity"
-      ("integrationMappingId", "contactId", "externalId", "status", "wonAt",
-       "providerUpdatedAt", "rawPayload")
-    values (${mapping.id}, ${contact.id}, 'migration-opportunity', 'won', now(),
-      now(), '{}')
-    returning "tags"
+      ("integrationMappingId", "contactId", "externalId", "status", "source",
+       "wonAt", "providerUpdatedAt", "rawPayload")
+    values (${mapping.id}, ${contact.id}, 'migration-opportunity', 'won',
+      'Facebook', now(), now(), '{}')
+    returning "source", "tags"
   `;
   if (!opportunity || opportunity.tags.length !== 0) {
     throw new Error("GHL opportunity tags do not default to an empty array");
+  }
+  if (opportunity.source !== "Facebook") {
+    throw new Error("GHL opportunity source was not stored");
   }
   await test`
     insert into "agency_os_revenue_rule"
