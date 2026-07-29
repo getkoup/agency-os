@@ -29,43 +29,34 @@ export function CampaignTrackerDateFilter({ date }: { date: string }) {
   }
 
   return (
-    <div className="border-border bg-card flex flex-wrap items-end justify-between gap-4 rounded-xl border p-4">
-      <div>
-        <p className="font-medium">Daily campaign view</p>
-        <p className="text-muted-foreground text-sm">
-          Showing four reporting dates ending on the selected date.
-        </p>
-      </div>
-      <div className="w-full space-y-2 sm:w-56">
-        <Label>Latest date</Label>
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full justify-start font-normal"
-              aria-label={`Latest date: ${format(selectedDate, "MMMM d, yyyy")}`}
-            >
-              <CalendarDays aria-hidden="true" />
-              <span>{format(selectedDate, "MMM d, yyyy")}</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto overflow-hidden p-0">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              defaultMonth={selectedDate}
-              onSelect={(nextDate) => {
-                if (!nextDate) return;
-                updateDate(format(nextDate, "yyyy-MM-dd"));
-                setCalendarOpen(false);
-              }}
-              autoFocus
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
+    <div className="w-full space-y-1.5 sm:w-52">
+      <Label>Latest date</Label>
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-start font-normal"
+            aria-label={`Latest date: ${format(selectedDate, "MMMM d, yyyy")}`}
+          >
+            <CalendarDays aria-hidden="true" />
+            <span>{format(selectedDate, "MMM d, yyyy")}</span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-auto overflow-hidden p-0">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            defaultMonth={selectedDate}
+            onSelect={(nextDate) => {
+              if (!nextDate) return;
+              updateDate(format(nextDate, "yyyy-MM-dd"));
+              setCalendarOpen(false);
+            }}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
