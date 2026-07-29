@@ -32,6 +32,7 @@ interface DashboardFiltersProps {
     campaigns: Array<{ id: string; name: string }>;
   };
   resetPageKeys?: string[];
+  defaultDatePreset?: DatePreset;
   showClient?: boolean;
   showPlatform?: boolean;
   showCampaign?: boolean;
@@ -41,6 +42,7 @@ export function DashboardFilters({
   values,
   options,
   resetPageKeys = [],
+  defaultDatePreset = "last7",
   showClient = true,
   showPlatform = true,
   showCampaign = true,
@@ -70,7 +72,7 @@ export function DashboardFilters({
     controlCount === 4 ? "xl:col-span-2" : standardColumnClass;
   const datePreset = (searchParams.get("range") ??
     (!searchParams.has("from") && !searchParams.has("to")
-      ? "last7"
+      ? defaultDatePreset
       : "custom")) as DatePreset;
   const selectedClient = options.clients.find(
     (client) => client.id === values.clientId,
@@ -115,7 +117,7 @@ export function DashboardFilters({
         </div>
         <Badge
           variant="outline"
-          className="border-primary/15 bg-background/75 text-foreground gap-1.5 rounded-full px-3 py-1 font-medium shadow-xs"
+          className="border-primary/15 bg-background/75 text-foreground gap-1.5 rounded-[0.35rem] px-3 py-1 font-medium shadow-xs"
         >
           <Clock3 className="text-primary size-3.5" aria-hidden="true" />
           {timezoneLabel}

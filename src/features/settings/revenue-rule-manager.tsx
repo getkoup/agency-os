@@ -69,7 +69,6 @@ function RuleDialog({
         <Button
           variant={row ? "ghost" : "default"}
           size={row ? "sm" : "default"}
-          className="rounded-full"
         >
           {row ? "Edit" : "Create rule"}
         </Button>
@@ -104,23 +103,22 @@ function RuleDialog({
         >
           <div className="space-y-2">
             <Label htmlFor={`rule-client-${row?.id ?? "new"}`}>Client</Label>
-            <select
-              id={`rule-client-${row?.id ?? "new"}`}
-              name="clientId"
-              defaultValue={row?.clientId ?? ""}
-              required
-              className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-            >
-              <option value="" disabled>
-                Select a client
-              </option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                  {client.status === "inactive" ? " (inactive)" : ""}
-                </option>
-              ))}
-            </select>
+            <Select name="clientId" defaultValue={row?.clientId} required>
+              <SelectTrigger
+                id={`rule-client-${row?.id ?? "new"}`}
+                className="w-full data-[size=default]:h-11"
+              >
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                    {client.status === "inactive" ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`rule-tag-${row?.id ?? "new"}`}>GHL tag</Label>
@@ -196,7 +194,7 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-border/70 bg-muted/20 flex flex-col gap-3 rounded-[0.75rem] border p-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Client</Label>
@@ -241,7 +239,7 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
           {toggleError}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="border-border/70 overflow-x-auto rounded-[0.75rem] border">
         <Table className="min-w-[54rem]">
           <TableHeader>
             <TableRow>
@@ -275,7 +273,6 @@ export function RevenueRuleManager({ result }: { result: RevenueRulesResult }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-full"
                       disabled={update.isPending}
                       onClick={() =>
                         update.mutate({

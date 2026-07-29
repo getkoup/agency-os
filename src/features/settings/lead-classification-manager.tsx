@@ -72,7 +72,6 @@ function ClassificationRuleDialog({
         <Button
           variant={row ? "ghost" : "default"}
           size={row ? "sm" : "default"}
-          className="rounded-full"
         >
           {row ? "Edit" : "Create category"}
         </Button>
@@ -121,23 +120,26 @@ function ClassificationRuleDialog({
             <Label htmlFor={`classification-client-${row?.id ?? "new"}`}>
               Client
             </Label>
-            <select
-              id={`classification-client-${row?.id ?? "new"}`}
+            <Select
               name="clientId"
-              defaultValue={row?.clientId ?? defaultClientId ?? ""}
+              defaultValue={row?.clientId ?? defaultClientId}
               required
-              className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
             >
-              <option value="" disabled>
-                Select a client
-              </option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                  {client.status === "inactive" ? " (inactive)" : ""}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id={`classification-client-${row?.id ?? "new"}`}
+                className="w-full data-[size=default]:h-11"
+              >
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                    {client.status === "inactive" ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`classification-name-${row?.id ?? "new"}`}>
@@ -172,15 +174,18 @@ function ClassificationRuleDialog({
               <Label htmlFor={`classification-mode-${row?.id ?? "new"}`}>
                 Match mode
               </Label>
-              <select
-                id={`classification-mode-${row?.id ?? "new"}`}
-                name="matchMode"
-                defaultValue={row?.matchMode ?? "any"}
-                className="border-input bg-background focus-visible:border-ring h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="any">Any keyword</option>
-                <option value="all">All keywords</option>
-              </select>
+              <Select name="matchMode" defaultValue={row?.matchMode ?? "any"}>
+                <SelectTrigger
+                  id={`classification-mode-${row?.id ?? "new"}`}
+                  className="w-full data-[size=default]:h-11"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any keyword</SelectItem>
+                  <SelectItem value="all">All keywords</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor={`classification-priority-${row?.id ?? "new"}`}>
@@ -242,7 +247,7 @@ export function LeadClassificationManager({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-border/70 bg-muted/20 flex flex-col gap-3 rounded-[0.75rem] border p-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="w-full space-y-1.5 sm:max-w-sm">
           <Label>Client</Label>
           <Select value={selectedClientId} onValueChange={updateClient}>
@@ -275,7 +280,7 @@ export function LeadClassificationManager({
           {error}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="border-border/70 overflow-x-auto rounded-[0.75rem] border">
         <Table className="min-w-[58rem]">
           <TableHeader>
             <TableRow>
@@ -319,7 +324,6 @@ export function LeadClassificationManager({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full"
                         disabled={update.isPending}
                         onClick={() =>
                           update.mutate({
@@ -351,7 +355,7 @@ export function LeadClassificationManager({
           No lead classification rules are configured for this view.
         </p>
       ) : null}
-      <div className="space-y-3">
+      <div className="border-border/70 space-y-3 border-t pt-6">
         <div>
           <h3 className="font-medium">Campaign preview</h3>
           <p className="text-muted-foreground text-sm">

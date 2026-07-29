@@ -118,7 +118,7 @@ export function DateRangeFilter({
             value={preset}
             onValueChange={(value) => selectPreset(value as DatePreset)}
           >
-            <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-md shadow-xs transition-colors data-[size=default]:h-10">
+            <SelectTrigger className="border-border/80 bg-background/70 hover:border-primary/25 w-full rounded-[0.5rem] shadow-xs transition-colors data-[size=default]:h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -139,7 +139,7 @@ export function DateRangeFilter({
               <Button
                 type="button"
                 variant="outline"
-                className="border-border/80 bg-background/70 hover:border-primary/25 h-10 w-full justify-start rounded-md px-3 shadow-xs transition-colors"
+                className="border-border/80 bg-background/70 hover:border-primary/25 w-full justify-start shadow-xs transition-colors"
                 aria-label={`Selected dates: ${rangeLabel({ from: parseDate(from), to: parseDate(to) })}`}
               >
                 <CalendarDays aria-hidden="true" />

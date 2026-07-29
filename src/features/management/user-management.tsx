@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -17,6 +18,13 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import {
   Table,
   TableBody,
@@ -42,24 +50,59 @@ function Memberships({
   setSelected: (ids: string[]) => void;
   disabled: boolean;
 }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = normalizedQuery
+    ? options.filter((client) =>
+        client.name.toLowerCase().includes(normalizedQuery),
+      )
+    : options;
+
   return (
-    <div className="border-border/80 bg-secondary/25 grid max-h-44 gap-2 overflow-auto rounded-xl border p-3">
-      {options.map((client) => (
-        <Label key={client.id} className="flex items-center gap-2 font-normal">
-          <Checkbox
-            disabled={disabled}
-            checked={selected.includes(client.id)}
-            onCheckedChange={(checked) =>
-              setSelected(
-                checked
-                  ? [...selected, client.id]
-                  : selected.filter((id) => id !== client.id),
-              )
-            }
+    <div className="border-border/80 overflow-hidden rounded-[0.625rem] border">
+      <div className="border-border bg-muted/20 border-b p-2.5">
+        <div className="relative">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
           />
-          {client.name}
-        </Label>
-      ))}
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search clients"
+            aria-label="Search client memberships"
+            className="bg-background h-9 pl-9"
+            disabled={disabled}
+          />
+        </div>
+      </div>
+      <div className="grid max-h-44 gap-1 overflow-auto p-2">
+        {visibleOptions.length ? (
+          visibleOptions.map((client) => (
+            <Label
+              key={client.id}
+              className="hover:bg-muted/60 rounded-[0.5rem] p-2 font-normal transition-colors"
+            >
+              <Checkbox
+                disabled={disabled}
+                checked={selected.includes(client.id)}
+                onCheckedChange={(checked) =>
+                  setSelected(
+                    checked
+                      ? [...selected, client.id]
+                      : selected.filter((id) => id !== client.id),
+                  )
+                }
+              />
+              {client.name}
+            </Label>
+          ))
+        ) : (
+          <p className="text-muted-foreground px-3 py-6 text-center text-sm">
+            No clients match “{query.trim()}”.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -78,6 +121,15 @@ export function UserManagement({
   const [role, setRole] = useState<UserRole>("client");
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleRows = normalizedQuery
+    ? rows.filter((user) =>
+        [user.name, user.email, user.role].some((value) =>
+          value?.toLowerCase().includes(normalizedQuery),
+        ),
+      )
+    : rows;
   const create = api.management.createUser.useMutation({
     onSuccess: () => {
       setCreateOpen(false);
@@ -103,21 +155,38 @@ export function UserManagement({
   });
   function roleSelect(value: string, onChange: (next: UserRole) => void) {
     return (
-      <select
-        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
+      <Select
         value={value}
-        onChange={(event) => onChange(event.target.value as UserRole)}
+        onValueChange={(next) => onChange(next as UserRole)}
       >
-        <option value="owner">Owner</option>
-        <option value="admin">Admin</option>
-        <option value="manager">Manager</option>
-        <option value="client">Client</option>
-      </select>
+        <SelectTrigger className="w-full data-[size=default]:h-11">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="owner">Owner</SelectItem>
+          <SelectItem value="admin">Admin</SelectItem>
+          <SelectItem value="manager">Manager</SelectItem>
+          <SelectItem value="client">Client</SelectItem>
+        </SelectContent>
+      </Select>
     );
   }
   return (
     <>
-      <div className="mb-4 flex justify-end px-5">
+      <div className="mb-4 flex flex-col gap-3 px-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search users"
+            aria-label="Search users"
+            className="bg-background h-10 pl-9"
+          />
+        </div>
         <Dialog
           open={createOpen}
           onOpenChange={(open) => {
@@ -128,7 +197,7 @@ export function UserManagement({
           }}
         >
           <DialogTrigger asChild>
-            <Button className="h-11 rounded-full px-5">Create user</Button>
+            <Button size="lg">Create user</Button>
           </DialogTrigger>
           <DialogContent className="shadow-sage-floating max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[1.25rem]">
             <DialogHeader>
@@ -195,11 +264,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={create.isPending}
-                >
+                <Button size="lg" type="submit" disabled={create.isPending}>
                   {create.isPending ? "Creating…" : "Create user"}
                 </Button>
               </DialogFooter>
@@ -219,7 +284,7 @@ export function UserManagement({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((user) => (
+            {visibleRows.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="pl-6">
                   <div className="font-medium">{user.name ?? user.email}</div>
@@ -281,6 +346,16 @@ export function UserManagement({
                 </TableCell>
               </TableRow>
             ))}
+            {!visibleRows.length ? (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="text-muted-foreground h-28 text-center"
+                >
+                  No users match “{query.trim()}”.
+                </TableCell>
+              </TableRow>
+            ) : null}
           </TableBody>
         </Table>
       </div>
@@ -326,17 +401,18 @@ export function UserManagement({
                 setRole(next);
                 if (next !== "client") setSelected([]);
               })}
-              <Label>
-                Status
-                <select
-                  name="status"
-                  defaultValue={editing.status}
-                  className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 mt-2 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </Label>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select name="status" defaultValue={editing.status}>
+                  <SelectTrigger className="w-full data-[size=default]:h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Memberships
                 options={clients}
                 selected={selected}
@@ -347,11 +423,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={update.isPending}
-                >
+                <Button size="lg" type="submit" disabled={update.isPending}>
                   {update.isPending ? "Saving…" : "Save changes"}
                 </Button>
               </DialogFooter>
@@ -398,11 +470,7 @@ export function UserManagement({
                 <p className="text-destructive text-sm">{error}</p>
               ) : null}
               <DialogFooter>
-                <Button
-                  className="h-11 sm:min-w-32"
-                  type="submit"
-                  disabled={reset.isPending}
-                >
+                <Button size="lg" type="submit" disabled={reset.isPending}>
                   {reset.isPending ? "Resetting…" : "Reset password"}
                 </Button>
               </DialogFooter>

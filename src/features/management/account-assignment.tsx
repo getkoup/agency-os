@@ -13,6 +13,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { api } from "~/trpc/react";
 
 export function AccountAssignment({
@@ -39,7 +46,7 @@ export function AccountAssignment({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="rounded-full">
+        <Button size="sm" variant="outline">
           {currentClientId ? "Reassign" : "Assign client"}
         </Button>
       </DialogTrigger>
@@ -50,23 +57,24 @@ export function AccountAssignment({
             Historical performance and leads move with the account immediately.
           </DialogDescription>
         </DialogHeader>
-        <select
-          className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-11 w-full rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px]"
-          value={clientId}
-          onChange={(event) => setClientId(event.target.value)}
-        >
-          <option value="unassigned">Unassigned</option>
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
-            </option>
-          ))}
-        </select>
+        <Select value={clientId} onValueChange={setClientId}>
+          <SelectTrigger className="w-full data-[size=default]:h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {clients.map((client) => (
+              <SelectItem key={client.id} value={client.id}>
+                {client.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
         <DialogFooter>
           <Button
             disabled={mutation.isPending}
-            className="h-11 sm:min-w-32"
+            size="lg"
             onClick={() =>
               mutation.mutate({
                 sourceAccountId,

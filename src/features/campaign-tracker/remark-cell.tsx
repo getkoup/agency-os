@@ -50,8 +50,7 @@ export function RemarkCell({
         </span>
         {changed ? (
           <Button
-            size="sm"
-            className="h-7 px-3 text-xs"
+            size="xs"
             disabled={mutation.isPending}
             onClick={() =>
               mutation.mutate({ campaignId, date, remark: remark.trim() })

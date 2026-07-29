@@ -44,7 +44,6 @@ export function GoalCell({
       {changed ? (
         <Button
           size="sm"
-          className="h-8"
           disabled={!valid || mutation.isPending}
           onClick={() =>
             mutation.mutate({ clientId, dailyBookingGoal: parsed })

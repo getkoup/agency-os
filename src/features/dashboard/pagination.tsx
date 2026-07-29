@@ -34,12 +34,12 @@ export function Pagination({
   }
 
   return (
-    <div className="border-border/70 flex items-center justify-between gap-4 border-t px-5 pt-4">
+    <div className="border-border/70 flex items-center justify-between gap-4 border-t px-5 py-4">
       <p className="text-muted-foreground text-xs tabular-nums">
         Page {page} of {pageCount}
       </p>
       <div className="flex gap-2">
-        <Button asChild variant="outline" size="sm" className="rounded-full">
+        <Button asChild variant="outline" size="sm">
           <Link
             href={href(Math.max(1, page - 1))}
             aria-disabled={page <= 1}
@@ -49,7 +49,7 @@ export function Pagination({
             Previous
           </Link>
         </Button>
-        <Button asChild variant="outline" size="sm" className="rounded-full">
+        <Button asChild variant="outline" size="sm">
           <Link
             href={href(Math.min(pageCount, page + 1))}
             aria-disabled={page >= pageCount}

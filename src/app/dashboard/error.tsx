@@ -18,7 +18,7 @@ export default function DashboardError({ reset }: { reset: () => void }) {
             We could not load this view. Retry the request to continue.
           </p>
         </div>
-        <Button className="h-11 rounded-full px-6" onClick={reset}>
+        <Button size="lg" onClick={reset}>
           Retry
         </Button>
       </div>

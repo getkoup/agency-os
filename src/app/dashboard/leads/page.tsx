@@ -99,8 +99,8 @@ export default async function LeadsPage({
         />
       </section>
       <section className="grid gap-6 2xl:grid-cols-[minmax(24rem,1fr)_minmax(52rem,2fr)]">
-        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-          <CardHeader>
+        <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+          <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
             <CardTitle className="tracking-tight">
               Lead type breakdown
             </CardTitle>
@@ -136,8 +136,8 @@ export default async function LeadsPage({
             </Table>
           </CardContent>
         </Card>
-        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-          <CardHeader>
+        <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+          <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
             <CardTitle className="tracking-tight">
               Service category breakdown
             </CardTitle>
@@ -205,8 +205,8 @@ export default async function LeadsPage({
             )}
           </CardContent>
         </Card>
-        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5 2xl:col-span-2">
-          <CardHeader>
+        <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0 2xl:col-span-2">
+          <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
             <CardTitle className="tracking-tight">
               Booking breakdown by calendar
             </CardTitle>
@@ -262,8 +262,8 @@ export default async function LeadsPage({
             )}
           </CardContent>
         </Card>
-        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5 2xl:col-span-2">
-          <CardHeader>
+        <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0 2xl:col-span-2">
+          <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
             <CardTitle className="tracking-tight">
               Daily lead conversion
             </CardTitle>
@@ -310,8 +310,8 @@ export default async function LeadsPage({
           </CardContent>
         </Card>
       </section>
-      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-        <CardHeader>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <CardTitle className="tracking-tight">
             Facebook Lead Form details ({leads.total})
           </CardTitle>

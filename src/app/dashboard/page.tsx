@@ -111,7 +111,7 @@ export default async function DashboardPage({
         title="Agency Overview"
         description="Internal performance snapshot across the clients you can access."
         meta={
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-[0.35rem]">
             {search.from} through {search.to} · client-local dates
           </Badge>
         }
@@ -134,8 +134,8 @@ export default async function DashboardPage({
           />
         ))}
       </section>
-      <Card className="shadow-sage border-border/80 gap-3 rounded-[1.25rem] py-5">
-        <CardHeader>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <CardTitle className="tracking-tight">Daily performance</CardTitle>
           <p className="text-muted-foreground text-sm">
             Spend and total lead events by client-local date. Total leads
@@ -143,12 +143,12 @@ export default async function DashboardPage({
             use GHL created-at timestamps localized to each client.
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <OverviewChart rows={trend} />
         </CardContent>
       </Card>
-      <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-        <CardHeader>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <CardTitle className="tracking-tight">Client performance</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">

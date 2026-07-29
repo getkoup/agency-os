@@ -89,12 +89,11 @@ export default async function SalesTrackingPage({
         title="Sales Tracking"
         description="Booking creation performance against each client's configured goal."
         meta={
-          <Badge variant="secondary" className="rounded-full">
+          <Badge variant="secondary" className="rounded-[0.35rem]">
             {result.rows.length} active clients
           </Badge>
         }
       />
-      <SalesTrackingControls date={date} groupSize={groupSize} />
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {(
           [
@@ -104,19 +103,46 @@ export default async function SalesTrackingPage({
             ["no_goal", counts.no_goal],
           ] as const
         ).map(([status, count]) => (
-          <Card key={status} className="gap-2 py-5">
-            <CardHeader>
-              <CardTitle className="text-muted-foreground text-sm font-medium">
-                {statusPresentation[status].label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold tabular-nums">
-              {count}
+          <Card
+            key={status}
+            className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.1rem] py-0"
+          >
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-muted-foreground text-sm font-medium">
+                  {statusPresentation[status].label}
+                </p>
+                <span
+                  className={cn(
+                    "size-2.5 rounded-full border",
+                    statusPresentation[status].className,
+                  )}
+                  aria-hidden="true"
+                />
+              </div>
+              <p className="mt-5 text-3xl font-semibold tabular-nums">
+                {count}
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Active clients
+              </p>
             </CardContent>
           </Card>
         ))}
       </section>
-      <Card className="overflow-hidden py-0">
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card flex flex-col gap-5 border-b bg-gradient-to-r px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="tracking-tight">
+              Client booking performance
+            </CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Ranked progress against each client&apos;s booking goal for the
+              four reporting periods.
+            </p>
+          </div>
+          <SalesTrackingControls date={date} groupSize={groupSize} />
+        </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {result.rows.length ? (
             <Table className="min-w-[64rem]">

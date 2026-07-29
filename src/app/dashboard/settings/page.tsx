@@ -132,10 +132,12 @@ export default async function SettingsPage({
           );
         })}
       </section>
-      <Card className="shadow-sage border-border/80 gap-3 rounded-[1.25rem] py-5">
-        <CardHeader>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <div className="flex items-center gap-3">
-            <ListFilter className="text-primary size-5" />
+            <span className="bg-primary/10 text-primary ring-primary/10 grid size-10 shrink-0 place-items-center rounded-[0.625rem] ring-1">
+              <ListFilter className="size-5" />
+            </span>
             <div>
               <CardTitle className="tracking-tight">
                 Lead classification
@@ -147,17 +149,19 @@ export default async function SettingsPage({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <LeadClassificationManager
             result={classificationRules}
             canManage={user.role === "owner"}
           />
         </CardContent>
       </Card>
-      <Card className="shadow-sage border-border/80 gap-3 rounded-[1.25rem] py-5">
-        <CardHeader>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <div className="flex items-center gap-3">
-            <Tags className="text-primary size-5" />
+            <span className="bg-primary/10 text-primary ring-primary/10 grid size-10 shrink-0 place-items-center rounded-[0.625rem] ring-1">
+              <Tags className="size-5" />
+            </span>
             <div>
               <CardTitle className="tracking-tight">Revenue rules</CardTitle>
               <p className="text-muted-foreground mt-1 text-sm">
@@ -166,7 +170,7 @@ export default async function SettingsPage({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <RevenueRuleManager result={rules} />
         </CardContent>
         <Pagination
@@ -179,10 +183,12 @@ export default async function SettingsPage({
         />
       </Card>
       {user.role === "owner" ? (
-        <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
-          <CardHeader>
+        <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+          <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
             <div className="flex items-center gap-3">
-              <ShieldCheck className="text-primary size-5" />
+              <span className="bg-primary/10 text-primary ring-primary/10 grid size-10 shrink-0 place-items-center rounded-[0.625rem] ring-1">
+                <ShieldCheck className="size-5" />
+              </span>
               <div>
                 <CardTitle className="tracking-tight">
                   Per-client GoHighLevel configuration
@@ -194,7 +200,7 @@ export default async function SettingsPage({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 py-2">
             <GhlConfigurationManager rows={ghlStatus} />
           </CardContent>
         </Card>

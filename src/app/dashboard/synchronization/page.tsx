@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { Badge } from "~/components/ui/badge";
@@ -16,6 +16,22 @@ import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { SyncAllClientsButton } from "~/features/synchronization/sync-all-clients-button";
 import { api } from "~/trpc/server";
+
+const syncDateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+
+function formatSyncDate(value: Date) {
+  return `${syncDateFormatter.format(value)} UTC`;
+}
+
+function formatDuration(startedAt: Date, completedAt: Date | null) {
+  return completedAt
+    ? `${Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 1000))}s`
+    : "Running";
+}
 
 export default async function SynchronizationPage() {
   const user = await getAuthenticatedUser();
@@ -46,14 +62,15 @@ export default async function SynchronizationPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           {aggregateRuns.length ? (
-            aggregateRuns.map((run) => (
-              <section
+            aggregateRuns.map((run, index) => (
+              <details
                 key={run.id}
-                className="border-border/70 overflow-hidden rounded-2xl border"
+                className="group/run border-border/70 overflow-hidden rounded-[0.75rem] border"
+                open={index === 0 ? true : undefined}
               >
-                <div className="bg-muted/35 flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                  <div>
-                    <div className="flex items-center gap-2">
+                <summary className="bg-muted/25 hover:bg-muted/45 flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 px-5 py-4 transition-colors [&::-webkit-details-marker]:hidden">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge
                         variant={
                           run.status === "failed"
@@ -71,20 +88,26 @@ export default async function SynchronizationPage() {
                       </span>
                     </div>
                     <p className="text-muted-foreground mt-2 text-xs tabular-nums">
-                      {run.startedAt.toISOString()} ·{" "}
-                      {run.completedAt
-                        ? `${Math.max(0, Math.round((run.completedAt.getTime() - run.startedAt.getTime()) / 1000))}s`
-                        : "Running"}
+                      {formatSyncDate(run.startedAt)} ·{" "}
+                      {formatDuration(run.startedAt, run.completedAt)}
                     </p>
                   </div>
-                  <p className="text-muted-foreground text-xs tabular-nums">
-                    {run.discoveredAccountCount} accounts ·{" "}
-                    {run.performanceRowCount} performance · {run.leadRowCount}{" "}
-                    leads · {run.opportunityRowCount} wins ·{" "}
-                    {run.matchedOpportunityCount} matched
-                  </p>
-                </div>
-                <div className="overflow-x-auto">
+                  <div className="flex items-center gap-4">
+                    <div className="text-muted-foreground hidden text-right text-xs tabular-nums lg:block">
+                      <p>
+                        {run.discoveredAccountCount} accounts ·{" "}
+                        {run.leadRowCount} leads · {run.opportunityRowCount}{" "}
+                        wins
+                      </p>
+                      <p className="mt-1">
+                        {run.performanceRowCount} performance ·{" "}
+                        {run.matchedOpportunityCount} matched
+                      </p>
+                    </div>
+                    <ChevronDown className="text-muted-foreground size-4 shrink-0 transition-transform group-open/run:rotate-180" />
+                  </div>
+                </summary>
+                <div className="border-border/70 overflow-x-auto border-t">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -132,7 +155,7 @@ export default async function SynchronizationPage() {
                     </TableBody>
                   </Table>
                 </div>
-              </section>
+              </details>
             ))
           ) : (
             <EmptyState
@@ -167,7 +190,7 @@ export default async function SynchronizationPage() {
                   ? runs.rows.map((run) => (
                       <TableRow key={run.id}>
                         <TableCell className="pl-6 whitespace-nowrap tabular-nums">
-                          {run.startedAt.toISOString()}
+                          {formatSyncDate(run.startedAt)}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -184,9 +207,7 @@ export default async function SynchronizationPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {run.completedAt
-                            ? `${Math.max(0, Math.round((run.completedAt.getTime() - run.startedAt.getTime()) / 1000))}s`
-                            : "Running"}
+                          {formatDuration(run.startedAt, run.completedAt)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {run.discoveredAccountCount}
