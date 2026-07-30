@@ -15,6 +15,7 @@ import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { SyncAllClientsButton } from "~/features/synchronization/sync-all-clients-button";
+import { isAllClientSyncRunActive } from "~/server/sync/run-status";
 import { api } from "~/trpc/server";
 
 const syncDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -48,8 +49,8 @@ export default async function SynchronizationPage() {
         description="Run Windsor and configured GoHighLevel imports for every active client."
         actions={
           <SyncAllClientsButton
-            serverRunIsActive={aggregateRuns.some(
-              (run) => run.status === "running",
+            serverRunIsActive={aggregateRuns.some((run) =>
+              isAllClientSyncRunActive(run),
             )}
           />
         }

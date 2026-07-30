@@ -6,6 +6,7 @@ import {
   allClientSyncRuns,
   allClientSyncTargets,
   clients,
+  syncRuns,
   users,
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
@@ -104,12 +105,20 @@ describe("syncAllClients", () => {
   it("recovers stale targets and never provisions configured clients", async () => {
     await db.delete(clients).where(inArray(clients.slug, configuredSlugs));
     const staleAt = new Date(Date.now() - 20 * 60 * 1000);
+    const [staleProviderRun] = await db
+      .insert(syncRuns)
+      .values({ dataProvider: "windsor", startedAt: staleAt })
+      .returning({ id: syncRuns.id });
+    if (!staleProviderRun) {
+      throw new Error("Could not create stale provider test run");
+    }
     const [staleRun] = await db
       .insert(allClientSyncRuns)
       .values({
         requestedByUserId: userId,
         startedAt: staleAt,
         heartbeatAt: staleAt,
+        windsorSyncRunId: staleProviderRun.id,
       })
       .returning({ id: allClientSyncRuns.id });
     if (!staleRun) throw new Error("Could not create stale test run");
@@ -150,10 +159,16 @@ describe("syncAllClients", () => {
       );
     expect(recoveredRun?.status).toBe("failed");
     expect(recoveredTarget?.status).toBe("failed");
+    const [recoveredProviderRun] = await db
+      .select({ status: syncRuns.status })
+      .from(syncRuns)
+      .where(eq(syncRuns.id, staleProviderRun.id));
+    expect(recoveredProviderRun?.status).toBe("failed");
     const configuredClients = await db
       .select({ id: clients.id })
       .from(clients)
       .where(inArray(clients.slug, configuredSlugs));
     expect(configuredClients).toEqual([]);
+    await db.delete(syncRuns).where(eq(syncRuns.id, staleProviderRun.id));
   });
 });

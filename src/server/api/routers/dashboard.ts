@@ -174,9 +174,17 @@ export const dashboardRouter = createTRPCRouter({
           cause: error,
         });
       }
+      console.error("All-client synchronization failed", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "Unknown synchronization error",
+      });
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Synchronization could not start. Check server configuration.",
+        cause: error,
       });
     }
   }),

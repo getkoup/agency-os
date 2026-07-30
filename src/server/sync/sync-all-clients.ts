@@ -12,8 +12,10 @@ import {
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
 import { loadStoredGhlConfig } from "~/server/ghl/configuration";
-import { type GhlConfig } from "~/server/ghl/env";
+import { type GhlConfig, type GhlClientMapping } from "~/server/ghl/env";
 import { syncGhlLocation } from "~/server/ghl/sync";
+import { mapInBatches } from "~/server/sync/batch";
+import { ALL_CLIENT_SYNC_STALE_AFTER_MS } from "~/server/sync/run-status";
 import { WindsorClient } from "~/server/windsor/client";
 import {
   discoverWindsorSourceAccounts,
@@ -21,7 +23,14 @@ import {
   WindsorDataSyncError,
 } from "~/server/windsor/sync";
 
-const STALE_RUN_MS = 15 * 60 * 1000;
+const WINDSOR_CLIENT_BATCH_SIZE = 4;
+const GHL_CLIENT_BATCH_SIZE = 4;
+
+interface ActiveClient {
+  id: string;
+  slug: string;
+  name: string;
+}
 
 export class SyncAlreadyRunningError extends Error {
   constructor() {
@@ -32,6 +41,10 @@ export class SyncAlreadyRunningError extends Error {
 
 function safeError(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 500) : "Unknown error";
+}
+
+function targetKey(provider: "windsor" | "ghl", clientSlug: string) {
+  return `${provider}:${clientSlug}`;
 }
 
 async function heartbeat(runId: string) {
@@ -53,6 +66,55 @@ async function finishTarget(
     .where(eq(allClientSyncTargets.id, targetId));
 }
 
+async function failUnexpectedRun(
+  runId: string,
+  windsorRunId: string | null,
+  error: unknown,
+) {
+  const completedAt = new Date();
+  const errorMessage = `Synchronization aborted: ${safeError(error)}`;
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(allClientSyncTargets)
+        .set({ status: "failed", completedAt, errorMessage })
+        .where(
+          and(
+            eq(allClientSyncTargets.runId, runId),
+            eq(allClientSyncTargets.status, "running"),
+          ),
+        );
+      if (windsorRunId) {
+        await tx
+          .update(syncRuns)
+          .set({ status: "failed", completedAt, errorMessage })
+          .where(
+            and(eq(syncRuns.id, windsorRunId), eq(syncRuns.status, "running")),
+          );
+      }
+      await tx
+        .update(allClientSyncRuns)
+        .set({
+          status: "failed",
+          completedAt,
+          heartbeatAt: completedAt,
+          errorMessage,
+        })
+        .where(
+          and(
+            eq(allClientSyncRuns.id, runId),
+            eq(allClientSyncRuns.status, "running"),
+          ),
+        );
+    });
+  } catch (cleanupError) {
+    throw new Error(
+      "Synchronization failed and its run could not be finalized",
+      { cause: new AggregateError([error, cleanupError]) },
+    );
+  }
+}
+
 async function createRun(requestedByUserId: string, startedAt: Date) {
   try {
     return await db.transaction(async (tx) => {
@@ -68,11 +130,14 @@ async function createRun(requestedByUserId: string, startedAt: Date) {
             eq(allClientSyncRuns.status, "running"),
             lt(
               allClientSyncRuns.heartbeatAt,
-              new Date(startedAt.getTime() - STALE_RUN_MS),
+              new Date(startedAt.getTime() - ALL_CLIENT_SYNC_STALE_AFTER_MS),
             ),
           ),
         )
-        .returning({ id: allClientSyncRuns.id });
+        .returning({
+          id: allClientSyncRuns.id,
+          windsorSyncRunId: allClientSyncRuns.windsorSyncRunId,
+        });
       if (staleRuns.length > 0) {
         await tx
           .update(allClientSyncTargets)
@@ -90,6 +155,24 @@ async function createRun(requestedByUserId: string, startedAt: Date) {
               eq(allClientSyncTargets.status, "running"),
             ),
           );
+        const staleProviderRunIds = staleRuns.flatMap(({ windsorSyncRunId }) =>
+          windsorSyncRunId ? [windsorSyncRunId] : [],
+        );
+        if (staleProviderRunIds.length > 0) {
+          await tx
+            .update(syncRuns)
+            .set({
+              status: "failed",
+              completedAt: startedAt,
+              errorMessage: "Synchronization heartbeat expired",
+            })
+            .where(
+              and(
+                inArray(syncRuns.id, staleProviderRunIds),
+                eq(syncRuns.status, "running"),
+              ),
+            );
+        }
       }
       const [run] = await tx
         .insert(allClientSyncRuns)
@@ -111,142 +194,147 @@ async function createRun(requestedByUserId: string, startedAt: Date) {
   }
 }
 
-export async function syncAllClients(
-  requestedByUserId: string,
-  dependencies: {
-    windsorClient?: WindsorClient;
-    ghlConfig?: GhlConfig;
-    ghlClient?: GhlClient;
-  } = {},
-) {
-  const startedAt = new Date();
-  const windsorClient = dependencies.windsorClient ?? new WindsorClient();
-  const ghlConfig = dependencies.ghlConfig ?? (await loadStoredGhlConfig());
-  const ghlClient = dependencies.ghlClient ?? new GhlClient(ghlConfig.baseUrl);
-  const run = await createRun(requestedByUserId, startedAt);
-  const activeClients = await db
-    .select({ id: clients.id, slug: clients.slug, name: clients.name })
-    .from(clients)
-    .where(eq(clients.status, "active"));
-  const activeBySlug = new Map(
-    activeClients.map((client) => [client.slug, client]),
+async function createTargets(input: {
+  runId: string;
+  startedAt: Date;
+  activeClients: readonly ActiveClient[];
+  ghlConfig: GhlConfig;
+}) {
+  const configuredSlugs = new Set(
+    input.ghlConfig.mappings.map(({ clientSlug }) => clientSlug),
   );
-  const targets = new Map<string, { id: string; clientId: string | null }>();
-
-  for (const client of activeClients) {
-    const [windsorTarget] = await db
-      .insert(allClientSyncTargets)
-      .values({
-        runId: run.id,
-        clientId: client.id,
-        clientSlug: client.slug,
-        clientName: client.name,
-        provider: "windsor",
-      })
-      .returning({ id: allClientSyncTargets.id });
-    if (!windsorTarget) throw new Error("Could not create Windsor target");
-    targets.set(`windsor:${client.slug}`, {
-      id: windsorTarget.id,
-      clientId: client.id,
+  const activeSlugs = new Set(input.activeClients.map(({ slug }) => slug));
+  const targetValues: Array<typeof allClientSyncTargets.$inferInsert> =
+    input.activeClients.flatMap((client) => {
+      const hasGhlConfiguration = configuredSlugs.has(client.slug);
+      return [
+        {
+          runId: input.runId,
+          clientId: client.id,
+          clientSlug: client.slug,
+          clientName: client.name,
+          provider: "windsor",
+        },
+        {
+          runId: input.runId,
+          clientId: client.id,
+          clientSlug: client.slug,
+          clientName: client.name,
+          provider: "ghl",
+          status: hasGhlConfiguration ? "running" : "skipped",
+          completedAt: hasGhlConfiguration ? null : input.startedAt,
+          errorMessage: hasGhlConfiguration
+            ? null
+            : "No GHL location configured",
+        },
+      ];
     });
-    const configured = ghlConfig.mappings.some(
-      (mapping) => mapping.clientSlug === client.slug,
-    );
-    const [ghlTarget] = await db
-      .insert(allClientSyncTargets)
-      .values({
-        runId: run.id,
-        clientId: client.id,
-        clientSlug: client.slug,
-        clientName: client.name,
-        provider: "ghl",
-        status: configured ? "running" : "skipped",
-        completedAt: configured ? null : startedAt,
-        errorMessage: configured ? null : "No GHL location configured",
-      })
-      .returning({ id: allClientSyncTargets.id });
-    if (!ghlTarget) throw new Error("Could not create GHL target");
-    targets.set(`ghl:${client.slug}`, {
-      id: ghlTarget.id,
-      clientId: client.id,
-    });
-  }
-  for (const mapping of ghlConfig.mappings) {
-    if (activeBySlug.has(mapping.clientSlug)) continue;
-    const [target] = await db
-      .insert(allClientSyncTargets)
-      .values({
-        runId: run.id,
+  targetValues.push(
+    ...input.ghlConfig.mappings
+      .filter((mapping) => !activeSlugs.has(mapping.clientSlug))
+      .map((mapping) => ({
+        runId: input.runId,
         clientSlug: mapping.clientSlug,
         clientName: mapping.clientName,
         provider: "ghl",
-        status: "failed",
-        completedAt: startedAt,
+        status: "failed" as const,
+        completedAt: input.startedAt,
         errorMessage: "Expected active client is missing",
-      })
-      .returning({ id: allClientSyncTargets.id });
-    if (!target) throw new Error("Could not create missing-client target");
-    targets.set(`ghl:${mapping.clientSlug}`, { id: target.id, clientId: null });
-  }
+      })),
+  );
+  if (targetValues.length === 0) return new Map<string, string>();
 
-  const [windsorRun] = await db
-    .insert(syncRuns)
-    .values({ dataProvider: "windsor" })
-    .returning({ id: syncRuns.id });
-  if (!windsorRun) throw new Error("Could not create Windsor provider run");
-  await db
-    .update(allClientSyncRuns)
-    .set({ windsorSyncRunId: windsorRun.id })
-    .where(eq(allClientSyncRuns.id, run.id));
+  const targetRows = await db
+    .insert(allClientSyncTargets)
+    .values(targetValues)
+    .returning({
+      id: allClientSyncTargets.id,
+      clientSlug: allClientSyncTargets.clientSlug,
+      provider: allClientSyncTargets.provider,
+    });
+  return new Map(
+    targetRows.map((target) => [
+      `${target.provider}:${target.clientSlug}`,
+      target.id,
+    ]),
+  );
+}
+
+async function syncWindsorTargets(input: {
+  client: WindsorClient;
+  runId: string;
+  activeClients: readonly ActiveClient[];
+  targetIds: ReadonlyMap<string, string>;
+}) {
   let discoveredAccountCount = 0;
-  let windsorFailed = false;
   try {
     ({ discoveredAccountCount } = await discoverWindsorSourceAccounts(
-      windsorClient,
+      input.client,
       { provisionMappedClients: false },
     ));
   } catch (error) {
-    windsorFailed = true;
-    for (const client of activeClients) {
-      const target = targets.get(`windsor:${client.slug}`);
-      if (target) {
-        await finishTarget(target.id, {
-          status: "failed",
-          errorMessage: safeError(error),
-        });
-      }
-    }
+    await db
+      .update(allClientSyncTargets)
+      .set({
+        status: "failed",
+        completedAt: new Date(),
+        errorMessage: safeError(error),
+      })
+      .where(
+        and(
+          eq(allClientSyncTargets.runId, input.runId),
+          eq(allClientSyncTargets.provider, "windsor"),
+          eq(allClientSyncTargets.status, "running"),
+        ),
+      );
+    return { discoveredAccountCount };
   }
 
-  if (!windsorFailed) {
-    for (const client of activeClients) {
-      const target = targets.get(`windsor:${client.slug}`);
-      if (!target) continue;
-      const countRows = await db
-        .select({ count: sql<number>`count(*)::int` })
+  const clientIds = input.activeClients.map(({ id }) => id);
+  const countRows = clientIds.length
+    ? await db
+        .select({
+          clientId: sourceAccounts.clientId,
+          count: sql<number>`count(*)::int`,
+        })
         .from(sourceAccounts)
         .where(
           and(
             eq(sourceAccounts.dataProvider, "windsor"),
             eq(sourceAccounts.status, "active"),
-            eq(sourceAccounts.clientId, client.id),
+            inArray(sourceAccounts.clientId, clientIds),
           ),
-        );
-      const sourceAccountCount = countRows[0]?.count ?? 0;
+        )
+        .groupBy(sourceAccounts.clientId)
+    : [];
+  const sourceAccountCounts = new Map(
+    countRows.flatMap((row) =>
+      row.clientId ? [[row.clientId, row.count] as const] : [],
+    ),
+  );
+
+  await mapInBatches(
+    input.activeClients,
+    WINDSOR_CLIENT_BATCH_SIZE,
+    async (client) => {
+      const targetId = input.targetIds.get(targetKey("windsor", client.slug));
+      if (!targetId)
+        throw new Error("Windsor synchronization target is missing");
+      const sourceAccountCount = sourceAccountCounts.get(client.id) ?? 0;
       if (sourceAccountCount === 0) {
-        await finishTarget(target.id, {
+        await finishTarget(targetId, {
           status: "skipped",
           sourceAccountCount,
           errorMessage: "No active Windsor accounts",
         });
-        continue;
+        return;
       }
       try {
-        const summary = await syncWindsorData(windsorClient, {
+        const summary = await syncWindsorData(input.client, {
           kind: "client",
           clientId: client.id,
         });
-        await finishTarget(target.id, {
+        await finishTarget(targetId, {
           status: "succeeded",
           sourceAccountCount,
           ...summary,
@@ -256,50 +344,82 @@ export async function syncAllClients(
           error instanceof WindsorDataSyncError
             ? error.summary
             : { performanceRowCount: 0, leadRowCount: 0 };
-        await finishTarget(target.id, {
+        await finishTarget(targetId, {
           status: "failed",
           sourceAccountCount,
           ...partial,
           errorMessage: safeError(error),
         });
       }
-      await heartbeat(run.id);
-    }
-  }
+    },
+    () => heartbeat(input.runId),
+  );
+  return { discoveredAccountCount };
+}
 
-  for (const mapping of ghlConfig.mappings) {
-    const client = activeBySlug.get(mapping.clientSlug);
-    const target = targets.get(`ghl:${mapping.clientSlug}`);
-    if (!client || !target) continue;
-    try {
-      const summary = await syncGhlLocation({
-        client: ghlClient,
-        clientId: client.id,
-        locationId: mapping.locationId,
-        token: mapping.token,
-        runStartedAt: startedAt,
-        onPage: () => heartbeat(run.id),
-      });
-      await finishTarget(target.id, {
-        status: "succeeded",
-        integrationMappingId: summary.mappingId,
-        contactRowCount: summary.contactRowCount,
-        opportunityRowCount: summary.appointmentRowCount,
-        matchedOpportunityCount: summary.matchedAppointmentCount,
-      });
-    } catch (error) {
-      await finishTarget(target.id, {
-        status: "failed",
-        errorMessage: safeError(error),
-      });
-    }
-    await heartbeat(run.id);
-  }
+async function syncGhlTargets(input: {
+  client: GhlClient;
+  config: GhlConfig;
+  runId: string;
+  runStartedAt: Date;
+  activeClientsBySlug: ReadonlyMap<string, ActiveClient>;
+  targetIds: ReadonlyMap<string, string>;
+}) {
+  const configuredClients = input.config.mappings.flatMap((mapping) => {
+    const client = input.activeClientsBySlug.get(mapping.clientSlug);
+    return client ? [{ client, mapping }] : [];
+  });
 
+  await mapInBatches(
+    configuredClients,
+    GHL_CLIENT_BATCH_SIZE,
+    async ({
+      client,
+      mapping,
+    }: {
+      client: ActiveClient;
+      mapping: GhlClientMapping;
+    }) => {
+      const targetId = input.targetIds.get(
+        targetKey("ghl", mapping.clientSlug),
+      );
+      if (!targetId) throw new Error("GHL synchronization target is missing");
+      try {
+        const summary = await syncGhlLocation({
+          client: input.client,
+          clientId: client.id,
+          locationId: mapping.locationId,
+          token: mapping.token,
+          runStartedAt: input.runStartedAt,
+          onPage: () => heartbeat(input.runId),
+        });
+        await finishTarget(targetId, {
+          status: "succeeded",
+          integrationMappingId: summary.mappingId,
+          contactRowCount: summary.contactRowCount,
+          opportunityRowCount: summary.appointmentRowCount,
+          matchedOpportunityCount: summary.matchedAppointmentCount,
+        });
+      } catch (error) {
+        await finishTarget(targetId, {
+          status: "failed",
+          errorMessage: safeError(error),
+        });
+      }
+    },
+    () => heartbeat(input.runId),
+  );
+}
+
+async function finishRun(input: {
+  runId: string;
+  windsorRunId: string;
+  discoveredAccountCount: number;
+}) {
   const targetRows = await db
     .select()
     .from(allClientSyncTargets)
-    .where(eq(allClientSyncTargets.runId, run.id));
+    .where(eq(allClientSyncTargets.runId, input.runId));
   const totals = targetRows.reduce(
     (sum, target) => ({
       performanceRowCount: sum.performanceRowCount + target.performanceRowCount,
@@ -317,41 +437,114 @@ export async function syncAllClients(
       matchedOpportunityCount: 0,
     },
   );
-  const failed = targetRows.some((target) => target.status === "failed");
+  const failed = targetRows.some(
+    (target) => target.status === "failed" || target.status === "running",
+  );
+  const windsorFailed = targetRows.some(
+    (target) =>
+      target.provider === "windsor" &&
+      (target.status === "failed" || target.status === "running"),
+  );
   const completedAt = new Date();
-  await db
-    .update(syncRuns)
-    .set({
-      status: targetRows.some(
-        (target) => target.provider === "windsor" && target.status === "failed",
-      )
-        ? "failed"
-        : "succeeded",
-      completedAt,
-      discoveredAccountCount,
-      performanceRowCount: totals.performanceRowCount,
-      leadRowCount: totals.leadRowCount,
-      errorMessage: windsorFailed ? "One or more Windsor targets failed" : null,
-    })
-    .where(eq(syncRuns.id, windsorRun.id));
-  await db
-    .update(allClientSyncRuns)
-    .set({
-      status: failed ? "failed" : "succeeded",
-      completedAt,
-      heartbeatAt: completedAt,
-      discoveredAccountCount,
-      ...totals,
-      errorMessage: failed
-        ? "One or more synchronization targets failed"
-        : null,
-    })
-    .where(eq(allClientSyncRuns.id, run.id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(syncRuns)
+      .set({
+        status: windsorFailed ? "failed" : "succeeded",
+        completedAt,
+        discoveredAccountCount: input.discoveredAccountCount,
+        performanceRowCount: totals.performanceRowCount,
+        leadRowCount: totals.leadRowCount,
+        errorMessage: windsorFailed
+          ? "One or more Windsor targets failed"
+          : null,
+      })
+      .where(eq(syncRuns.id, input.windsorRunId));
+    await tx
+      .update(allClientSyncRuns)
+      .set({
+        status: failed ? "failed" : "succeeded",
+        completedAt,
+        heartbeatAt: completedAt,
+        discoveredAccountCount: input.discoveredAccountCount,
+        ...totals,
+        errorMessage: failed
+          ? "One or more synchronization targets failed"
+          : null,
+      })
+      .where(eq(allClientSyncRuns.id, input.runId));
+  });
   const [summary] = await db
     .select()
     .from(allClientSyncRuns)
-    .where(eq(allClientSyncRuns.id, run.id))
+    .where(eq(allClientSyncRuns.id, input.runId))
     .limit(1);
   if (!summary) throw new Error("Completed synchronization run disappeared");
   return { ...summary, targets: targetRows };
+}
+
+export async function syncAllClients(
+  requestedByUserId: string,
+  dependencies: {
+    windsorClient?: WindsorClient;
+    ghlConfig?: GhlConfig;
+    ghlClient?: GhlClient;
+  } = {},
+) {
+  const startedAt = new Date();
+  const windsorClient = dependencies.windsorClient ?? new WindsorClient();
+  const ghlConfig = dependencies.ghlConfig ?? (await loadStoredGhlConfig());
+  const ghlClient = dependencies.ghlClient ?? new GhlClient(ghlConfig.baseUrl);
+  const run = await createRun(requestedByUserId, startedAt);
+  let windsorRunId: string | null = null;
+
+  try {
+    const activeClients = await db
+      .select({ id: clients.id, slug: clients.slug, name: clients.name })
+      .from(clients)
+      .where(eq(clients.status, "active"));
+    const activeClientsBySlug = new Map(
+      activeClients.map((client) => [client.slug, client]),
+    );
+    const targetIds = await createTargets({
+      runId: run.id,
+      startedAt,
+      activeClients,
+      ghlConfig,
+    });
+
+    const [windsorRun] = await db
+      .insert(syncRuns)
+      .values({ dataProvider: "windsor" })
+      .returning({ id: syncRuns.id });
+    if (!windsorRun) throw new Error("Could not create Windsor provider run");
+    windsorRunId = windsorRun.id;
+    await db
+      .update(allClientSyncRuns)
+      .set({ windsorSyncRunId: windsorRun.id })
+      .where(eq(allClientSyncRuns.id, run.id));
+
+    const { discoveredAccountCount } = await syncWindsorTargets({
+      client: windsorClient,
+      runId: run.id,
+      activeClients,
+      targetIds,
+    });
+    await syncGhlTargets({
+      client: ghlClient,
+      config: ghlConfig,
+      runId: run.id,
+      runStartedAt: startedAt,
+      activeClientsBySlug,
+      targetIds,
+    });
+    return await finishRun({
+      runId: run.id,
+      windsorRunId,
+      discoveredAccountCount,
+    });
+  } catch (error) {
+    await failUnexpectedRun(run.id, windsorRunId, error);
+    throw error;
+  }
 }

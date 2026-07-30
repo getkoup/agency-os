@@ -37,10 +37,10 @@ export function SyncAllClientsButton({
   const running = mutation.isPending || serverRunIsActive;
 
   useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => router.refresh(), 3_000);
+    if (!serverRunIsActive || mutation.isPending) return;
+    const timer = window.setInterval(() => router.refresh(), 10_000);
     return () => window.clearInterval(timer);
-  }, [router, running]);
+  }, [mutation.isPending, router, serverRunIsActive]);
 
   const failedTargets =
     mutation.data?.targets.filter((target) => target.status === "failed") ?? [];

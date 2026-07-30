@@ -2,6 +2,8 @@ import "server-only";
 
 import { z } from "zod";
 
+import { GhlRateLimiter } from "~/server/ghl/rate-limiter";
+
 const contactSchema = z
   .object({
     id: z.string().min(1),
@@ -136,6 +138,24 @@ export type GhlContact = z.infer<typeof contactResponseSchema>["contact"];
 
 const MAX_REQUEST_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 30_000;
+const GHL_BURST_INTERVAL_MS = 10_000;
+const GHL_BURST_REQUEST_BUDGET = 80;
+const GHL_RATE_LIMIT_SAFETY_RATIO = 0.8;
+const BASE_RETRY_DELAY_MS = 250;
+
+type GhlClientOptions = {
+  now?: () => number;
+  random?: () => number;
+};
+
+type GhlRateLimitSnapshot = {
+  dailyLimit: number | null;
+  dailyRemaining: number | null;
+  intervalMs: number | null;
+  maxRequests: number | null;
+  remaining: number | null;
+  retryAfterMs: number | null;
+};
 
 function defaultWait(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -145,50 +165,198 @@ function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
-function retryDelayMs(response: Response | null, attempt: number): number {
-  const retryAfter = response?.headers.get("retry-after");
-  const retryAfterSeconds = retryAfter ? Number(retryAfter) : Number.NaN;
-  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
-    return Math.min(retryAfterSeconds * 1_000, 5_000);
+function nonNegativeHeader(headers: Headers, name: string): number | null {
+  const value = headers.get(name);
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function retryAfterMs(headers: Headers, now: number): number | null {
+  const value = headers.get("retry-after");
+  if (value === null) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const retryAt = Date.parse(value);
+  return Number.isFinite(retryAt) ? Math.max(0, retryAt - now) : null;
+}
+
+function rateLimitSnapshot(
+  response: Response,
+  now: number,
+): GhlRateLimitSnapshot {
+  return {
+    dailyLimit: nonNegativeHeader(response.headers, "x-ratelimit-limit-daily"),
+    dailyRemaining: nonNegativeHeader(
+      response.headers,
+      "x-ratelimit-daily-remaining",
+    ),
+    intervalMs: nonNegativeHeader(
+      response.headers,
+      "x-ratelimit-interval-milliseconds",
+    ),
+    maxRequests: nonNegativeHeader(response.headers, "x-ratelimit-max"),
+    remaining: nonNegativeHeader(response.headers, "x-ratelimit-remaining"),
+    retryAfterMs: retryAfterMs(response.headers, now),
+  };
+}
+
+function jitteredBackoffMs(attempt: number, random: () => number): number {
+  const randomValue = random();
+  const jitter = Number.isFinite(randomValue)
+    ? Math.min(1, Math.max(0, randomValue))
+    : 0.5;
+  return Math.ceil(BASE_RETRY_DELAY_MS * 2 ** attempt * (1 + jitter));
+}
+
+function retryDelayMs(
+  response: Response | null,
+  attempt: number,
+  now: number,
+  random: () => number,
+): number {
+  const backoffMs = jitteredBackoffMs(attempt, random);
+  if (!response) return backoffMs;
+  const snapshot = rateLimitSnapshot(response, now);
+  if (response.status === 429) {
+    const providerDelayMs = Math.max(
+      snapshot.retryAfterMs ?? 0,
+      snapshot.intervalMs ?? GHL_BURST_INTERVAL_MS,
+    );
+    return providerDelayMs + backoffMs;
   }
-  return 250 * 2 ** attempt;
+  return Math.max(backoffMs, snapshot.retryAfterMs ?? 0);
+}
+
+function failedResponseError(
+  operation: string,
+  response: Response,
+  now: number,
+): Error {
+  if (response.status !== 429) {
+    return new Error(`${operation} failed with status ${response.status}`);
+  }
+  const snapshot = rateLimitSnapshot(response, now);
+  const details = [
+    snapshot.remaining === null ? null : `remaining=${snapshot.remaining}`,
+    snapshot.intervalMs === null ? null : `intervalMs=${snapshot.intervalMs}`,
+    snapshot.dailyRemaining === null
+      ? null
+      : `dailyRemaining=${snapshot.dailyRemaining}`,
+  ].filter((detail): detail is string => detail !== null);
+  const suffix = details.length > 0 ? ` (${details.join(", ")})` : "";
+  return new Error(
+    `${operation} failed with status ${response.status}${suffix}`,
+  );
 }
 
 export class GhlClient {
+  readonly #now: () => number;
+  readonly #random: () => number;
+  readonly #rateLimiter: GhlRateLimiter;
+
   constructor(
     private readonly baseUrl: URL,
     private readonly fetcher: typeof fetch = fetch,
     private readonly wait: (delayMs: number) => Promise<void> = defaultWait,
-  ) {}
+    options: GhlClientOptions = {},
+  ) {
+    this.#now = options.now ?? Date.now;
+    this.#random = options.random ?? Math.random;
+    this.#rateLimiter = new GhlRateLimiter({
+      maxRequests: GHL_BURST_REQUEST_BUDGET,
+      intervalMs: GHL_BURST_INTERVAL_MS,
+      now: this.#now,
+      wait: this.wait,
+    });
+  }
 
   async #request(
     url: URL,
     init: RequestInit,
     operation: string,
+    resourceId: string,
   ): Promise<Response> {
     for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
-      let response: Response | null = null;
+      await this.#rateLimiter.acquire(resourceId);
+      let response: Response;
       try {
         const requestSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
         const signal = init.signal
           ? AbortSignal.any([init.signal, requestSignal])
           : requestSignal;
         response = await this.fetcher(url, { ...init, signal });
-        if (
-          response.ok ||
-          !isRetryableStatus(response.status) ||
-          attempt === MAX_REQUEST_ATTEMPTS - 1
-        ) {
-          return response;
-        }
       } catch (error) {
         if (attempt === MAX_REQUEST_ATTEMPTS - 1) {
           throw new Error(`${operation} failed`, { cause: error });
         }
+        await this.wait(retryDelayMs(null, attempt, this.#now(), this.#random));
+        continue;
       }
-      await this.wait(retryDelayMs(response, attempt));
+
+      const snapshot = this.#observeRateLimit(resourceId, operation, response);
+      if (
+        response.ok ||
+        !isRetryableStatus(response.status) ||
+        snapshot.dailyRemaining === 0 ||
+        attempt === MAX_REQUEST_ATTEMPTS - 1
+      ) {
+        return response;
+      }
+
+      const delayMs = retryDelayMs(
+        response,
+        attempt,
+        this.#now(),
+        this.#random,
+      );
+      if (response.status === 429) {
+        this.#rateLimiter.blockFor(resourceId, delayMs);
+      } else {
+        await this.wait(delayMs);
+      }
     }
     throw new Error(`${operation} failed`);
+  }
+
+  #observeRateLimit(
+    resourceId: string,
+    operation: string,
+    response: Response,
+  ): GhlRateLimitSnapshot {
+    const snapshot = rateLimitSnapshot(response, this.#now());
+    this.#rateLimiter.updateWindow(resourceId, {
+      maxRequests:
+        snapshot.maxRequests === null
+          ? undefined
+          : Math.max(
+              1,
+              Math.floor(snapshot.maxRequests * GHL_RATE_LIMIT_SAFETY_RATIO),
+            ),
+      intervalMs: snapshot.intervalMs ?? undefined,
+    });
+    if (snapshot.remaining === 0) {
+      this.#rateLimiter.blockFor(
+        resourceId,
+        snapshot.intervalMs ?? GHL_BURST_INTERVAL_MS,
+      );
+    }
+    if (snapshot.dailyRemaining === 0) {
+      this.#rateLimiter.markDailyExhausted(resourceId);
+    }
+    if (response.status === 429) {
+      console.warn("GHL API rate limit reached", {
+        operation,
+        locationId: resourceId,
+        dailyLimit: snapshot.dailyLimit,
+        dailyRemaining: snapshot.dailyRemaining,
+        intervalMs: snapshot.intervalMs,
+        maxRequests: snapshot.maxRequests,
+        remaining: snapshot.remaining,
+        retryAfterMs: snapshot.retryAfterMs,
+      });
+    }
+    return snapshot;
   }
 
   async locationTimezone(input: {
@@ -209,11 +377,10 @@ export class GhlClient {
         },
       },
       "GHL location request",
+      input.locationId,
     );
     if (!response.ok) {
-      throw new Error(
-        `GHL location request failed with status ${response.status}`,
-      );
+      throw failedResponseError("GHL location request", response, this.#now());
     }
     const result = locationSchema.parse(await response.json());
     if (result.location.id !== input.locationId) {
@@ -238,11 +405,10 @@ export class GhlClient {
         },
       },
       "GHL calendar request",
+      input.locationId,
     );
     if (!response.ok) {
-      throw new Error(
-        `GHL calendar request failed with status ${response.status}`,
-      );
+      throw failedResponseError("GHL calendar request", response, this.#now());
     }
     return calendarsSchema
       .parse(await response.json())
@@ -271,10 +437,13 @@ export class GhlClient {
         },
       },
       "GHL calendar event request",
+      input.locationId,
     );
     if (!response.ok) {
-      throw new Error(
-        `GHL calendar event request failed with status ${response.status}`,
+      throw failedResponseError(
+        "GHL calendar event request",
+        response,
+        this.#now(),
       );
     }
     return calendarEventsSchema
@@ -288,6 +457,7 @@ export class GhlClient {
 
   async contact(input: {
     contactId: string;
+    locationId: string;
     token: string;
   }): Promise<GhlContact> {
     const url = new URL(
@@ -304,11 +474,10 @@ export class GhlClient {
         },
       },
       "GHL contact request",
+      input.locationId,
     );
     if (!response.ok) {
-      throw new Error(
-        `GHL contact request failed with status ${response.status}`,
-      );
+      throw failedResponseError("GHL contact request", response, this.#now());
     }
     const contact = contactResponseSchema.parse(await response.json()).contact;
     if (contact.id !== input.contactId) {
@@ -346,9 +515,14 @@ export class GhlClient {
           },
         },
         "GHL opportunity request",
+        input.locationId,
       );
       if (!response.ok) {
-        throw new Error(`GHL request failed with status ${response.status}`);
+        throw failedResponseError(
+          "GHL opportunity request",
+          response,
+          this.#now(),
+        );
       }
       const page = pageSchema.parse(await response.json());
       const rows = page.opportunities

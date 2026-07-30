@@ -11,8 +11,11 @@ import type {
 } from "~/server/ghl/client";
 import { upsertGhlAppointmentBatch } from "~/server/ghl/appointment-persistence";
 import { upsertGhlOpportunityPage } from "~/server/ghl/persistence";
+import { mapInBatches } from "~/server/sync/batch";
 
 const REPLAY_OVERLAP_MS = 5 * 60 * 1000;
+const GHL_CALENDAR_WINDOW_BATCH_SIZE = 5;
+const GHL_CONTACT_FETCH_BATCH_SIZE = 20;
 const APPOINTMENT_HISTORY_MS = 90 * 24 * 60 * 60 * 1_000;
 const APPOINTMENT_FUTURE_MS = 180 * 24 * 60 * 60 * 1_000;
 const APPOINTMENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -98,38 +101,56 @@ export async function syncGhlLocation(input: {
   const appointmentThrough = new Date(
     input.runStartedAt.getTime() + APPOINTMENT_FUTURE_MS,
   );
-  for (const calendar of calendars) {
+  const calendarWindows = calendars.flatMap((calendar) => {
+    const windows: Array<{ calendarId: string; start: Date; end: Date }> = [];
     for (
       let windowStart = appointmentFloor;
       windowStart < appointmentThrough;
       windowStart = new Date(windowStart.getTime() + APPOINTMENT_WINDOW_MS)
     ) {
-      const windowEnd = new Date(
-        Math.min(
-          windowStart.getTime() + APPOINTMENT_WINDOW_MS,
-          appointmentThrough.getTime(),
-        ),
-      );
-      const rows = await input.client.calendarEvents({
-        locationId: input.locationId,
+      windows.push({
         calendarId: calendar.id,
-        token: input.token,
         start: windowStart,
-        end: windowEnd,
+        end: new Date(
+          Math.min(
+            windowStart.getTime() + APPOINTMENT_WINDOW_MS,
+            appointmentThrough.getTime(),
+          ),
+        ),
       });
-      for (const event of rows) events.set(event.id, event);
-      await input.onPage?.();
     }
+    return windows;
+  });
+  const eventPages = await mapInBatches(
+    calendarWindows,
+    GHL_CALENDAR_WINDOW_BATCH_SIZE,
+    (window) =>
+      input.client.calendarEvents({
+        locationId: input.locationId,
+        calendarId: window.calendarId,
+        token: input.token,
+        start: window.start,
+        end: window.end,
+      }),
+    input.onPage,
+  );
+  for (const rows of eventPages) {
+    for (const event of rows) events.set(event.id, event);
   }
-  const contacts = new Map<string, GhlContact>();
-  for (const contactId of new Set(
-    [...events.values()].map((event) => event.contactId),
-  )) {
-    contacts.set(
-      contactId,
-      await input.client.contact({ contactId, token: input.token }),
-    );
-  }
+  const contactRows = await mapInBatches(
+    [...new Set([...events.values()].map((event) => event.contactId))],
+    GHL_CONTACT_FETCH_BATCH_SIZE,
+    (contactId) =>
+      input.client.contact({
+        contactId,
+        locationId: input.locationId,
+        token: input.token,
+      }),
+    input.onPage,
+  );
+  const contacts = new Map<string, GhlContact>(
+    contactRows.map((contact) => [contact.id, contact]),
+  );
   const appointmentSummary = await upsertGhlAppointmentBatch({
     mappingId: mapping.id,
     clientId: input.clientId,

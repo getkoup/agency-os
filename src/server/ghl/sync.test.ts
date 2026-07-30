@@ -271,4 +271,115 @@ describe("syncGhlLocation", () => {
       .where(eq(integrationMappings.clientId, clientId));
     expect(after?.value).toEqual(before?.value);
   });
+
+  it("fetches appointment contacts in bounded concurrent batches", async () => {
+    const events = Array.from({ length: 25 }, (_, index) => ({
+      id: `batched-event-${index + 1}`,
+      locationId: "test-location",
+      calendarId: "calendar-1",
+      contactId: `batched-contact-${index + 1}`,
+      appointmentStatus: "confirmed",
+      startTime: "2026-07-16T14:00:00.000Z",
+      endTime: "2026-07-16T15:00:00.000Z",
+      dateAdded: "2026-07-15T12:00:00.000Z",
+      dateUpdated: "2026-07-15T12:00:00.000Z",
+      title: `Batched appointment ${index + 1}`,
+      deleted: false,
+    }));
+    let calendarPageCount = 0;
+    let activeCalendarRequests = 0;
+    let maximumCalendarConcurrency = 0;
+    let activeContactRequests = 0;
+    let maximumContactConcurrency = 0;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (request) => {
+        const url = new URL(
+          request instanceof URL
+            ? request.href
+            : typeof request === "string"
+              ? request
+              : request.url,
+        );
+        if (url.pathname.startsWith("/locations/")) {
+          return Response.json({
+            location: {
+              id: "test-location",
+              timezone: "America/New_York",
+            },
+          });
+        }
+        if (url.pathname === "/opportunities/search") {
+          return Response.json({ opportunities: [], meta: {} });
+        }
+        if (url.pathname === "/calendars/") {
+          return Response.json({
+            calendars: [
+              {
+                id: "calendar-1",
+                locationId: "test-location",
+                name: "Main calendar",
+                isActive: true,
+              },
+            ],
+          });
+        }
+        if (url.pathname === "/calendars/events") {
+          const pageEvents = calendarPageCount === 0 ? events : [];
+          calendarPageCount += 1;
+          activeCalendarRequests += 1;
+          maximumCalendarConcurrency = Math.max(
+            maximumCalendarConcurrency,
+            activeCalendarRequests,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          activeCalendarRequests -= 1;
+          return Response.json({ events: pageEvents });
+        }
+        if (url.pathname.startsWith("/contacts/")) {
+          const contactId = decodeURIComponent(url.pathname.split("/").at(-1)!);
+          activeContactRequests += 1;
+          maximumContactConcurrency = Math.max(
+            maximumContactConcurrency,
+            activeContactRequests,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          activeContactRequests -= 1;
+          return Response.json({
+            contact: {
+              id: contactId,
+              name: contactId,
+              email: `${contactId}@example.com`,
+              phone: null,
+              tags: [],
+              source: "Facebook",
+              attributionSource: null,
+              lastAttributionSource: null,
+              dateAdded: "2026-07-15T12:00:00.000Z",
+              dateUpdated: "2026-07-15T12:00:00.000Z",
+            },
+          });
+        }
+        throw new Error(`Unexpected GHL test request: ${url.pathname}`);
+      });
+    const onPage = vi.fn(() => Promise.resolve());
+
+    const summary = await syncGhlLocation({
+      client: new GhlClient(new URL("https://ghl.example"), fetcher),
+      clientId,
+      locationId: "test-location",
+      token: "test-token",
+      runStartedAt: new Date("2026-07-15T10:30:00.000Z"),
+      onPage,
+    });
+
+    expect(summary).toMatchObject({
+      contactRowCount: 25,
+      appointmentRowCount: 25,
+      matchedAppointmentCount: 0,
+    });
+    expect(maximumCalendarConcurrency).toBe(5);
+    expect(maximumContactConcurrency).toBe(20);
+    expect(onPage).toHaveBeenCalledTimes(5);
+  });
 });
