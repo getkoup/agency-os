@@ -23,7 +23,9 @@
     "test": "vitest run",
     "test:migration": "bun scripts/verify-migrations.ts",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "worker:sync": "bun --conditions=react-server src/server/sync/worker-cli.ts",
+    "worker:sync:check": "bun --conditions=react-server src/server/sync/worker-cli.ts --check"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.2",
