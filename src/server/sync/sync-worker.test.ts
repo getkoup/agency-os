@@ -337,6 +337,68 @@ describe("processPendingSyncTargets", () => {
     }
   });
 
+  it.each([400, 401])(
+    "retries transient status %i before permanently failing the target",
+    async (status) => {
+      const run = await syncAllClients(userId, {
+        windsorClient: emptyWindsor,
+        ghlConfig,
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(null, { status }));
+      const ghlClient = new GhlClient(ghlConfig.baseUrl, fetcher);
+
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        await processPendingSyncTargets(
+          { runId: run.id, maxChunks: 1 },
+          { ghlClient, ghlConfig, windsorClient: emptyWindsor },
+        );
+
+        const [target] = await db
+          .select({
+            id: allClientSyncTargets.id,
+            status: allClientSyncTargets.status,
+            failureCount: allClientSyncTargets.failureCount,
+            errorMessage: allClientSyncTargets.errorMessage,
+          })
+          .from(allClientSyncTargets)
+          .where(
+            and(
+              eq(allClientSyncTargets.runId, run.id),
+              eq(allClientSyncTargets.provider, "ghl"),
+            ),
+          );
+        expect(target).toMatchObject(
+          attempt < 3
+            ? {
+                status: "pending",
+                failureCount: attempt,
+                errorMessage: `Retry ${attempt}/3: GHL location request failed with status ${status}`,
+              }
+            : {
+                status: "failed",
+                failureCount: 3,
+                errorMessage: `GHL location request failed with status ${status}`,
+              },
+        );
+        if (attempt < 3 && target) {
+          await db
+            .update(allClientSyncTargets)
+            .set({ availableAt: new Date(0) })
+            .where(eq(allClientSyncTargets.id, target.id));
+        }
+      }
+
+      const [completedRun] = await db
+        .select({ status: allClientSyncRuns.status })
+        .from(allClientSyncRuns)
+        .where(eq(allClientSyncRuns.id, run.id));
+      expect(fetcher).toHaveBeenCalledTimes(3);
+      expect(completedRun?.status).toBe("failed");
+    },
+  );
+
   it("fails permanent provider errors without retrying the target", async () => {
     const run = await syncAllClients(userId, {
       windsorClient: emptyWindsor,
@@ -344,7 +406,7 @@ describe("processPendingSyncTargets", () => {
     });
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 401 }));
+      .mockResolvedValue(new Response(null, { status: 403 }));
 
     await processPendingSyncTargets(
       { runId: run.id, maxChunks: 1 },
@@ -377,7 +439,7 @@ describe("processPendingSyncTargets", () => {
     expect(failedTarget).toMatchObject({
       status: "failed",
       failureCount: 1,
-      errorMessage: "GHL location request failed with status 401",
+      errorMessage: "GHL location request failed with status 403",
     });
   });
 });

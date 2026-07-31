@@ -30,6 +30,10 @@ import {
   protectedProcedure,
 } from "~/server/api/trpc";
 import {
+  FailedClientSyncTargetsNotFoundError,
+  retryClientSync,
+} from "~/server/sync/retry-client-sync";
+import {
   syncAllClients,
   SyncAlreadyRunningError,
 } from "~/server/sync/sync-all-clients";
@@ -191,6 +195,50 @@ export const dashboardRouter = createTRPCRouter({
       });
     }
   }),
+  retryClientSync: agencyProcedure
+    .input(
+      z.object({
+        clientId: z.string().uuid(),
+        sourceRunId: z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const run = await retryClientSync({
+          ...input,
+          requestedByUserId: ctx.currentUser.id,
+        });
+        scheduleSyncWorker(run.id);
+        return run;
+      } catch (error) {
+        if (error instanceof SyncAlreadyRunningError) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: error.message,
+            cause: error,
+          });
+        }
+        if (error instanceof FailedClientSyncTargetsNotFoundError) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: error.message,
+            cause: error,
+          });
+        }
+        console.error("Client synchronization retry failed", {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown synchronization retry error",
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Client synchronization retry could not start.",
+          cause: error,
+        });
+      }
+    }),
   clients: agencyProcedure
     .input(
       z.object({

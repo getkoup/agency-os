@@ -4,6 +4,7 @@ import { type UserRole } from "~/lib/roles";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
+import { retryClientSync } from "~/server/sync/retry-client-sync";
 import { syncAllClients } from "~/server/sync/sync-all-clients";
 import { scheduleSyncWorker } from "~/server/sync/schedule-worker";
 
@@ -25,6 +26,10 @@ vi.mock("~/features/dashboard/server/queries", () => ({
   getSyncRuns: vi.fn(),
   getTopCampaigns: vi.fn(),
   getTrend: vi.fn(),
+}));
+vi.mock("~/server/sync/retry-client-sync", () => ({
+  retryClientSync: vi.fn(),
+  FailedClientSyncTargetsNotFoundError: class FailedClientSyncTargetsNotFoundError extends Error {},
 }));
 vi.mock("~/server/sync/sync-all-clients", () => ({
   syncAllClients: vi.fn(),
@@ -115,4 +120,37 @@ describe("dashboard.syncAllClients authorization", () => {
     });
     expect(syncAllClients).not.toHaveBeenCalled();
   });
+});
+
+describe("dashboard.retryClientSync authorization", () => {
+  const input = {
+    clientId: "00000000-0000-4000-8000-000000000002",
+    sourceRunId: "00000000-0000-4000-8000-000000000003",
+  };
+
+  beforeEach(() => {
+    vi.mocked(retryClientSync).mockReset().mockResolvedValue(completedRun);
+    vi.mocked(scheduleSyncWorker).mockReset();
+  });
+
+  it.each(["owner", "admin"] as const)("allows %s callers", async (role) => {
+    await expect(callerFor(role).retryClientSync(input)).resolves.toEqual(
+      completedRun,
+    );
+    expect(retryClientSync).toHaveBeenCalledWith({
+      ...input,
+      requestedByUserId: "user-1",
+    });
+    expect(scheduleSyncWorker).toHaveBeenCalledWith(completedRun.id);
+  });
+
+  it.each(["manager", "client"] as const)(
+    "rejects %s callers",
+    async (role) => {
+      await expect(
+        callerFor(role).retryClientSync(input),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(retryClientSync).not.toHaveBeenCalled();
+    },
+  );
 });

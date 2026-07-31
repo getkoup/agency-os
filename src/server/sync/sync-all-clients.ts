@@ -24,7 +24,7 @@ interface ActiveClient {
 
 export class SyncAlreadyRunningError extends Error {
   constructor() {
-    super("An all-client synchronization is already running");
+    super("A synchronization is already running");
     this.name = "SyncAlreadyRunningError";
   }
 }
@@ -33,7 +33,7 @@ function safeError(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 500) : "Unknown error";
 }
 
-async function recoverStaleRuns(startedAt: Date) {
+export async function recoverStaleSyncRuns(startedAt: Date) {
   const staleRuns = await db
     .update(allClientSyncRuns)
     .set({
@@ -95,7 +95,7 @@ async function recoverStaleRuns(startedAt: Date) {
 }
 
 async function createRun(requestedByUserId: string, startedAt: Date) {
-  await recoverStaleRuns(startedAt);
+  await recoverStaleSyncRuns(startedAt);
   try {
     return await db.transaction(async (tx) => {
       const [run] = await tx
@@ -292,7 +292,7 @@ async function failRunSetup(
   });
 }
 
-async function getRun(runId: string) {
+export async function getSyncRun(runId: string) {
   const [run] = await db
     .select({
       id: allClientSyncRuns.id,
@@ -375,7 +375,7 @@ export async function syncAllClients(
       .update(allClientSyncRuns)
       .set({ discoveredAccountCount, heartbeatAt: new Date() })
       .where(eq(allClientSyncRuns.id, run.id));
-    return getRun(run.id);
+    return getSyncRun(run.id);
   } catch (error) {
     await failRunSetup(run.id, run.windsorRunId, error);
     throw error;

@@ -41,7 +41,7 @@ function safeError(error: unknown): string {
 
 function isPermanentProviderError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return /status (400|401|403|404|409|422)\b/.test(error.message);
+  return /status (403|404|409|422)\b/.test(error.message);
 }
 
 async function acquireWorkerLease(input: {

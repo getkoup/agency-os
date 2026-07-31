@@ -14,6 +14,7 @@ import {
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
+import { RetryClientSyncButton } from "~/features/synchronization/retry-client-sync-button";
 import { SyncAllClientsButton } from "~/features/synchronization/sync-all-clients-button";
 import { isAllClientSyncRunActive } from "~/server/sync/run-status";
 import { api } from "~/trpc/server";
@@ -34,6 +35,34 @@ function formatDuration(startedAt: Date, completedAt: Date | null) {
     : "Running";
 }
 
+function isFirstFailedTargetForClient(
+  target: { clientId: string | null; id: string; status: string },
+  targets: Array<{ clientId: string | null; id: string; status: string }>,
+) {
+  if (target.status !== "failed" || !target.clientId) return false;
+  return (
+    targets.find(
+      (candidate) =>
+        candidate.status === "failed" && candidate.clientId === target.clientId,
+    )?.id === target.id
+  );
+}
+
+function isLatestRunForClient(
+  runId: string,
+  clientId: string,
+  runs: Array<{
+    id: string;
+    targets: Array<{ clientId: string | null }>;
+  }>,
+) {
+  return (
+    runs.find((run) =>
+      run.targets.some((target) => target.clientId === clientId),
+    )?.id === runId
+  );
+}
+
 export default async function SynchronizationPage() {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
@@ -41,24 +70,21 @@ export default async function SynchronizationPage() {
     api.dashboard.syncRuns({ page: 1, pageSize: 25 }),
     api.dashboard.allClientSyncRuns(),
   ]);
+  const serverRunIsActive = aggregateRuns.some((run) =>
+    isAllClientSyncRunActive(run),
+  );
   return (
     <div className="mx-auto max-w-[96rem] space-y-7">
       <PageHeader
         eyebrow="Operations"
         title="Synchronization"
-        description="Run Windsor and configured GoHighLevel imports for every active client."
-        actions={
-          <SyncAllClientsButton
-            serverRunIsActive={aggregateRuns.some((run) =>
-              isAllClientSyncRunActive(run),
-            )}
-          />
-        }
+        description="Run Windsor and configured GoHighLevel imports, then retry individual client failures without repeating completed work."
+        actions={<SyncAllClientsButton serverRunIsActive={serverRunIsActive} />}
       />
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
         <CardHeader>
           <CardTitle className="tracking-tight">
-            All-client runs ({aggregateRuns.length})
+            Synchronization runs ({aggregateRuns.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -117,6 +143,7 @@ export default async function SynchronizationPage() {
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Records</TableHead>
                         <TableHead>Context</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -156,6 +183,25 @@ export default async function SynchronizationPage() {
                                   ? "Processing"
                                   : "Completed")}
                           </TableCell>
+                          <TableCell className="text-right">
+                            {isFirstFailedTargetForClient(
+                              target,
+                              run.targets,
+                            ) &&
+                            target.clientId &&
+                            isLatestRunForClient(
+                              run.id,
+                              target.clientId,
+                              aggregateRuns,
+                            ) ? (
+                              <RetryClientSyncButton
+                                clientId={target.clientId}
+                                clientName={target.clientName}
+                                disabled={serverRunIsActive}
+                                sourceRunId={run.id}
+                              />
+                            ) : null}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -166,7 +212,7 @@ export default async function SynchronizationPage() {
           ) : (
             <EmptyState
               icon={RefreshCw}
-              title="No all-client runs"
+              title="No synchronization runs"
               description="Use Sync all clients to start the first manual import."
             />
           )}
