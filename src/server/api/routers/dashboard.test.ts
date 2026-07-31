@@ -5,6 +5,7 @@ import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import { syncAllClients } from "~/server/sync/sync-all-clients";
+import { scheduleSyncWorker } from "~/server/sync/schedule-worker";
 
 vi.mock("~/server/db", () => ({ db: {} }));
 vi.mock("~/server/auth", () => ({ auth: vi.fn() }));
@@ -28,6 +29,9 @@ vi.mock("~/features/dashboard/server/queries", () => ({
 vi.mock("~/server/sync/sync-all-clients", () => ({
   syncAllClients: vi.fn(),
   SyncAlreadyRunningError: class SyncAlreadyRunningError extends Error {},
+}));
+vi.mock("~/server/sync/schedule-worker", () => ({
+  scheduleSyncWorker: vi.fn(),
 }));
 
 vi.mock("~/features/synchronization/server/queries", () => ({
@@ -84,6 +88,7 @@ function callerFor(role: UserRole | null) {
 describe("dashboard.syncAllClients authorization", () => {
   beforeEach(() => {
     vi.mocked(syncAllClients).mockReset().mockResolvedValue(completedRun);
+    vi.mocked(scheduleSyncWorker).mockReset();
   });
 
   it.each(["owner", "admin"] as const)("allows %s callers", async (role) => {
@@ -91,6 +96,7 @@ describe("dashboard.syncAllClients authorization", () => {
       completedRun,
     );
     expect(syncAllClients).toHaveBeenCalledWith("user-1");
+    expect(scheduleSyncWorker).toHaveBeenCalledWith(completedRun.id);
   });
 
   it.each(["manager", "client"] as const)(

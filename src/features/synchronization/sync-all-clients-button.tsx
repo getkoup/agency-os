@@ -35,6 +35,7 @@ export function SyncAllClientsButton({
     onError: () => setDialogOpen(true),
   });
   const running = mutation.isPending || serverRunIsActive;
+  const synchronizationQueued = mutation.data?.status === "running";
 
   useEffect(() => {
     if (!serverRunIsActive || mutation.isPending) return;
@@ -68,7 +69,12 @@ export function SyncAllClientsButton({
           <div className="from-primary/12 via-background to-background bg-gradient-to-br p-6">
             <DialogHeader>
               <div className="bg-background mb-2 flex size-11 items-center justify-center rounded-2xl shadow-sm">
-                {mutation.data?.status === "succeeded" ? (
+                {synchronizationQueued ? (
+                  <LoaderCircle
+                    className="text-primary size-6 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : mutation.data?.status === "succeeded" ? (
                   <CheckCircle2
                     className="text-primary size-6"
                     aria-hidden="true"
@@ -81,20 +87,24 @@ export function SyncAllClientsButton({
                 )}
               </div>
               <DialogTitle className="text-xl">
-                {mutation.data?.status === "succeeded"
-                  ? "Synchronization complete"
-                  : "Synchronization needs attention"}
+                {synchronizationQueued
+                  ? "Synchronization queued"
+                  : mutation.data?.status === "succeeded"
+                    ? "Synchronization complete"
+                    : "Synchronization needs attention"}
               </DialogTitle>
               <DialogDescription>
                 {mutation.error
                   ? mutation.error.message
-                  : failedTargets.length
-                    ? `${failedTargets.length} target${failedTargets.length === 1 ? "" : "s"} could not be synchronized.`
-                    : "All configured client data sources finished successfully."}
+                  : synchronizationQueued
+                    ? "Client jobs will continue in the background and resume automatically if interrupted."
+                    : failedTargets.length
+                      ? `${failedTargets.length} target${failedTargets.length === 1 ? "" : "s"} could not be synchronized.`
+                      : "All configured client data sources finished successfully."}
               </DialogDescription>
             </DialogHeader>
           </div>
-          {mutation.data ? (
+          {mutation.data && !synchronizationQueued ? (
             <div className="space-y-4 px-6 pb-2">
               <dl className="grid grid-cols-3 gap-3">
                 {[

@@ -47,7 +47,7 @@ export const allClientSyncStatus = pgEnum("agency_os_all_client_sync_status", [
 ]);
 export const allClientSyncTargetStatus = pgEnum(
   "agency_os_all_client_sync_target_status",
-  ["running", "succeeded", "failed", "skipped"],
+  ["pending", "running", "succeeded", "failed", "skipped"],
 );
 export const opportunityMatchStatus = pgEnum(
   "agency_os_opportunity_match_status",
@@ -757,6 +757,7 @@ export const allClientSyncRuns = createTable(
     status: allClientSyncStatus().default("running").notNull(),
     startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     heartbeatAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    workerLeaseExpiresAt: d.timestamp({ withTimezone: true }),
     completedAt: d.timestamp({ withTimezone: true }),
     windsorSyncRunId: d
       .uuid()
@@ -791,9 +792,14 @@ export const allClientSyncTargets = createTable(
     clientSlug: d.varchar({ length: 100 }).notNull(),
     clientName: d.varchar({ length: 255 }).notNull(),
     provider: d.varchar({ length: 50 }).notNull(),
-    status: allClientSyncTargetStatus().default("running").notNull(),
+    status: allClientSyncTargetStatus().default("pending").notNull(),
     startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    heartbeatAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    availableAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    leaseExpiresAt: d.timestamp({ withTimezone: true }),
     completedAt: d.timestamp({ withTimezone: true }),
+    failureCount: d.integer().default(0).notNull(),
+    checkpoint: d.jsonb().$type<unknown>(),
     sourceAccountCount: d.integer().default(0).notNull(),
     performanceRowCount: d.integer().default(0).notNull(),
     leadRowCount: d.integer().default(0).notNull(),
@@ -809,6 +815,11 @@ export const allClientSyncTargets = createTable(
       t.provider,
     ),
     index("all_client_sync_target_run_idx").on(t.runId),
+    index("all_client_sync_target_queue_idx").on(t.status, t.availableAt),
+    check(
+      "all_client_sync_target_failure_count_nonnegative",
+      sql`${t.failureCount} >= 0`,
+    ),
   ],
 );
 

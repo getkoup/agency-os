@@ -15,6 +15,7 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string()
         : z.string().optional(),
+    CRON_SECRET: z.string().min(32).optional(),
     DATABASE_URL: z.string().url(),
     GHL_CREDENTIALS_ENCRYPTION_KEY: encryptionKey,
     NODE_ENV: z
@@ -24,6 +25,7 @@ export const env = createEnv({
   client: {},
   runtimeEnv: {
     AUTH_SECRET: process.env.AUTH_SECRET,
+    CRON_SECRET: process.env.CRON_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     GHL_CREDENTIALS_ENCRYPTION_KEY: process.env.GHL_CREDENTIALS_ENCRYPTION_KEY,
     NODE_ENV: process.env.NODE_ENV,

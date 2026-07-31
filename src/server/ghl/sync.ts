@@ -1,24 +1,69 @@
 import "server-only";
 
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
+import { upsertGhlAppointmentBatch } from "~/server/ghl/appointment-persistence";
+import type { GhlCalendar, GhlClient, GhlContact } from "~/server/ghl/client";
 import { db } from "~/server/db";
 import { integrationMappings } from "~/server/db/schema";
-import type {
-  GhlCalendarEvent,
-  GhlClient,
-  GhlContact,
-} from "~/server/ghl/client";
-import { upsertGhlAppointmentBatch } from "~/server/ghl/appointment-persistence";
 import { upsertGhlOpportunityPage } from "~/server/ghl/persistence";
 import { mapInBatches } from "~/server/sync/batch";
 
 const REPLAY_OVERLAP_MS = 5 * 60 * 1000;
-const GHL_CALENDAR_WINDOW_BATCH_SIZE = 5;
 const GHL_CONTACT_FETCH_BATCH_SIZE = 20;
 const APPOINTMENT_HISTORY_MS = 90 * 24 * 60 * 60 * 1_000;
 const APPOINTMENT_FUTURE_MS = 180 * 24 * 60 * 60 * 1_000;
-const APPOINTMENT_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+const APPOINTMENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
+const GHL_SYNC_CHECKPOINT_VERSION = 1;
+
+const progressSchema = z.object({
+  contactRowCount: z.number().int().nonnegative(),
+  opportunityRowCount: z.number().int().nonnegative(),
+  matchedOpportunityCount: z.number().int().nonnegative(),
+  appointmentRowCount: z.number().int().nonnegative(),
+  matchedAppointmentCount: z.number().int().nonnegative(),
+});
+
+const checkpointCalendarSchema = z.object({
+  id: z.string().min(1),
+  locationId: z.string().min(1),
+  name: z.string().min(1),
+  isActive: z.boolean(),
+});
+
+const checkpointWindowSchema = z.object({
+  calendarId: z.string().min(1),
+  start: z.string().datetime({ offset: true }),
+  end: z.string().datetime({ offset: true }),
+});
+
+const ghlSyncCheckpointSchema = z.discriminatedUnion("phase", [
+  z.object({
+    version: z.literal(GHL_SYNC_CHECKPOINT_VERSION),
+    phase: z.literal("initialize"),
+  }),
+  z.object({
+    version: z.literal(GHL_SYNC_CHECKPOINT_VERSION),
+    phase: z.literal("opportunities"),
+    mappingId: z.string().uuid(),
+    floor: z.string().datetime({ offset: true }),
+    through: z.string().datetime({ offset: true }),
+    pageUrl: z.string().url().nullable(),
+    visitedPageUrls: z.array(z.string().url()),
+    progress: progressSchema,
+  }),
+  z.object({
+    version: z.literal(GHL_SYNC_CHECKPOINT_VERSION),
+    phase: z.literal("appointments"),
+    mappingId: z.string().uuid(),
+    through: z.string().datetime({ offset: true }),
+    calendars: z.array(checkpointCalendarSchema),
+    windows: z.array(checkpointWindowSchema),
+    nextWindowIndex: z.number().int().nonnegative(),
+    progress: progressSchema,
+  }),
+]);
 
 export interface GhlSyncSummary {
   contactRowCount: number;
@@ -28,14 +73,39 @@ export interface GhlSyncSummary {
   matchedAppointmentCount: number;
 }
 
-export async function syncGhlLocation(input: {
+export type GhlSyncCheckpoint = z.infer<typeof ghlSyncCheckpointSchema>;
+
+export type GhlSyncChunkResult =
+  | { done: false; checkpoint: GhlSyncCheckpoint }
+  | {
+      done: true;
+      summary: GhlSyncSummary & { mappingId: string };
+    };
+
+function emptyProgress(): GhlSyncSummary {
+  return {
+    contactRowCount: 0,
+    opportunityRowCount: 0,
+    matchedOpportunityCount: 0,
+    appointmentRowCount: 0,
+    matchedAppointmentCount: 0,
+  };
+}
+
+function initialCheckpoint(): GhlSyncCheckpoint {
+  return {
+    version: GHL_SYNC_CHECKPOINT_VERSION,
+    phase: "initialize",
+  };
+}
+
+async function prepareLocation(input: {
   client: GhlClient;
   clientId: string;
   locationId: string;
   token: string;
   runStartedAt: Date;
-  onPage?: () => Promise<void>;
-}): Promise<GhlSyncSummary & { mappingId: string }> {
+}): Promise<GhlSyncCheckpoint> {
   const timezone = await input.client.locationTimezone({
     locationId: input.locationId,
     token: input.token,
@@ -67,78 +137,159 @@ export async function syncGhlLocation(input: {
     : mapping.syncFromAt;
   const floor =
     replayFloor < mapping.syncFromAt ? mapping.syncFromAt : replayFloor;
-  const summary: GhlSyncSummary = {
-    contactRowCount: 0,
-    opportunityRowCount: 0,
-    matchedOpportunityCount: 0,
-    appointmentRowCount: 0,
-    matchedAppointmentCount: 0,
+  return {
+    version: GHL_SYNC_CHECKPOINT_VERSION,
+    phase: "opportunities",
+    mappingId: mapping.id,
+    floor: floor.toISOString(),
+    through: input.runStartedAt.toISOString(),
+    pageUrl: null,
+    visitedPageUrls: [],
+    progress: emptyProgress(),
   };
-  for await (const page of input.client.wonOpportunities({
-    locationId: input.locationId,
-    token: input.token,
-    floor,
-    through: input.runStartedAt,
-    onPage: input.onPage,
-  })) {
-    const pageSummary = await upsertGhlOpportunityPage({
-      mappingId: mapping.id,
-      clientId: input.clientId,
-      rows: page,
-    });
-    summary.contactRowCount += pageSummary.contactRowCount;
-    summary.opportunityRowCount += pageSummary.opportunityRowCount;
-    summary.matchedOpportunityCount += pageSummary.matchedOpportunityCount;
-  }
-  const calendars = await input.client.calendars({
-    locationId: input.locationId,
-    token: input.token,
-  });
-  const events = new Map<string, GhlCalendarEvent>();
-  const appointmentFloor = new Date(
-    input.runStartedAt.getTime() - APPOINTMENT_HISTORY_MS,
-  );
-  const appointmentThrough = new Date(
-    input.runStartedAt.getTime() + APPOINTMENT_FUTURE_MS,
-  );
-  const calendarWindows = calendars.flatMap((calendar) => {
-    const windows: Array<{ calendarId: string; start: Date; end: Date }> = [];
+}
+
+function appointmentWindows(
+  calendars: readonly GhlCalendar[],
+  runStartedAt: Date,
+): Array<{ calendarId: string; start: string; end: string }> {
+  const floor = new Date(runStartedAt.getTime() - APPOINTMENT_HISTORY_MS);
+  const through = new Date(runStartedAt.getTime() + APPOINTMENT_FUTURE_MS);
+  return calendars.flatMap((calendar) => {
+    const windows: Array<{ calendarId: string; start: string; end: string }> =
+      [];
     for (
-      let windowStart = appointmentFloor;
-      windowStart < appointmentThrough;
+      let windowStart = floor;
+      windowStart < through;
       windowStart = new Date(windowStart.getTime() + APPOINTMENT_WINDOW_MS)
     ) {
       windows.push({
         calendarId: calendar.id,
-        start: windowStart,
+        start: windowStart.toISOString(),
         end: new Date(
           Math.min(
             windowStart.getTime() + APPOINTMENT_WINDOW_MS,
-            appointmentThrough.getTime(),
+            through.getTime(),
           ),
-        ),
+        ).toISOString(),
       });
     }
     return windows;
   });
-  const eventPages = await mapInBatches(
-    calendarWindows,
-    GHL_CALENDAR_WINDOW_BATCH_SIZE,
-    (window) =>
-      input.client.calendarEvents({
-        locationId: input.locationId,
-        calendarId: window.calendarId,
-        token: input.token,
-        start: window.start,
-        end: window.end,
-      }),
-    input.onPage,
-  );
-  for (const rows of eventPages) {
-    for (const event of rows) events.set(event.id, event);
+}
+
+async function processOpportunityPage(input: {
+  client: GhlClient;
+  clientId: string;
+  locationId: string;
+  token: string;
+  checkpoint: Extract<GhlSyncCheckpoint, { phase: "opportunities" }>;
+  onProgress?: () => Promise<void>;
+}): Promise<GhlSyncChunkResult> {
+  if (
+    input.checkpoint.pageUrl &&
+    input.checkpoint.visitedPageUrls.includes(input.checkpoint.pageUrl)
+  ) {
+    throw new Error("GHL returned a repeated pagination cursor");
   }
+  const page = await input.client.wonOpportunityPage({
+    locationId: input.locationId,
+    token: input.token,
+    floor: new Date(input.checkpoint.floor),
+    through: new Date(input.checkpoint.through),
+    pageUrl: input.checkpoint.pageUrl,
+  });
+  const pageSummary = await upsertGhlOpportunityPage({
+    mappingId: input.checkpoint.mappingId,
+    clientId: input.clientId,
+    rows: page.rows,
+  });
+  const progress = {
+    ...input.checkpoint.progress,
+    contactRowCount:
+      input.checkpoint.progress.contactRowCount + pageSummary.contactRowCount,
+    opportunityRowCount:
+      input.checkpoint.progress.opportunityRowCount +
+      pageSummary.opportunityRowCount,
+    matchedOpportunityCount:
+      input.checkpoint.progress.matchedOpportunityCount +
+      pageSummary.matchedOpportunityCount,
+  };
+  await input.onProgress?.();
+
+  const visitedPageUrls = input.checkpoint.pageUrl
+    ? [...input.checkpoint.visitedPageUrls, input.checkpoint.pageUrl]
+    : input.checkpoint.visitedPageUrls;
+  if (page.nextPageUrl) {
+    if (visitedPageUrls.includes(page.nextPageUrl)) {
+      throw new Error("GHL returned a repeated pagination cursor");
+    }
+    return {
+      done: false,
+      checkpoint: {
+        ...input.checkpoint,
+        pageUrl: page.nextPageUrl,
+        visitedPageUrls,
+        progress,
+      },
+    };
+  }
+
+  const calendars = await input.client.calendars({
+    locationId: input.locationId,
+    token: input.token,
+  });
+  return {
+    done: false,
+    checkpoint: {
+      version: GHL_SYNC_CHECKPOINT_VERSION,
+      phase: "appointments",
+      mappingId: input.checkpoint.mappingId,
+      through: input.checkpoint.through,
+      calendars,
+      windows: appointmentWindows(
+        calendars,
+        new Date(input.checkpoint.through),
+      ),
+      nextWindowIndex: 0,
+      progress,
+    },
+  };
+}
+
+async function processAppointmentWindow(input: {
+  client: GhlClient;
+  clientId: string;
+  locationId: string;
+  token: string;
+  checkpoint: Extract<GhlSyncCheckpoint, { phase: "appointments" }>;
+  onProgress?: () => Promise<void>;
+}): Promise<GhlSyncChunkResult> {
+  const window = input.checkpoint.windows[input.checkpoint.nextWindowIndex];
+  if (!window) {
+    const completedAt = new Date(input.checkpoint.through);
+    await db
+      .update(integrationMappings)
+      .set({ lastSuccessfulSyncAt: completedAt, updatedAt: new Date() })
+      .where(eq(integrationMappings.id, input.checkpoint.mappingId));
+    return {
+      done: true,
+      summary: {
+        mappingId: input.checkpoint.mappingId,
+        ...input.checkpoint.progress,
+      },
+    };
+  }
+
+  const events = await input.client.calendarEvents({
+    locationId: input.locationId,
+    calendarId: window.calendarId,
+    token: input.token,
+    start: new Date(window.start),
+    end: new Date(window.end),
+  });
   const contactRows = await mapInBatches(
-    [...new Set([...events.values()].map((event) => event.contactId))],
+    [...new Set(events.map((event) => event.contactId))],
     GHL_CONTACT_FETCH_BATCH_SIZE,
     (contactId) =>
       input.client.contact({
@@ -146,25 +297,59 @@ export async function syncGhlLocation(input: {
         locationId: input.locationId,
         token: input.token,
       }),
-    input.onPage,
+    input.onProgress,
   );
   const contacts = new Map<string, GhlContact>(
     contactRows.map((contact) => [contact.id, contact]),
   );
   const appointmentSummary = await upsertGhlAppointmentBatch({
-    mappingId: mapping.id,
+    mappingId: input.checkpoint.mappingId,
     clientId: input.clientId,
-    calendars,
-    events: [...events.values()],
+    calendars: input.checkpoint.calendars,
+    events,
     contacts,
   });
-  summary.appointmentRowCount = appointmentSummary.appointmentCount;
-  summary.matchedAppointmentCount = appointmentSummary.matchedAppointmentCount;
-  summary.contactRowCount += contacts.size;
+  const progress = {
+    ...input.checkpoint.progress,
+    contactRowCount: input.checkpoint.progress.contactRowCount + contacts.size,
+    appointmentRowCount:
+      input.checkpoint.progress.appointmentRowCount +
+      appointmentSummary.appointmentCount,
+    matchedAppointmentCount:
+      input.checkpoint.progress.matchedAppointmentCount +
+      appointmentSummary.matchedAppointmentCount,
+  };
+  await input.onProgress?.();
+  return {
+    done: false,
+    checkpoint: {
+      ...input.checkpoint,
+      nextWindowIndex: input.checkpoint.nextWindowIndex + 1,
+      progress,
+    },
+  };
+}
 
-  await db
-    .update(integrationMappings)
-    .set({ lastSuccessfulSyncAt: input.runStartedAt, updatedAt: new Date() })
-    .where(eq(integrationMappings.id, mapping.id));
-  return { mappingId: mapping.id, ...summary };
+export async function processGhlLocationSyncChunk(input: {
+  client: GhlClient;
+  clientId: string;
+  locationId: string;
+  token: string;
+  runStartedAt: Date;
+  checkpoint: unknown;
+  onProgress?: () => Promise<void>;
+}): Promise<GhlSyncChunkResult> {
+  const checkpoint = ghlSyncCheckpointSchema.parse(
+    input.checkpoint ?? initialCheckpoint(),
+  );
+  if (checkpoint.phase === "initialize") {
+    return {
+      done: false,
+      checkpoint: await prepareLocation(input),
+    };
+  }
+  if (checkpoint.phase === "opportunities") {
+    return processOpportunityPage({ ...input, checkpoint });
+  }
+  return processAppointmentWindow({ ...input, checkpoint });
 }

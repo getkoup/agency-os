@@ -33,6 +33,7 @@ import {
   syncAllClients,
   SyncAlreadyRunningError,
 } from "~/server/sync/sync-all-clients";
+import { scheduleSyncWorker } from "~/server/sync/schedule-worker";
 
 export const dashboardRouter = createTRPCRouter({
   currentUser: protectedProcedure.query(({ ctx }) => ctx.currentUser),
@@ -165,7 +166,9 @@ export const dashboardRouter = createTRPCRouter({
   allClientSyncRuns: agencyProcedure.query(() => getAllClientSyncRuns()),
   syncAllClients: agencyProcedure.mutation(async ({ ctx }) => {
     try {
-      return await syncAllClients(ctx.currentUser.id);
+      const run = await syncAllClients(ctx.currentUser.id);
+      scheduleSyncWorker(run.id);
+      return run;
     } catch (error) {
       if (error instanceof SyncAlreadyRunningError) {
         throw new TRPCError({

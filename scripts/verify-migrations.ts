@@ -76,6 +76,8 @@ try {
   await applyMigration(test, "drizzle/0010_overconfident_apocalypse.sql");
   await applyMigration(test, "drizzle/0011_nebulous_red_wolf.sql");
   await applyMigration(test, "drizzle/0012_woozy_karnak.sql");
+  await applyMigration(test, "drizzle/0013_watery_firestar.sql");
+  await applyMigration(test, "drizzle/0014_complex_spencer_smythe.sql");
   const [backfillMapping] = await test`
     select "lastSuccessfulSyncAt"
     from "agency_os_integration_mapping"

@@ -136,6 +136,11 @@ export type GhlCalendar = z.infer<typeof calendarSchema>;
 export type GhlCalendarEvent = z.infer<typeof calendarEventSchema>;
 export type GhlContact = z.infer<typeof contactResponseSchema>["contact"];
 
+export interface GhlOpportunityPage {
+  rows: GhlOpportunity[];
+  nextPageUrl: string | null;
+}
+
 const MAX_REQUEST_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 30_000;
 const GHL_BURST_INTERVAL_MS = 10_000;
@@ -486,75 +491,74 @@ export class GhlClient {
     return contact;
   }
 
-  async *wonOpportunities(input: {
+  async wonOpportunityPage(input: {
     locationId: string;
     token: string;
     floor: Date;
     through: Date;
-    onPage?: () => Promise<void>;
-  }): AsyncGenerator<GhlOpportunity[]> {
-    const firstUrl = new URL("/opportunities/search", this.baseUrl);
-    firstUrl.searchParams.set("locationId", input.locationId);
-    firstUrl.searchParams.set("status", "won");
-    firstUrl.searchParams.set("limit", "100");
-    const seen = new Set<string>();
-    let nextUrl: URL | null = firstUrl;
-
-    while (nextUrl) {
-      if (nextUrl.origin !== this.baseUrl.origin || seen.has(nextUrl.href)) {
-        throw new Error("GHL returned an unsafe pagination cursor");
-      }
-      seen.add(nextUrl.href);
-      const response = await this.#request(
-        nextUrl,
-        {
-          headers: {
-            Authorization: `Bearer ${input.token}`,
-            Version: "v3",
-            Accept: "application/json",
-          },
-        },
-        "GHL opportunity request",
-        input.locationId,
-      );
-      if (!response.ok) {
-        throw failedResponseError(
-          "GHL opportunity request",
-          response,
-          this.#now(),
-        );
-      }
-      const page = pageSchema.parse(await response.json());
-      const rows = page.opportunities
-        .filter((row) => row.locationId === input.locationId)
-        .sort(
-          (left, right) =>
-            Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
-        );
-      const withinWindow = rows.filter((row) => {
-        const wonAt = new Date(row.lastStatusChangeAt);
-        return wonAt >= input.floor && wonAt <= input.through;
-      });
-      yield withinWindow;
-      await input.onPage?.();
-
-      const cursor = page.meta.nextPageUrl;
-      if (
-        !cursor ||
-        rows.every((row) => new Date(row.updatedAt) < input.floor)
-      ) {
-        nextUrl = null;
-      } else {
-        let parsed: URL;
-        try {
-          parsed = new URL(cursor);
-        } catch (error) {
-          throw new Error("GHL returned a malformed pagination cursor", {
-            cause: error,
-          });
-        }
-        nextUrl = parsed;
-      }
+    pageUrl: string | null;
+  }): Promise<GhlOpportunityPage> {
+    const url = input.pageUrl
+      ? this.#parseOpportunityCursor(input.pageUrl)
+      : new URL("/opportunities/search", this.baseUrl);
+    if (!input.pageUrl) {
+      url.searchParams.set("locationId", input.locationId);
+      url.searchParams.set("status", "won");
+      url.searchParams.set("limit", "100");
     }
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "v3",
+          Accept: "application/json",
+        },
+      },
+      "GHL opportunity request",
+      input.locationId,
+    );
+    if (!response.ok) {
+      throw failedResponseError(
+        "GHL opportunity request",
+        response,
+        this.#now(),
+      );
+    }
+    const page = pageSchema.parse(await response.json());
+    const rows = page.opportunities
+      .filter((row) => row.locationId === input.locationId)
+      .sort(
+        (left, right) =>
+          Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+      );
+    const withinWindow = rows.filter((row) => {
+      const wonAt = new Date(row.lastStatusChangeAt);
+      return wonAt >= input.floor && wonAt <= input.through;
+    });
+    const cursor = page.meta.nextPageUrl;
+    const nextPageUrl =
+      !cursor || rows.every((row) => new Date(row.updatedAt) < input.floor)
+        ? null
+        : this.#parseOpportunityCursor(cursor).href;
+    if (nextPageUrl === url.href) {
+      throw new Error("GHL returned a repeated pagination cursor");
+    }
+    return { rows: withinWindow, nextPageUrl };
+  }
+
+  #parseOpportunityCursor(cursor: string): URL {
+    let parsed: URL;
+    try {
+      parsed = new URL(cursor);
+    } catch (error) {
+      throw new Error("GHL returned a malformed pagination cursor", {
+        cause: error,
+      });
+    }
+    if (parsed.origin !== this.baseUrl.origin) {
+      throw new Error("GHL returned an unsafe pagination cursor");
+    }
+    return parsed;
   }
 }

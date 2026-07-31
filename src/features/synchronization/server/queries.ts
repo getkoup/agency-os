@@ -33,7 +33,25 @@ export async function getAllClientSyncRuns() {
     .limit(25);
   if (runs.length === 0) return [];
   const targets = await db
-    .select()
+    .select({
+      id: allClientSyncTargets.id,
+      runId: allClientSyncTargets.runId,
+      clientId: allClientSyncTargets.clientId,
+      integrationMappingId: allClientSyncTargets.integrationMappingId,
+      clientSlug: allClientSyncTargets.clientSlug,
+      clientName: allClientSyncTargets.clientName,
+      provider: allClientSyncTargets.provider,
+      status: allClientSyncTargets.status,
+      startedAt: allClientSyncTargets.startedAt,
+      completedAt: allClientSyncTargets.completedAt,
+      sourceAccountCount: allClientSyncTargets.sourceAccountCount,
+      performanceRowCount: allClientSyncTargets.performanceRowCount,
+      leadRowCount: allClientSyncTargets.leadRowCount,
+      contactRowCount: allClientSyncTargets.contactRowCount,
+      opportunityRowCount: allClientSyncTargets.opportunityRowCount,
+      matchedOpportunityCount: allClientSyncTargets.matchedOpportunityCount,
+      errorMessage: allClientSyncTargets.errorMessage,
+    })
     .from(allClientSyncTargets)
     .where(
       inArray(

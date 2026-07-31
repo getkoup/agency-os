@@ -1,5 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { db } from "~/server/db";
 import {
@@ -15,10 +23,15 @@ import {
   syncAllClients,
   SyncAlreadyRunningError,
 } from "~/server/sync/sync-all-clients";
+import { processPendingSyncTargets } from "~/server/sync/sync-worker";
 import { WindsorClient } from "~/server/windsor/client";
 
 const userId = "sync-orchestrator-test-user";
-const configuredSlugs = ["tint-lab", "diamond-auto-restoration"];
+const configuredSlugs = [
+  "tint-lab",
+  "diamond-auto-restoration",
+  "resumable-sync-client",
+];
 const ghlConfig: GhlConfig = {
   baseUrl: new URL("https://ghl.example"),
   mappings: [
@@ -76,10 +89,22 @@ describe("syncAllClients", () => {
     });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
+    const providerRuns = await db
+      .select({ id: allClientSyncRuns.windsorSyncRunId })
+      .from(allClientSyncRuns)
+      .where(eq(allClientSyncRuns.requestedByUserId, userId));
     await db
       .delete(allClientSyncRuns)
       .where(eq(allClientSyncRuns.requestedByUserId, userId));
+    const providerRunIds = providerRuns.flatMap(({ id }) => (id ? [id] : []));
+    if (providerRunIds.length > 0) {
+      await db.delete(syncRuns).where(inArray(syncRuns.id, providerRunIds));
+    }
+    await db.delete(clients).where(inArray(clients.slug, configuredSlugs));
+  });
+
+  afterAll(async () => {
     await db.delete(users).where(eq(users.id, userId));
   });
 
@@ -92,7 +117,6 @@ describe("syncAllClients", () => {
       syncAllClients(userId, {
         windsorClient: emptyWindsor,
         ghlConfig,
-        ghlClient: emptyGhl,
       }),
     ).rejects.toBeInstanceOf(SyncAlreadyRunningError);
     if (running) {
@@ -100,6 +124,39 @@ describe("syncAllClients", () => {
         .delete(allClientSyncRuns)
         .where(eq(allClientSyncRuns.id, running.id));
     }
+  });
+
+  it("enqueues provider work without waiting for GHL requests", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({
+        slug: "resumable-sync-client",
+        name: "Resumable Sync Client",
+        status: "active",
+      })
+      .returning({ id: clients.id });
+    if (!client) throw new Error("Could not create resumable sync test client");
+    const queuedGhlConfig: GhlConfig = {
+      baseUrl: new URL("https://ghl.example"),
+      mappings: [
+        {
+          clientSlug: "resumable-sync-client",
+          clientName: "Resumable Sync Client",
+          locationId: "resumable-location",
+          token: "resumable-token",
+        },
+      ],
+    };
+
+    const result = await syncAllClients(userId, {
+      windsorClient: emptyWindsor,
+      ghlConfig: queuedGhlConfig,
+    });
+
+    expect(result.status).toBe("running");
+    expect(
+      result.targets.find((target) => target.provider === "ghl")?.status,
+    ).toBe("pending");
   });
 
   it("recovers stale targets and never provisions configured clients", async () => {
@@ -136,14 +193,25 @@ describe("syncAllClients", () => {
     const result = await syncAllClients(userId, {
       windsorClient: emptyWindsor,
       ghlConfig,
-      ghlClient: emptyGhl,
     });
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("running");
     expect(result.targets).toHaveLength(2);
     expect(result.targets.every((target) => target.status === "failed")).toBe(
       true,
     );
+    await processPendingSyncTargets(
+      { runId: result.id, maxChunks: 1 },
+      {
+        windsorClient: emptyWindsor,
+        ghlConfig,
+        ghlClient: emptyGhl,
+      },
+    );
 
+    const [completedRun] = await db
+      .select({ status: allClientSyncRuns.status })
+      .from(allClientSyncRuns)
+      .where(eq(allClientSyncRuns.id, result.id));
     const [recoveredRun] = await db
       .select({ status: allClientSyncRuns.status })
       .from(allClientSyncRuns)
@@ -157,6 +225,7 @@ describe("syncAllClients", () => {
           eq(allClientSyncTargets.runId, staleRun.id),
         ),
       );
+    expect(completedRun?.status).toBe("failed");
     expect(recoveredRun?.status).toBe("failed");
     expect(recoveredTarget?.status).toBe("failed");
     const [recoveredProviderRun] = await db

@@ -149,7 +149,12 @@ export default async function SynchronizationPage() {
                               target.opportunityRowCount}
                           </TableCell>
                           <TableCell className="text-muted-foreground max-w-md text-xs">
-                            {target.errorMessage ?? "Completed"}
+                            {target.errorMessage ??
+                              (target.status === "pending"
+                                ? "Waiting for worker"
+                                : target.status === "running"
+                                  ? "Processing"
+                                  : "Completed")}
                           </TableCell>
                         </TableRow>
                       ))}

@@ -12,7 +12,7 @@ import {
   sourceAccounts,
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
-import { syncGhlLocation } from "~/server/ghl/sync";
+import { processGhlLocationSyncChunk } from "~/server/ghl/sync";
 
 const clientSlug = "ghl-sync-test-client";
 let clientId = "";
@@ -78,7 +78,27 @@ function clientReturning(rows: unknown[]) {
   };
 }
 
-describe("syncGhlLocation", () => {
+async function syncGhlLocation(input: {
+  client: GhlClient;
+  clientId: string;
+  locationId: string;
+  token: string;
+  runStartedAt: Date;
+  onPage?: () => Promise<void>;
+}) {
+  let checkpoint: unknown = null;
+  while (true) {
+    const result = await processGhlLocationSyncChunk({
+      ...input,
+      checkpoint,
+      onProgress: input.onPage,
+    });
+    if (result.done) return result.summary;
+    checkpoint = result.checkpoint;
+  }
+}
+
+describe("processGhlLocationSyncChunk", () => {
   beforeAll(async () => {
     const [client] = await db
       .insert(clients)
@@ -272,7 +292,7 @@ describe("syncGhlLocation", () => {
     expect(after?.value).toEqual(before?.value);
   });
 
-  it("fetches appointment contacts in bounded concurrent batches", async () => {
+  it("checkpoints calendar windows and bounds concurrent contact requests", async () => {
     const events = Array.from({ length: 25 }, (_, index) => ({
       id: `batched-event-${index + 1}`,
       locationId: "test-location",
@@ -378,8 +398,8 @@ describe("syncGhlLocation", () => {
       appointmentRowCount: 25,
       matchedAppointmentCount: 0,
     });
-    expect(maximumCalendarConcurrency).toBe(5);
+    expect(maximumCalendarConcurrency).toBe(1);
     expect(maximumContactConcurrency).toBe(20);
-    expect(onPage).toHaveBeenCalledTimes(5);
+    expect(onPage).toHaveBeenCalledTimes(42);
   });
 });

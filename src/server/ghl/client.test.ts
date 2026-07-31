@@ -26,14 +26,18 @@ const opportunity = {
 
 async function collect(client: GhlClient) {
   const rows = [];
-  for await (const page of client.wonOpportunities({
-    locationId: "location-1",
-    token: "private-token",
-    floor: new Date("2026-07-15T08:00:00.000Z"),
-    through: new Date("2026-07-15T10:00:00.000Z"),
-  })) {
-    rows.push(...page);
-  }
+  let pageUrl: string | null = null;
+  do {
+    const page = await client.wonOpportunityPage({
+      locationId: "location-1",
+      token: "private-token",
+      floor: new Date("2026-07-15T08:00:00.000Z"),
+      through: new Date("2026-07-15T10:00:00.000Z"),
+      pageUrl,
+    });
+    rows.push(...page.rows);
+    pageUrl = page.nextPageUrl;
+  } while (pageUrl);
   return rows;
 }
 
@@ -336,6 +340,49 @@ describe("GhlClient", () => {
       Version: "v3",
     });
   });
+  it("continues opportunity pagination from a safe provider cursor", async () => {
+    const nextPageUrl =
+      "https://services.leadconnectorhq.com/opportunities/search?locationId=location-1&page=2";
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          opportunities: [opportunity],
+          meta: { nextPageUrl },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          opportunities: [
+            {
+              ...opportunity,
+              id: "opportunity-2",
+              updatedAt: "2026-07-15T09:02:00.000Z",
+            },
+          ],
+          meta: {},
+        }),
+      );
+
+    const rows = await collect(
+      new GhlClient(new URL("https://services.leadconnectorhq.com"), fetcher),
+    );
+
+    expect(rows.map(({ id }) => id)).toEqual([
+      "opportunity-1",
+      "opportunity-2",
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const [secondRequest] = fetcher.mock.calls[1]!;
+    const secondRequestedUrl =
+      secondRequest instanceof URL
+        ? secondRequest.href
+        : typeof secondRequest === "string"
+          ? secondRequest
+          : secondRequest.url;
+    expect(secondRequestedUrl).toBe(nextPageUrl);
+  });
+
   it("accepts optional opportunity and embedded contact tags", async () => {
     const tagged = {
       ...opportunity,
