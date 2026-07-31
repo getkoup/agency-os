@@ -163,19 +163,23 @@ async function getRecentlySuccessfulClientProviders(input: {
       },
     )
     .from(allClientSyncTargets)
+    .innerJoin(
+      allClientSyncRuns,
+      eq(allClientSyncRuns.id, allClientSyncTargets.runId),
+    )
     .where(
       and(
         inArray(allClientSyncTargets.clientId, clientIds),
         inArray(allClientSyncTargets.status, ["succeeded", "failed"]),
-        isNotNull(allClientSyncTargets.completedAt),
-        gte(allClientSyncTargets.completedAt, completedAfter),
+        isNotNull(allClientSyncRuns.completedAt),
+        gte(allClientSyncRuns.completedAt, completedAfter),
       ),
     )
     .orderBy(
       asc(allClientSyncTargets.clientId),
       asc(allClientSyncTargets.provider),
+      desc(allClientSyncRuns.completedAt),
       desc(allClientSyncTargets.completedAt),
-      desc(allClientSyncTargets.startedAt),
     );
   return new Set(
     latestTargets.flatMap((target) =>

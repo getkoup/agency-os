@@ -170,6 +170,7 @@ describe("syncAllClients", () => {
       })
       .returning({ id: clients.id });
     if (!client) throw new Error("Could not create buffered sync test client");
+    const targetCompletedAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const completedAt = new Date(Date.now() - 2 * 60 * 1000);
     const [sourceRun] = await db
       .insert(allClientSyncRuns)
@@ -189,7 +190,7 @@ describe("syncAllClients", () => {
         clientName: "Buffered Sync Client",
         provider,
         status: "succeeded" as const,
-        completedAt,
+        completedAt: targetCompletedAt,
       })),
     );
     const bufferedAt = new Date(Date.now() - 60 * 1000);
