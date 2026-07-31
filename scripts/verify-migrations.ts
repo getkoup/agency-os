@@ -19,9 +19,11 @@ async function applyMigration(
   path: string,
 ) {
   const source = await readFile(path, "utf8");
-  for (const statement of source.split("--> statement-breakpoint")) {
-    if (statement.trim()) await sqlClient.unsafe(statement);
-  }
+  await sqlClient.begin(async (transaction) => {
+    for (const statement of source.split("--> statement-breakpoint")) {
+      if (statement.trim()) await transaction.unsafe(statement);
+    }
+  });
 }
 
 async function expectConstraintViolation(
