@@ -1,6 +1,16 @@
 import "server-only";
 
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lt,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "~/server/db";
 import {
@@ -12,7 +22,10 @@ import {
 } from "~/server/db/schema";
 import { loadStoredGhlConfig } from "~/server/ghl/configuration";
 import type { GhlConfig } from "~/server/ghl/env";
-import { ALL_CLIENT_SYNC_STALE_AFTER_MS } from "~/server/sync/run-status";
+import {
+  ALL_CLIENT_SYNC_STALE_AFTER_MS,
+  CLIENT_SYNC_SUCCESS_BUFFER_MS,
+} from "~/server/sync/run-status";
 import { WindsorClient } from "~/server/windsor/client";
 import { discoverWindsorSourceAccounts } from "~/server/windsor/sync";
 
@@ -127,11 +140,58 @@ async function createRun(requestedByUserId: string, startedAt: Date) {
   }
 }
 
+function clientProviderKey(clientId: string, provider: string): string {
+  return `${clientId}:${provider}`;
+}
+
+async function getRecentlySuccessfulClientProviders(input: {
+  activeClients: readonly ActiveClient[];
+  startedAt: Date;
+}): Promise<Set<string>> {
+  const clientIds = input.activeClients.map(({ id }) => id);
+  if (clientIds.length === 0) return new Set();
+  const completedAfter = new Date(
+    input.startedAt.getTime() - CLIENT_SYNC_SUCCESS_BUFFER_MS,
+  );
+  const latestTargets = await db
+    .selectDistinctOn(
+      [allClientSyncTargets.clientId, allClientSyncTargets.provider],
+      {
+        clientId: allClientSyncTargets.clientId,
+        provider: allClientSyncTargets.provider,
+        status: allClientSyncTargets.status,
+      },
+    )
+    .from(allClientSyncTargets)
+    .where(
+      and(
+        inArray(allClientSyncTargets.clientId, clientIds),
+        inArray(allClientSyncTargets.status, ["succeeded", "failed"]),
+        isNotNull(allClientSyncTargets.completedAt),
+        gte(allClientSyncTargets.completedAt, completedAfter),
+      ),
+    )
+    .orderBy(
+      asc(allClientSyncTargets.clientId),
+      asc(allClientSyncTargets.provider),
+      desc(allClientSyncTargets.completedAt),
+      desc(allClientSyncTargets.startedAt),
+    );
+  return new Set(
+    latestTargets.flatMap((target) =>
+      target.clientId && target.status === "succeeded"
+        ? [clientProviderKey(target.clientId, target.provider)]
+        : [],
+    ),
+  );
+}
+
 async function createTargets(input: {
   runId: string;
   startedAt: Date;
   activeClients: readonly ActiveClient[];
   ghlConfig: GhlConfig;
+  recentlySuccessfulClientProviders: ReadonlySet<string>;
 }) {
   const configuredSlugs = new Set(
     input.ghlConfig.mappings.map(({ clientSlug }) => clientSlug),
@@ -140,6 +200,17 @@ async function createTargets(input: {
   const targetValues: Array<typeof allClientSyncTargets.$inferInsert> =
     input.activeClients.flatMap((client) => {
       const hasGhlConfiguration = configuredSlugs.has(client.slug);
+      const recentlySyncedWindsor = input.recentlySuccessfulClientProviders.has(
+        clientProviderKey(client.id, "windsor"),
+      );
+      const recentlySyncedGhl = input.recentlySuccessfulClientProviders.has(
+        clientProviderKey(client.id, "ghl"),
+      );
+      const ghlSkipReason = !hasGhlConfiguration
+        ? "No GHL location configured"
+        : recentlySyncedGhl
+          ? "Successfully synchronized within the last 60 minutes"
+          : null;
       return [
         {
           runId: input.runId,
@@ -147,7 +218,13 @@ async function createTargets(input: {
           clientSlug: client.slug,
           clientName: client.name,
           provider: "windsor",
-          status: "pending" as const,
+          status: recentlySyncedWindsor
+            ? ("skipped" as const)
+            : ("pending" as const),
+          completedAt: recentlySyncedWindsor ? input.startedAt : null,
+          errorMessage: recentlySyncedWindsor
+            ? "Successfully synchronized within the last 60 minutes"
+            : null,
         },
         {
           runId: input.runId,
@@ -155,11 +232,9 @@ async function createTargets(input: {
           clientSlug: client.slug,
           clientName: client.name,
           provider: "ghl",
-          status: hasGhlConfiguration ? ("pending" as const) : "skipped",
-          completedAt: hasGhlConfiguration ? null : input.startedAt,
-          errorMessage: hasGhlConfiguration
-            ? null
-            : "No GHL location configured",
+          status: ghlSkipReason ? ("skipped" as const) : ("pending" as const),
+          completedAt: ghlSkipReason ? input.startedAt : null,
+          errorMessage: ghlSkipReason,
         },
       ];
     });
@@ -186,6 +261,24 @@ async function prepareWindsorTargets(input: {
   runId: string;
   activeClients: readonly ActiveClient[];
 }): Promise<number> {
+  const pendingTargets = await db
+    .select({ clientId: allClientSyncTargets.clientId })
+    .from(allClientSyncTargets)
+    .where(
+      and(
+        eq(allClientSyncTargets.runId, input.runId),
+        eq(allClientSyncTargets.provider, "windsor"),
+        eq(allClientSyncTargets.status, "pending"),
+      ),
+    );
+  const pendingClientIds = new Set(
+    pendingTargets.flatMap(({ clientId }) => (clientId ? [clientId] : [])),
+  );
+  const activeClients = input.activeClients.filter(({ id }) =>
+    pendingClientIds.has(id),
+  );
+  if (activeClients.length === 0) return 0;
+
   let discoveredAccountCount = 0;
   try {
     ({ discoveredAccountCount } = await discoverWindsorSourceAccounts(
@@ -211,29 +304,27 @@ async function prepareWindsorTargets(input: {
     return discoveredAccountCount;
   }
 
-  const clientIds = input.activeClients.map(({ id }) => id);
-  const countRows = clientIds.length
-    ? await db
-        .select({
-          clientId: sourceAccounts.clientId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(sourceAccounts)
-        .where(
-          and(
-            eq(sourceAccounts.dataProvider, "windsor"),
-            eq(sourceAccounts.status, "active"),
-            inArray(sourceAccounts.clientId, clientIds),
-          ),
-        )
-        .groupBy(sourceAccounts.clientId)
-    : [];
+  const clientIds = activeClients.map(({ id }) => id);
+  const countRows = await db
+    .select({
+      clientId: sourceAccounts.clientId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(sourceAccounts)
+    .where(
+      and(
+        eq(sourceAccounts.dataProvider, "windsor"),
+        eq(sourceAccounts.status, "active"),
+        inArray(sourceAccounts.clientId, clientIds),
+      ),
+    )
+    .groupBy(sourceAccounts.clientId);
   const counts = new Map(
     countRows.flatMap((row) =>
       row.clientId ? [[row.clientId, row.count] as const] : [],
     ),
   );
-  for (const client of input.activeClients) {
+  for (const client of activeClients) {
     const sourceAccountCount = counts.get(client.id) ?? 0;
     await db
       .update(allClientSyncTargets)
@@ -252,6 +343,7 @@ async function prepareWindsorTargets(input: {
           eq(allClientSyncTargets.runId, input.runId),
           eq(allClientSyncTargets.clientId, client.id),
           eq(allClientSyncTargets.provider, "windsor"),
+          eq(allClientSyncTargets.status, "pending"),
         ),
       );
   }
@@ -360,11 +452,14 @@ export async function syncAllClients(
       .from(clients)
       .where(eq(clients.status, "active"))
       .orderBy(asc(clients.slug), asc(clients.id));
+    const recentlySuccessfulClientProviders =
+      await getRecentlySuccessfulClientProviders({ activeClients, startedAt });
     await createTargets({
       runId: run.id,
       startedAt,
       activeClients,
       ghlConfig,
+      recentlySuccessfulClientProviders,
     });
     const discoveredAccountCount = await prepareWindsorTargets({
       client: windsorClient,

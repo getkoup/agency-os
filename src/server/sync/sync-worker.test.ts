@@ -1,5 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { db } from "~/server/db";
 import {
@@ -182,12 +190,9 @@ describe("processPendingSyncTargets", () => {
     clientId = client.id;
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     const runs = await db
-      .select({
-        id: allClientSyncRuns.id,
-        windsorRunId: allClientSyncRuns.windsorSyncRunId,
-      })
+      .select({ windsorRunId: allClientSyncRuns.windsorSyncRunId })
       .from(allClientSyncRuns)
       .where(eq(allClientSyncRuns.requestedByUserId, userId));
     await db
@@ -199,6 +204,9 @@ describe("processPendingSyncTargets", () => {
     if (providerRunIds.length > 0) {
       await db.delete(syncRuns).where(inArray(syncRuns.id, providerRunIds));
     }
+  });
+
+  afterAll(async () => {
     await db.delete(clients).where(eq(clients.id, clientId));
     await db.delete(users).where(eq(users.id, userId));
   });

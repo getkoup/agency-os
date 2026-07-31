@@ -78,7 +78,7 @@ export default async function SynchronizationPage() {
       <PageHeader
         eyebrow="Operations"
         title="Synchronization"
-        description="Run Windsor and configured GoHighLevel imports, then retry individual client failures without repeating completed work."
+        description="Sync due Windsor and GoHighLevel providers. Successful providers are buffered for 60 minutes, while failures remain retryable per client."
         actions={<SyncAllClientsButton serverRunIsActive={serverRunIsActive} />}
       />
       <Card className="shadow-sage border-border/80 gap-3 overflow-hidden rounded-[1.25rem] py-5">
@@ -213,7 +213,7 @@ export default async function SynchronizationPage() {
             <EmptyState
               icon={RefreshCw}
               title="No synchronization runs"
-              description="Use Sync all clients to start the first manual import."
+              description="Use Sync due clients to start the first manual import."
             />
           )}
         </CardContent>

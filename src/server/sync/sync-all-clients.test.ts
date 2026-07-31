@@ -31,6 +31,7 @@ const configuredSlugs = [
   "tint-lab",
   "diamond-auto-restoration",
   "resumable-sync-client",
+  "buffered-sync-client",
 ];
 const ghlConfig: GhlConfig = {
   baseUrl: new URL("https://ghl.example"),
@@ -157,6 +158,172 @@ describe("syncAllClients", () => {
     expect(
       result.targets.find((target) => target.provider === "ghl")?.status,
     ).toBe("pending");
+  });
+
+  it("skips providers synchronized successfully within the last hour", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({
+        slug: "buffered-sync-client",
+        name: "Buffered Sync Client",
+        status: "active",
+      })
+      .returning({ id: clients.id });
+    if (!client) throw new Error("Could not create buffered sync test client");
+    const completedAt = new Date(Date.now() - 2 * 60 * 1000);
+    const [sourceRun] = await db
+      .insert(allClientSyncRuns)
+      .values({
+        requestedByUserId: userId,
+        status: "succeeded",
+        heartbeatAt: completedAt,
+        completedAt,
+      })
+      .returning({ id: allClientSyncRuns.id });
+    if (!sourceRun) throw new Error("Could not create buffered source run");
+    await db.insert(allClientSyncTargets).values(
+      ["windsor", "ghl"].map((provider) => ({
+        runId: sourceRun.id,
+        clientId: client.id,
+        clientSlug: "buffered-sync-client",
+        clientName: "Buffered Sync Client",
+        provider,
+        status: "succeeded" as const,
+        completedAt,
+      })),
+    );
+    const bufferedAt = new Date(Date.now() - 60 * 1000);
+    const [bufferedRun] = await db
+      .insert(allClientSyncRuns)
+      .values({
+        requestedByUserId: userId,
+        status: "succeeded",
+        startedAt: bufferedAt,
+        heartbeatAt: bufferedAt,
+        completedAt: bufferedAt,
+      })
+      .returning({ id: allClientSyncRuns.id });
+    if (!bufferedRun) throw new Error("Could not create prior buffered run");
+    await db.insert(allClientSyncTargets).values(
+      ["windsor", "ghl"].map((provider) => ({
+        runId: bufferedRun.id,
+        clientId: client.id,
+        clientSlug: "buffered-sync-client",
+        clientName: "Buffered Sync Client",
+        provider,
+        status: "skipped" as const,
+        completedAt: bufferedAt,
+        errorMessage: "Successfully synchronized within the last 60 minutes",
+      })),
+    );
+    const windsorFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json([]));
+    const bufferedConfig: GhlConfig = {
+      baseUrl: new URL("https://ghl.example"),
+      mappings: [
+        {
+          clientSlug: "buffered-sync-client",
+          clientName: "Buffered Sync Client",
+          locationId: "buffered-location",
+          token: "buffered-token",
+        },
+      ],
+    };
+
+    const result = await syncAllClients(userId, {
+      windsorClient: new WindsorClient(
+        {
+          WINDSOR_API_KEY: "test-key",
+          WINDSOR_DATA_BASE_URL: "https://windsor-data.example",
+          WINDSOR_ONBOARD_BASE_URL: "https://windsor-onboard.example",
+        },
+        windsorFetcher,
+      ),
+      ghlConfig: bufferedConfig,
+    });
+
+    expect(windsorFetcher).not.toHaveBeenCalled();
+    expect(result.targets).toHaveLength(2);
+    expect(
+      result.targets.every(
+        (target) =>
+          target.status === "skipped" &&
+          target.errorMessage ===
+            "Successfully synchronized within the last 60 minutes",
+      ),
+    ).toBe(true);
+  });
+
+  it("queues a recent failure while buffering the successful provider", async () => {
+    const [client] = await db
+      .insert(clients)
+      .values({
+        slug: "buffered-sync-client",
+        name: "Buffered Sync Client",
+        status: "active",
+      })
+      .returning({ id: clients.id });
+    if (!client) throw new Error("Could not create buffered sync test client");
+    const completedAt = new Date();
+    const [sourceRun] = await db
+      .insert(allClientSyncRuns)
+      .values({
+        requestedByUserId: userId,
+        status: "failed",
+        heartbeatAt: completedAt,
+        completedAt,
+        errorMessage: "One or more synchronization targets failed",
+      })
+      .returning({ id: allClientSyncRuns.id });
+    if (!sourceRun) throw new Error("Could not create buffered source run");
+    await db.insert(allClientSyncTargets).values([
+      {
+        runId: sourceRun.id,
+        clientId: client.id,
+        clientSlug: "buffered-sync-client",
+        clientName: "Buffered Sync Client",
+        provider: "windsor",
+        status: "succeeded",
+        completedAt,
+      },
+      {
+        runId: sourceRun.id,
+        clientId: client.id,
+        clientSlug: "buffered-sync-client",
+        clientName: "Buffered Sync Client",
+        provider: "ghl",
+        status: "failed",
+        completedAt,
+        errorMessage: "Temporary GHL failure",
+      },
+    ]);
+    const bufferedConfig: GhlConfig = {
+      baseUrl: new URL("https://ghl.example"),
+      mappings: [
+        {
+          clientSlug: "buffered-sync-client",
+          clientName: "Buffered Sync Client",
+          locationId: "buffered-location",
+          token: "buffered-token",
+        },
+      ],
+    };
+
+    const result = await syncAllClients(userId, {
+      windsorClient: emptyWindsor,
+      ghlConfig: bufferedConfig,
+    });
+
+    expect(
+      result.targets.find(({ provider }) => provider === "windsor"),
+    ).toMatchObject({
+      status: "skipped",
+      errorMessage: "Successfully synchronized within the last 60 minutes",
+    });
+    expect(
+      result.targets.find(({ provider }) => provider === "ghl"),
+    ).toMatchObject({ status: "pending", errorMessage: null });
   });
 
   it("recovers stale targets and never provisions configured clients", async () => {

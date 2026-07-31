@@ -1,6 +1,7 @@
 import "server-only";
 
 export const ALL_CLIENT_SYNC_STALE_AFTER_MS = 15 * 60 * 1000;
+export const CLIENT_SYNC_SUCCESS_BUFFER_MS = 60 * 60 * 1000;
 
 export function isAllClientSyncRunActive(
   run: { status: string; heartbeatAt: Date },

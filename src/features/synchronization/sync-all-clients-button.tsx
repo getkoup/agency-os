@@ -62,7 +62,7 @@ export function SyncAllClientsButton({
         ) : (
           <RefreshCw aria-hidden="true" />
         )}
-        {running ? "Synchronizing…" : "Sync all clients"}
+        {running ? "Synchronizing…" : "Sync due clients"}
       </Button>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="overflow-hidden rounded-3xl p-0 sm:max-w-lg">
