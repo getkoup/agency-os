@@ -266,11 +266,11 @@ export async function updateSalesperson(input: {
   displayName: string;
   status: "active" | "inactive";
 }) {
+  const displayName = input.displayName.trim() || null;
   const rows = await db
     .update(salespeople)
     .set({
-      displayName: normalizedName(input.displayName, "Salesperson name"),
-      nameIsPlaceholder: false,
+      displayName,
       status: input.status,
       updatedAt: new Date(),
     })

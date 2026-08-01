@@ -109,7 +109,7 @@ export const salesCommissionsRouter = createTRPCRouter({
       z.object({
         clientId: id,
         salespersonId: id,
-        displayName: z.string().trim().min(1).max(255),
+        displayName: z.string().trim().max(255),
         status,
       }),
     )

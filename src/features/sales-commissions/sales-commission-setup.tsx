@@ -234,7 +234,8 @@ export function SalesCommissionSetup({ result }: { result: SetupResult }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="pl-6">Display name</TableHead>
+                <TableHead className="pl-6">GHL name</TableHead>
+                <TableHead>Display name</TableHead>
                 <TableHead>GHL identity</TableHead>
                 <TableHead>Last observed</TableHead>
                 <TableHead>Status</TableHead>
@@ -289,7 +290,9 @@ export function SalesCommissionSetup({ result }: { result: SetupResult }) {
                 {activeSalespeople.map((person) => (
                   <TableRow key={person.id}>
                     <TableCell className="bg-card sticky left-0 z-10 pl-6 font-medium">
-                      {person.displayName}
+                      {person.displayName ??
+                        person.providerName ??
+                        `Unnamed • ${person.externalUserId.slice(-6)}`}
                     </TableCell>
                     {activeCategories.map((category) => {
                       const rate = result.rates.find(

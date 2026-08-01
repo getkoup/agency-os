@@ -265,8 +265,10 @@ export default async function SalesCommissionsPage({
                         <TableCell className="pl-5 font-medium">
                           <div className="flex items-center gap-2">
                             {person.name}
-                            {person.nameIsPlaceholder ? (
-                              <Badge variant="outline">Rename</Badge>
+                            {person.isUnnamed ? (
+                              <Badge variant="outline">Unnamed</Badge>
+                            ) : person.hasCustomDisplayName ? (
+                              <Badge variant="secondary">Display name</Badge>
                             ) : null}
                           </div>
                         </TableCell>

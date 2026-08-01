@@ -8,6 +8,8 @@ const contactSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().nullish(),
+    firstName: z.string().nullish(),
+    lastName: z.string().nullish(),
     email: z.string().nullish(),
     phone: z.string().nullish(),
     tags: z.array(z.string()).optional(),
@@ -88,6 +90,17 @@ const calendarsSchema = z
   .object({ calendars: z.array(calendarSchema) })
   .strip();
 
+const userSchema = z
+  .object({
+    id: z.string().min(1).max(255),
+    name: z.string().max(255).nullish(),
+    firstName: z.string().max(255).nullish(),
+    lastName: z.string().max(255).nullish(),
+  })
+  .strip();
+
+const usersSchema = z.object({ users: z.array(userSchema) }).strip();
+
 const appointmentStatusSchema = z.enum([
   "new",
   "confirmed",
@@ -145,6 +158,7 @@ export type GhlOpportunity = z.infer<typeof opportunitySchema>;
 export type GhlCalendar = z.infer<typeof calendarSchema>;
 export type GhlCalendarEvent = z.infer<typeof calendarEventSchema>;
 export type GhlContact = z.infer<typeof contactResponseSchema>["contact"];
+export type GhlUser = z.infer<typeof userSchema>;
 
 export interface GhlOpportunityPage {
   rows: GhlOpportunity[];
@@ -428,6 +442,31 @@ export class GhlClient {
     return calendarsSchema
       .parse(await response.json())
       .calendars.filter((calendar) => calendar.locationId === input.locationId);
+  }
+
+  async locationUsers(input: {
+    locationId: string;
+    token: string;
+  }): Promise<GhlUser[] | null> {
+    const url = new URL("/users/", this.baseUrl);
+    url.searchParams.set("locationId", input.locationId);
+    const response = await this.#request(
+      url,
+      {
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Version: "2021-07-28",
+          Accept: "application/json",
+        },
+      },
+      "GHL users request",
+      input.locationId,
+    );
+    if (response.status === 401 || response.status === 403) return null;
+    if (!response.ok) {
+      throw failedResponseError("GHL users request", response, this.#now());
+    }
+    return usersSchema.parse(await response.json()).users;
   }
 
   async calendarEvents(input: {

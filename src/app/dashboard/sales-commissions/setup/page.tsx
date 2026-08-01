@@ -43,8 +43,8 @@ export default async function SalesCommissionSetupPage({
           className="text-primary mt-0.5 size-4 shrink-0"
           aria-hidden="true"
         />
-        GHL user tokens do not currently expose user-profile names. Newly
-        observed salespeople receive a safe placeholder until renamed here.
+        GHL names synchronize when the client token has Users Read access. An
+        optional display name changes Agency OS only and never updates GHL.
       </div>
       <SalesCommissionSetup result={result} />
     </div>

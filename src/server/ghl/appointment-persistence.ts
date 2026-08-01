@@ -16,6 +16,7 @@ import type {
   GhlCalendar,
   GhlCalendarEvent,
   GhlContact,
+  GhlUser,
 } from "~/server/ghl/client";
 import { normalizeEmail, normalizePhone } from "~/server/windsor/normalize";
 
@@ -36,8 +37,57 @@ function normalizedSource(source: string | null | undefined): string | null {
   return trimmed;
 }
 
-function placeholderSalespersonName(externalUserId: string): string {
-  return `GHL user • ${externalUserId.slice(-6)}`;
+function joinedName(
+  values: readonly (string | null | undefined)[],
+): string | null {
+  const name = values
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+  return name || null;
+}
+
+function contactFullName(contact: GhlContact): string | null {
+  return (
+    normalizedSource(contact.name) ??
+    joinedName([contact.firstName, contact.lastName])
+  );
+}
+
+function userFullName(user: GhlUser): string | null {
+  return (
+    normalizedSource(user.name) ?? joinedName([user.firstName, user.lastName])
+  );
+}
+
+export async function updateGhlSalespersonNames(input: {
+  clientId: string;
+  users: readonly GhlUser[];
+}): Promise<{ updatedCount: number }> {
+  const names = new Map<string, string>();
+  for (const user of input.users) {
+    const providerName = userFullName(user);
+    if (providerName) names.set(user.id, providerName);
+  }
+  if (names.size === 0) return { updatedCount: 0 };
+
+  return db.transaction(async (tx) => {
+    let updatedCount = 0;
+    for (const [externalUserId, providerName] of names) {
+      const rows = await tx
+        .update(salespeople)
+        .set({ providerName, updatedAt: new Date() })
+        .where(
+          and(
+            eq(salespeople.clientId, input.clientId),
+            eq(salespeople.externalUserId, externalUserId),
+          ),
+        )
+        .returning({ id: salespeople.id });
+      updatedCount += rows.length;
+    }
+    return { updatedCount };
+  });
 }
 
 export async function upsertGhlAppointmentBatch(input: {
@@ -86,7 +136,7 @@ export async function upsertGhlAppointmentBatch(input: {
         contacts.map((contact) => ({
           integrationMappingId: input.mappingId,
           externalId: contact.id,
-          fullName: contact.name ?? null,
+          fullName: contactFullName(contact),
           email: contact.email ?? null,
           normalizedEmail: normalizeEmail(contact.email ?? undefined),
           phoneNumber: contact.phone ?? null,
@@ -99,6 +149,8 @@ export async function upsertGhlAppointmentBatch(input: {
           rawPayload: {
             id: contact.id,
             name: contact.name ?? null,
+            firstName: contact.firstName ?? null,
+            lastName: contact.lastName ?? null,
             email: contact.email ?? null,
             phone: contact.phone ?? null,
             source: contact.source ?? null,
@@ -146,8 +198,8 @@ export async function upsertGhlAppointmentBatch(input: {
           externalUserIds.map((externalUserId) => ({
             clientId: input.clientId,
             externalUserId,
-            displayName: placeholderSalespersonName(externalUserId),
-            nameIsPlaceholder: true,
+            providerName: null,
+            displayName: null,
             lastSeenAt: now,
           })),
         )

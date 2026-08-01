@@ -77,7 +77,7 @@ export function SalespersonRow({
   person: Salesperson;
 }) {
   const router = useRouter();
-  const [displayName, setDisplayName] = useState(person.displayName);
+  const [displayName, setDisplayName] = useState(person.displayName ?? "");
   const [status, setStatus] = useState(person.status);
   const [error, setError] = useState<string | null>(null);
   const update = api.salesCommissions.updateSalesperson.useMutation({
@@ -90,10 +90,14 @@ export function SalespersonRow({
 
   return (
     <TableRow>
-      <TableCell className="pl-6">
+      <TableCell className="pl-6 font-medium">
+        {person.providerName ?? "Unnamed / removed user"}
+      </TableCell>
+      <TableCell>
         <Input
           className="min-w-52"
           value={displayName}
+          placeholder="Optional dashboard name"
           onChange={(event) => setDisplayName(event.target.value)}
         />
         {error ? (
@@ -125,8 +129,8 @@ export function SalespersonRow({
           size="sm"
           disabled={
             update.isPending ||
-            !displayName.trim() ||
-            (displayName === person.displayName && status === person.status)
+            ((displayName.trim() || null) === person.displayName &&
+              status === person.status)
           }
           onClick={() =>
             update.mutate({

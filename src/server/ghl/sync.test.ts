@@ -71,7 +71,9 @@ function clientReturning(rows: unknown[]) {
           })
         : url.pathname === "/calendars/"
           ? Response.json({ calendars: [] })
-          : Response.json({ opportunities: rows, meta: {} }),
+          : url.pathname === "/users/"
+            ? Response.json({ users: [] })
+            : Response.json({ opportunities: rows, meta: {} }),
     );
   });
   return {
@@ -162,7 +164,7 @@ describe("processGhlLocationSyncChunk", () => {
       token: "test-token",
       runStartedAt: firstStartedAt,
     });
-    expect(first.fetcher).toHaveBeenCalledTimes(3);
+    expect(first.fetcher).toHaveBeenCalledTimes(4);
     expect(firstSummary).toMatchObject({
       contactRowCount: 100,
       opportunityRowCount: 100,
@@ -353,6 +355,18 @@ describe("processGhlLocationSyncChunk", () => {
             ],
           });
         }
+        if (url.pathname === "/users/") {
+          return Response.json({
+            users: [
+              { id: "salesperson-1", name: "Salesperson One" },
+              {
+                id: "salesperson-2",
+                firstName: "Salesperson",
+                lastName: "Two",
+              },
+            ],
+          });
+        }
         if (url.pathname === "/calendars/events") {
           const pageEvents = calendarPageCount === 0 ? events : [];
           calendarPageCount += 1;
@@ -377,7 +391,8 @@ describe("processGhlLocationSyncChunk", () => {
           return Response.json({
             contact: {
               id: contactId,
-              name: contactId,
+              firstName: "Contact",
+              lastName: contactId,
               email: `${contactId}@example.com`,
               phone: null,
               tags: [],
@@ -413,6 +428,7 @@ describe("processGhlLocationSyncChunk", () => {
 
     const [storedAppointment] = await db
       .select({
+        contactName: ghlContacts.fullName,
         description: ghlAppointments.description,
         notes: ghlAppointments.notes,
         assignedUserExternalId: ghlAppointments.assignedUserExternalId,
@@ -421,6 +437,7 @@ describe("processGhlLocationSyncChunk", () => {
         rawPayload: ghlAppointments.rawPayload,
       })
       .from(ghlAppointments)
+      .innerJoin(ghlContacts, eq(ghlAppointments.contactId, ghlContacts.id))
       .innerJoin(
         integrationMappings,
         eq(ghlAppointments.integrationMappingId, integrationMappings.id),
@@ -432,6 +449,7 @@ describe("processGhlLocationSyncChunk", () => {
         ),
       );
     expect(storedAppointment).toMatchObject({
+      contactName: "Contact batched-contact-1",
       description: "NC299 package 1",
       notes: "Booked after consultation",
       assignedUserExternalId: "salesperson-1",
@@ -443,11 +461,19 @@ describe("processGhlLocationSyncChunk", () => {
       },
     });
     const observedSalespeople = await db
-      .select({ externalUserId: salespeople.externalUserId })
+      .select({
+        externalUserId: salespeople.externalUserId,
+        providerName: salespeople.providerName,
+      })
       .from(salespeople)
       .where(eq(salespeople.clientId, clientId));
-    expect(observedSalespeople.map((row) => row.externalUserId).sort()).toEqual(
-      ["salesperson-1", "salesperson-2"],
-    );
+    expect(
+      observedSalespeople
+        .map((row) => [row.externalUserId, row.providerName] as const)
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ).toEqual([
+      ["salesperson-1", "Salesperson One"],
+      ["salesperson-2", "Salesperson Two"],
+    ]);
   });
 });

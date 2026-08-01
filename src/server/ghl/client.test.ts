@@ -415,6 +415,64 @@ describe("GhlClient", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("loads the location user roster for salesperson names", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        users: [
+          { id: "user-1", name: "Salesperson One" },
+          { id: "user-2", firstName: "Salesperson", lastName: "Two" },
+        ],
+      }),
+    );
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+    );
+
+    await expect(
+      client.locationUsers({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).resolves.toEqual([
+      {
+        id: "user-1",
+        name: "Salesperson One",
+      },
+      {
+        id: "user-2",
+        firstName: "Salesperson",
+        lastName: "Two",
+      },
+    ]);
+    const [request, init] = fetcher.mock.calls[0]!;
+    const requestedUrl =
+      request instanceof URL
+        ? request.href
+        : typeof request === "string"
+          ? request
+          : request.url;
+    expect(new URL(requestedUrl).pathname).toBe("/users/");
+    expect(init?.headers).toMatchObject({ Version: "2021-07-28" });
+  });
+
+  it("treats a missing GHL users scope as an optional capability", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+    );
+
+    await expect(
+      client.locationUsers({
+        locationId: "location-1",
+        token: "private-token",
+      }),
+    ).resolves.toBeNull();
+  });
+
   it("retains appointment description and salesperson attribution fields", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({

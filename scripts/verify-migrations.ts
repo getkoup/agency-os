@@ -81,6 +81,37 @@ try {
   await applyMigration(test, "drizzle/0013_watery_firestar.sql");
   await applyMigration(test, "drizzle/0014_complex_spencer_smythe.sql");
   await applyMigration(test, "drizzle/0015_bright_praxagora.sql");
+  await test`
+    insert into "agency_os_salesperson"
+      ("clientId", "externalUserId", "displayName", "nameIsPlaceholder")
+    values
+      (${backfillClient.id}, 'placeholder-user', 'GHL user placeholder', true),
+      (${backfillClient.id}, 'custom-user', 'Custom display name', false)
+  `;
+  await applyMigration(test, "drizzle/0016_typical_moira_mactaggert.sql");
+  await applyMigration(test, "drizzle/0017_worthless_gamora.sql");
+  const migratedSalespersonNames = await test`
+    select "externalUserId", "displayName", "providerName"
+    from "agency_os_salesperson"
+    order by "externalUserId"
+  `;
+  if (
+    JSON.stringify(migratedSalespersonNames) !==
+    JSON.stringify([
+      {
+        externalUserId: "custom-user",
+        displayName: "Custom display name",
+        providerName: null,
+      },
+      {
+        externalUserId: "placeholder-user",
+        displayName: null,
+        providerName: null,
+      },
+    ])
+  ) {
+    throw new Error("Salesperson display-name migration is incorrect");
+  }
   const [backfillMapping] = await test`
     select "lastSuccessfulSyncAt"
     from "agency_os_integration_mapping"

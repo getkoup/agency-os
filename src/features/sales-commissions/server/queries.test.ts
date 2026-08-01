@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { updateSalesperson } from "~/features/sales-commissions/server/actions";
 import { getSalesCommissionReport } from "~/features/sales-commissions/server/queries";
 import { db } from "~/server/db";
 import {
@@ -16,6 +17,7 @@ import {
 } from "~/server/db/schema";
 
 let clientId = "";
+let salespersonId = "";
 
 describe("sales commission reporting", () => {
   beforeAll(async () => {
@@ -64,11 +66,12 @@ describe("sales commission reporting", () => {
       .values({
         clientId,
         externalUserId: "salesperson-a",
-        displayName: "Salesperson A",
-        nameIsPlaceholder: false,
+        providerName: "Salesperson A",
+        displayName: null,
       })
       .returning({ id: salespeople.id });
     if (!salesperson) throw new Error("Could not create test salesperson");
+    salespersonId = salesperson.id;
     const [tint, ceramic] = await db
       .insert(salesCategories)
       .values([
@@ -188,5 +191,50 @@ describe("sales commission reporting", () => {
       salesperson: { name: "Salesperson A" },
       offer: { categoryName: "Ceramic" },
     });
+  });
+
+  it("prefers a local display name without changing the GHL name", async () => {
+    await updateSalesperson({
+      clientId,
+      salespersonId,
+      displayName: "Closer A",
+      status: "active",
+    });
+
+    const report = await getSalesCommissionReport({
+      from: "2026-07-01",
+      to: "2026-07-31",
+      clientId,
+      page: 1,
+      pageSize: 1,
+    });
+    const [stored] = await db
+      .select({
+        providerName: salespeople.providerName,
+        displayName: salespeople.displayName,
+      })
+      .from(salespeople)
+      .where(eq(salespeople.clientId, clientId));
+
+    expect(report.rows[0]?.salesperson?.name).toBe("Closer A");
+    expect(stored).toEqual({
+      providerName: "Salesperson A",
+      displayName: "Closer A",
+    });
+
+    await updateSalesperson({
+      clientId,
+      salespersonId,
+      displayName: "",
+      status: "active",
+    });
+    const fallbackReport = await getSalesCommissionReport({
+      from: "2026-07-01",
+      to: "2026-07-31",
+      clientId,
+      page: 1,
+      pageSize: 1,
+    });
+    expect(fallbackReport.rows[0]?.salesperson?.name).toBe("Salesperson A");
   });
 });

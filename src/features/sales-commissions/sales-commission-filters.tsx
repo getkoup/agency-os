@@ -36,7 +36,7 @@ export function SalesCommissionFilters({
       id: string;
       clientId: string;
       name: string;
-      nameIsPlaceholder: boolean;
+      isUnnamed: boolean;
     }>;
     categories: Array<{ id: string; clientId: string; name: string }>;
   };

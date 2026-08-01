@@ -63,7 +63,8 @@ type CategoryGroup = {
 type SalespersonGroup = {
   id: string | null;
   name: string;
-  nameIsPlaceholder: boolean;
+  isUnnamed: boolean;
+  hasCustomDisplayName: boolean;
   summary: MoneySummary;
   categories: Map<string, CategoryGroup>;
 };
@@ -197,12 +198,17 @@ export async function getSalesCommissionReport(input: ReportInput) {
         id: salespeople.id,
         clientId: salespeople.clientId,
         externalUserId: salespeople.externalUserId,
+        providerName: salespeople.providerName,
         displayName: salespeople.displayName,
-        nameIsPlaceholder: salespeople.nameIsPlaceholder,
         status: salespeople.status,
       })
       .from(salespeople)
-      .orderBy(asc(salespeople.displayName), asc(salespeople.id)),
+      .orderBy(
+        asc(
+          sql`coalesce(${salespeople.displayName}, ${salespeople.providerName}, ${salespeople.externalUserId})`,
+        ),
+        asc(salespeople.id),
+      ),
     db
       .select({
         id: salesOffers.id,
@@ -317,8 +323,16 @@ export async function getSalesCommissionReport(input: ReportInput) {
         salesperson: salesperson
           ? {
               id: salesperson.id,
-              name: salesperson.displayName,
-              nameIsPlaceholder: salesperson.nameIsPlaceholder,
+              name:
+                salesperson.displayName ??
+                salesperson.providerName ??
+                `Unnamed • ${salesperson.externalUserId.slice(-6)}`,
+              providerName: salesperson.providerName,
+              displayName: salesperson.displayName,
+              isUnnamed:
+                salesperson.displayName === null &&
+                salesperson.providerName === null,
+              hasCustomDisplayName: salesperson.displayName !== null,
             }
           : null,
         ...financials,
@@ -361,7 +375,8 @@ export async function getSalesCommissionReport(input: ReportInput) {
     person ??= {
       id: row.salesperson?.id ?? null,
       name: row.salesperson?.name ?? "Unassigned / Booking widget",
-      nameIsPlaceholder: row.salesperson?.nameIsPlaceholder ?? false,
+      isUnnamed: row.salesperson?.isUnnamed ?? false,
+      hasCustomDisplayName: row.salesperson?.hasCustomDisplayName ?? false,
       summary: emptySummary(),
       categories: new Map<string, CategoryGroup>(),
     };
@@ -406,7 +421,8 @@ export async function getSalesCommissionReport(input: ReportInput) {
           .map((person) => ({
             id: person.id,
             name: person.name,
-            nameIsPlaceholder: person.nameIsPlaceholder,
+            isUnnamed: person.isUnnamed,
+            hasCustomDisplayName: person.hasCustomDisplayName,
             summary: presentSummary(person.summary),
             categories: [...person.categories.values()]
               .map((category) => ({
@@ -433,8 +449,11 @@ export async function getSalesCommissionReport(input: ReportInput) {
       salespeople: salespersonRows.map((row) => ({
         id: row.id,
         clientId: row.clientId,
-        name: row.displayName,
-        nameIsPlaceholder: row.nameIsPlaceholder,
+        name:
+          row.displayName ??
+          row.providerName ??
+          `Unnamed • ${row.externalUserId.slice(-6)}`,
+        isUnnamed: row.displayName === null && row.providerName === null,
       })),
       categories: categoryOptions,
     },
@@ -470,14 +489,19 @@ export async function getSalesCommissionSetup(input: { clientId?: string }) {
       .select({
         id: salespeople.id,
         externalUserId: salespeople.externalUserId,
+        providerName: salespeople.providerName,
         displayName: salespeople.displayName,
-        nameIsPlaceholder: salespeople.nameIsPlaceholder,
         status: salespeople.status,
         lastSeenAt: salespeople.lastSeenAt,
       })
       .from(salespeople)
       .where(eq(salespeople.clientId, selectedClientId))
-      .orderBy(asc(salespeople.displayName), asc(salespeople.id)),
+      .orderBy(
+        asc(
+          sql`coalesce(${salespeople.displayName}, ${salespeople.providerName}, ${salespeople.externalUserId})`,
+        ),
+        asc(salespeople.id),
+      ),
     db
       .select({
         id: salesCategories.id,

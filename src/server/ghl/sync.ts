@@ -3,7 +3,10 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { upsertGhlAppointmentBatch } from "~/server/ghl/appointment-persistence";
+import {
+  updateGhlSalespersonNames,
+  upsertGhlAppointmentBatch,
+} from "~/server/ghl/appointment-persistence";
 import type { GhlCalendar, GhlClient, GhlContact } from "~/server/ghl/client";
 import { db } from "~/server/db";
 import { integrationMappings } from "~/server/db/schema";
@@ -257,6 +260,30 @@ async function processOpportunityPage(input: {
   };
 }
 
+async function refreshSalespersonNames(input: {
+  client: GhlClient;
+  clientId: string;
+  locationId: string;
+  token: string;
+}): Promise<void> {
+  try {
+    const users = await input.client.locationUsers({
+      locationId: input.locationId,
+      token: input.token,
+    });
+    if (!users) return;
+    await updateGhlSalespersonNames({ clientId: input.clientId, users });
+  } catch (error) {
+    console.warn("Optional GHL salesperson name synchronization failed", {
+      clientId: input.clientId,
+      locationId: input.locationId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage:
+        error instanceof Error ? error.message : "Unknown GHL users error",
+    });
+  }
+}
+
 async function processAppointmentWindow(input: {
   client: GhlClient;
   clientId: string;
@@ -267,6 +294,7 @@ async function processAppointmentWindow(input: {
 }): Promise<GhlSyncChunkResult> {
   const window = input.checkpoint.windows[input.checkpoint.nextWindowIndex];
   if (!window) {
+    await refreshSalespersonNames(input);
     const completedAt = new Date(input.checkpoint.through);
     await db
       .update(integrationMappings)

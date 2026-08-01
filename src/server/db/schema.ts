@@ -723,8 +723,8 @@ export const salespeople = createTable(
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
     externalUserId: d.varchar({ length: 255 }).notNull(),
-    displayName: d.varchar({ length: 255 }).notNull(),
-    nameIsPlaceholder: d.boolean().default(true).notNull(),
+    providerName: d.varchar({ length: 255 }),
+    displayName: d.varchar({ length: 255 }),
     status: recordStatus().default("active").notNull(),
     firstSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
