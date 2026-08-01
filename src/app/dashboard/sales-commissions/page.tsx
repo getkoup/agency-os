@@ -38,11 +38,8 @@ import { api } from "~/trpc/server";
 const searchSchema = z.object({
   from: z.string().date(),
   to: z.string().date(),
-  view: z.enum(["client", "salesperson"]).default("client"),
+  view: z.enum(["client", "salesperson"]).default("salesperson"),
   clientId: z.string().uuid().optional(),
-  salespersonId: z
-    .union([z.string().uuid(), z.literal("unassigned")])
-    .optional(),
   globalSalespersonId: z
     .union([z.string().uuid(), z.literal("unassigned")])
     .optional(),
@@ -98,7 +95,6 @@ function reportViewHref(
   }
   next.set("view", view);
   next.delete("salespersonId");
-  next.delete("globalSalespersonId");
   next.set("salesCommissionPage", "1");
   return `/dashboard/sales-commissions?${next.toString()}`;
 }
@@ -117,7 +113,6 @@ export default async function SalesCommissionsPage({
     to: rawSearch.to ?? defaults.to,
     view: rawSearch.view,
     clientId: rawSearch.clientId,
-    salespersonId: rawSearch.salespersonId,
     globalSalespersonId: rawSearch.globalSalespersonId,
     appointmentStatus: rawSearch.appointmentStatus,
     categoryId: rawSearch.categoryId,
@@ -131,9 +126,7 @@ export default async function SalesCommissionsPage({
     from: search.from,
     to: search.to,
     clientId: search.clientId,
-    salespersonId: search.view === "client" ? search.salespersonId : undefined,
-    globalSalespersonId:
-      search.view === "salesperson" ? search.globalSalespersonId : undefined,
+    globalSalespersonId: search.globalSalespersonId,
     status: search.appointmentStatus,
     categoryId: search.categoryId,
     classificationStatus: search.classificationStatus,
@@ -147,7 +140,7 @@ export default async function SalesCommissionsPage({
       <PageHeader
         eyebrow="Sales operations"
         title="Sales & Commissions"
-        description="Client-wise appointment attribution, offer revenue, no-show opportunity, and earned salesperson commissions."
+        description="One salesperson view with client-level appointment, revenue, no-show, and commission breakdowns."
         meta={
           canConfigure ? (
             <Button asChild>
@@ -162,18 +155,10 @@ export default async function SalesCommissionsPage({
         <div className="px-2">
           <p className="text-sm font-semibold">Report view</p>
           <p className="text-muted-foreground text-xs">
-            Keep the client report or consolidate linked identities.
+            Global salesperson is the default; client view remains available.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            asChild
-            variant={search.view === "client" ? "default" : "ghost"}
-          >
-            <Link href={reportViewHref(rawSearch, "client")}>
-              <ReceiptText aria-hidden="true" /> By client
-            </Link>
-          </Button>
           <Button
             asChild
             variant={search.view === "salesperson" ? "default" : "ghost"}
@@ -182,15 +167,21 @@ export default async function SalesCommissionsPage({
               <UsersRound aria-hidden="true" /> By salesperson
             </Link>
           </Button>
+          <Button
+            asChild
+            variant={search.view === "client" ? "default" : "ghost"}
+          >
+            <Link href={reportViewHref(rawSearch, "client")}>
+              <ReceiptText aria-hidden="true" /> By client
+            </Link>
+          </Button>
         </div>
       </div>
       <SalesCommissionFilters
         values={{
           from: search.from,
           to: search.to,
-          view: search.view,
           clientId: search.clientId,
-          salespersonId: search.salespersonId,
           globalSalespersonId: search.globalSalespersonId,
           status: search.appointmentStatus,
           categoryId: search.categoryId,
