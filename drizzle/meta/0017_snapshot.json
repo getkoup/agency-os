@@ -3705,6 +3705,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "nameIsPlaceholder": {
+          "name": "nameIsPlaceholder",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "status": {
           "name": "status",
           "type": "agency_os_record_status",

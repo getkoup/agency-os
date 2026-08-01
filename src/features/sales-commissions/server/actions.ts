@@ -271,6 +271,7 @@ export async function updateSalesperson(input: {
     .update(salespeople)
     .set({
       displayName,
+      nameIsPlaceholder: displayName === null,
       status: input.status,
       updatedAt: new Date(),
     })

@@ -725,6 +725,8 @@ export const salespeople = createTable(
     externalUserId: d.varchar({ length: 255 }).notNull(),
     providerName: d.varchar({ length: 255 }),
     displayName: d.varchar({ length: 255 }),
+    // Retained for rollback compatibility with the first commissions release.
+    nameIsPlaceholder: d.boolean().default(true).notNull(),
     status: recordStatus().default("active").notNull(),
     firstSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     lastSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
