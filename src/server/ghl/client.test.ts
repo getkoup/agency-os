@@ -415,6 +415,53 @@ describe("GhlClient", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("retains appointment description and salesperson attribution fields", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        events: [
+          {
+            id: "appointment-1",
+            locationId: "location-1",
+            calendarId: "calendar-1",
+            contactId: "contact-1",
+            appointmentStatus: "showed",
+            startTime: "2026-07-15T12:00:00.000Z",
+            endTime: "2026-07-15T13:00:00.000Z",
+            dateAdded: "2026-07-14T12:00:00.000Z",
+            dateUpdated: "2026-07-15T13:00:00.000Z",
+            title: "Customer appointment",
+            description: "NC299 ceramic package",
+            notes: "Booked after phone consultation",
+            assignedUserId: "assigned-user-1",
+            createdBy: { source: "contactdetails_page", userId: "creator-1" },
+            deleted: false,
+            ignoredProviderField: "not persisted",
+          },
+        ],
+      }),
+    );
+    const client = new GhlClient(
+      new URL("https://services.leadconnectorhq.com"),
+      fetcher,
+    );
+
+    const rows = await client.calendarEvents({
+      locationId: "location-1",
+      calendarId: "calendar-1",
+      token: "private-token",
+      start: new Date("2026-07-15T00:00:00.000Z"),
+      end: new Date("2026-07-16T00:00:00.000Z"),
+    });
+
+    expect(rows[0]).toMatchObject({
+      description: "NC299 ceramic package",
+      notes: "Booked after phone consultation",
+      assignedUserId: "assigned-user-1",
+      createdBy: { source: "contactdetails_page", userId: "creator-1" },
+    });
+    expect(rows[0]).not.toHaveProperty("ignoredProviderField");
+  });
+
   it("rejects missing provider timestamps", async () => {
     const invalid = { ...opportunity, updatedAt: undefined };
     const fetcher = vi

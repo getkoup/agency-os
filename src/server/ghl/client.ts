@@ -108,7 +108,17 @@ const calendarEventSchema = z
     endTime: z.string().datetime({ offset: true }),
     dateAdded: z.string().datetime({ offset: true }),
     dateUpdated: z.string().datetime({ offset: true }),
-    title: z.string().nullish(),
+    title: z.string().max(500).nullish(),
+    description: z.string().max(100_000).nullish(),
+    notes: z.string().max(100_000).nullish(),
+    assignedUserId: z.string().max(255).nullish(),
+    createdBy: z
+      .object({
+        source: z.string().max(100).nullish(),
+        userId: z.string().max(255).nullish(),
+      })
+      .strip()
+      .nullish(),
     deleted: z.boolean().default(false),
   })
   .strip();

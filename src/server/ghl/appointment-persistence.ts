@@ -9,6 +9,7 @@ import {
   ghlCalendars,
   ghlContacts,
   leads,
+  salespeople,
   sourceAccounts,
 } from "~/server/db/schema";
 import type {
@@ -33,6 +34,10 @@ function normalizedSource(source: string | null | undefined): string | null {
   const trimmed = source?.trim();
   if (!trimmed) return null;
   return trimmed;
+}
+
+function placeholderSalespersonName(externalUserId: string): string {
+  return `GHL user • ${externalUserId.slice(-6)}`;
 }
 
 export async function upsertGhlAppointmentBatch(input: {
@@ -124,6 +129,38 @@ export async function upsertGhlAppointmentBatch(input: {
     const contactIds = new Map(
       storedContacts.map((contact) => [contact.externalId, contact.id]),
     );
+    const externalUserIds = [
+      ...new Set(
+        input.events.flatMap((event) =>
+          [
+            normalizedSource(event.createdBy?.userId),
+            normalizedSource(event.assignedUserId),
+          ].filter((value): value is string => value !== null),
+        ),
+      ),
+    ];
+    if (externalUserIds.length > 0) {
+      await tx
+        .insert(salespeople)
+        .values(
+          externalUserIds.map((externalUserId) => ({
+            clientId: input.clientId,
+            externalUserId,
+            displayName: placeholderSalespersonName(externalUserId),
+            nameIsPlaceholder: true,
+            lastSeenAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [salespeople.clientId, salespeople.externalUserId],
+          set: {
+            status: "active",
+            lastSeenAt: now,
+            updatedAt: now,
+          },
+        });
+    }
+
     const appointments = await tx
       .insert(ghlAppointments)
       .values(
@@ -139,7 +176,12 @@ export async function upsertGhlAppointmentBatch(input: {
             contactId,
             externalId: event.id,
             status: event.appointmentStatus,
-            title: event.title ?? null,
+            title: normalizedSource(event.title),
+            description: normalizedSource(event.description),
+            notes: normalizedSource(event.notes),
+            assignedUserExternalId: normalizedSource(event.assignedUserId),
+            createdByUserExternalId: normalizedSource(event.createdBy?.userId),
+            createdBySource: normalizedSource(event.createdBy?.source),
             startsAt: new Date(event.startTime),
             endsAt: new Date(event.endTime),
             providerCreatedAt: new Date(event.dateAdded),
@@ -159,6 +201,11 @@ export async function upsertGhlAppointmentBatch(input: {
           contactId: sql`excluded."contactId"`,
           status: sql`excluded."status"`,
           title: sql`excluded."title"`,
+          description: sql`excluded."description"`,
+          notes: sql`excluded."notes"`,
+          assignedUserExternalId: sql`excluded."assignedUserExternalId"`,
+          createdByUserExternalId: sql`excluded."createdByUserExternalId"`,
+          createdBySource: sql`excluded."createdBySource"`,
           startsAt: sql`excluded."startsAt"`,
           endsAt: sql`excluded."endsAt"`,
           providerUpdatedAt: sql`excluded."providerUpdatedAt"`,

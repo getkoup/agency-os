@@ -80,6 +80,7 @@ try {
   await applyMigration(test, "drizzle/0012_woozy_karnak.sql");
   await applyMigration(test, "drizzle/0013_watery_firestar.sql");
   await applyMigration(test, "drizzle/0014_complex_spencer_smythe.sql");
+  await applyMigration(test, "drizzle/0015_bright_praxagora.sql");
   const [backfillMapping] = await test`
     select "lastSuccessfulSyncAt"
     from "agency_os_integration_mapping"
@@ -257,6 +258,29 @@ try {
         values (${client.id}, 'Negative', array['negative'], -1)
       `,
     "non-negative lead category priority",
+  );
+  const [salesCategory] = await test`
+    insert into "agency_os_sales_category" ("clientId", "name")
+    values (${client.id}, 'Ceramic')
+    returning "id"
+  `;
+  if (!salesCategory) throw new Error("Sales category was not created");
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_category" ("clientId", "name")
+        values (${client.id}, 'ceramic')
+      `,
+    "case-insensitive sales category uniqueness",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_offer"
+          ("clientId", "categoryId", "name", "keywords", "revenueValue")
+        values (${client.id}, ${salesCategory.id}, 'Invalid', array[]::text[], 299)
+      `,
+    "non-empty sales offer keywords",
   );
   await expectConstraintViolation(
     () =>

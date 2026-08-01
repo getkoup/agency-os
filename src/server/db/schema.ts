@@ -65,6 +65,10 @@ export const appointmentStatus = pgEnum("agency_os_appointment_status", [
   "noshow",
   "invalid",
 ]);
+export const salespersonAttributionMode = pgEnum(
+  "agency_os_salesperson_attribution_mode",
+  ["created_by", "assigned_user", "created_by_then_assigned"],
+);
 
 export const users = createTable(
   "user",
@@ -612,6 +616,11 @@ export const ghlAppointments = createTable(
     externalId: d.varchar({ length: 255 }).notNull(),
     status: appointmentStatus().notNull(),
     title: d.varchar({ length: 500 }),
+    description: d.text(),
+    notes: d.text(),
+    assignedUserExternalId: d.varchar({ length: 255 }),
+    createdByUserExternalId: d.varchar({ length: 255 }),
+    createdBySource: d.varchar({ length: 100 }),
     startsAt: d.timestamp({ withTimezone: true }).notNull(),
     endsAt: d.timestamp({ withTimezone: true }).notNull(),
     providerCreatedAt: d.timestamp({ withTimezone: true }).notNull(),
@@ -687,6 +696,148 @@ export const revenueRules = createTable(
     ),
     index("revenue_rule_client_status_idx").on(t.clientId, t.status),
     check("revenue_rule_value_non_negative", sql`${t.revenueValue} >= 0`),
+  ],
+);
+
+export const salesCommissionSettings = createTable(
+  "sales_commission_setting",
+  (d) => ({
+    clientId: d
+      .uuid()
+      .primaryKey()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    attributionMode: salespersonAttributionMode()
+      .default("created_by")
+      .notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+);
+
+export const salespeople = createTable(
+  "salesperson",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    externalUserId: d.varchar({ length: 255 }).notNull(),
+    displayName: d.varchar({ length: 255 }).notNull(),
+    nameIsPlaceholder: d.boolean().default(true).notNull(),
+    status: recordStatus().default("active").notNull(),
+    firstSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("salesperson_client_external_idx").on(
+      t.clientId,
+      t.externalUserId,
+    ),
+    index("salesperson_client_status_idx").on(t.clientId, t.status),
+  ],
+);
+
+export const salesCategories = createTable(
+  "sales_category",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: d.varchar({ length: 100 }).notNull(),
+    sortOrder: d.integer().default(0).notNull(),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("sales_category_client_name_lower_idx").on(
+      t.clientId,
+      sql`lower(${t.name})`,
+    ),
+    index("sales_category_client_status_sort_idx").on(
+      t.clientId,
+      t.status,
+      t.sortOrder,
+    ),
+    check("sales_category_sort_nonnegative", sql`${t.sortOrder} >= 0`),
+  ],
+);
+
+export const salesOffers = createTable(
+  "sales_offer",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    categoryId: d
+      .uuid()
+      .notNull()
+      .references(() => salesCategories.id, { onDelete: "cascade" }),
+    name: d.varchar({ length: 100 }).notNull(),
+    keywords: d.text().array().notNull(),
+    matchMode: leadRuleMatchMode().default("any").notNull(),
+    priority: d.integer().default(0).notNull(),
+    revenueValue: d.numeric({ precision: 14, scale: 2 }).notNull(),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("sales_offer_client_name_lower_idx").on(
+      t.clientId,
+      sql`lower(${t.name})`,
+    ),
+    index("sales_offer_client_status_priority_idx").on(
+      t.clientId,
+      t.status,
+      t.priority,
+    ),
+    check(
+      "sales_offer_keywords_not_empty",
+      sql`cardinality(${t.keywords}) > 0`,
+    ),
+    check("sales_offer_priority_nonnegative", sql`${t.priority} >= 0`),
+    check("sales_offer_revenue_nonnegative", sql`${t.revenueValue} >= 0`),
+  ],
+);
+
+export const salespersonCommissionRates = createTable(
+  "salesperson_commission_rate",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    salespersonId: d
+      .uuid()
+      .notNull()
+      .references(() => salespeople.id, { onDelete: "cascade" }),
+    categoryId: d
+      .uuid()
+      .notNull()
+      .references(() => salesCategories.id, { onDelete: "cascade" }),
+    commissionValue: d.numeric({ precision: 14, scale: 2 }).notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("salesperson_commission_person_category_idx").on(
+      t.salespersonId,
+      t.categoryId,
+    ),
+    index("salesperson_commission_client_idx").on(t.clientId),
+    check(
+      "salesperson_commission_value_nonnegative",
+      sql`${t.commissionValue} >= 0`,
+    ),
   ],
 );
 
@@ -834,11 +985,16 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));
-export const clientsRelations = relations(clients, ({ many }) => ({
+export const clientsRelations = relations(clients, ({ many, one }) => ({
   memberships: many(clientMemberships),
   sourceAccounts: many(sourceAccounts),
   revenueRules: many(revenueRules),
   leadClassificationRules: many(leadClassificationRules),
+  salesCommissionSettings: one(salesCommissionSettings),
+  salespeople: many(salespeople),
+  salesCategories: many(salesCategories),
+  salesOffers: many(salesOffers),
+  salespersonCommissionRates: many(salespersonCommissionRates),
 }));
 export const clientMembershipsRelations = relations(
   clientMemberships,

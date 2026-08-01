@@ -4,11 +4,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "~/server/db";
 import {
   clients,
+  ghlAppointments,
   ghlContacts,
   ghlOpportunities,
   ghlOpportunityMatches,
   integrationMappings,
   leads,
+  salespeople,
   sourceAccounts,
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
@@ -304,6 +306,13 @@ describe("processGhlLocationSyncChunk", () => {
       dateAdded: "2026-07-15T12:00:00.000Z",
       dateUpdated: "2026-07-15T12:00:00.000Z",
       title: `Batched appointment ${index + 1}`,
+      description: `NC299 package ${index + 1}`,
+      notes: "Booked after consultation",
+      assignedUserId: `salesperson-${(index % 2) + 1}`,
+      createdBy: {
+        source: "contactdetails_page",
+        userId: `salesperson-${(index % 2) + 1}`,
+      },
       deleted: false,
     }));
     let calendarPageCount = 0;
@@ -401,5 +410,44 @@ describe("processGhlLocationSyncChunk", () => {
     expect(maximumCalendarConcurrency).toBe(1);
     expect(maximumContactConcurrency).toBe(20);
     expect(onPage).toHaveBeenCalledTimes(42);
+
+    const [storedAppointment] = await db
+      .select({
+        description: ghlAppointments.description,
+        notes: ghlAppointments.notes,
+        assignedUserExternalId: ghlAppointments.assignedUserExternalId,
+        createdByUserExternalId: ghlAppointments.createdByUserExternalId,
+        createdBySource: ghlAppointments.createdBySource,
+        rawPayload: ghlAppointments.rawPayload,
+      })
+      .from(ghlAppointments)
+      .innerJoin(
+        integrationMappings,
+        eq(ghlAppointments.integrationMappingId, integrationMappings.id),
+      )
+      .where(
+        and(
+          eq(integrationMappings.clientId, clientId),
+          eq(ghlAppointments.externalId, "batched-event-1"),
+        ),
+      );
+    expect(storedAppointment).toMatchObject({
+      description: "NC299 package 1",
+      notes: "Booked after consultation",
+      assignedUserExternalId: "salesperson-1",
+      createdByUserExternalId: "salesperson-1",
+      createdBySource: "contactdetails_page",
+      rawPayload: {
+        description: "NC299 package 1",
+        createdBy: { userId: "salesperson-1" },
+      },
+    });
+    const observedSalespeople = await db
+      .select({ externalUserId: salespeople.externalUserId })
+      .from(salespeople)
+      .where(eq(salespeople.clientId, clientId));
+    expect(observedSalespeople.map((row) => row.externalUserId).sort()).toEqual(
+      ["salesperson-1", "salesperson-2"],
+    );
   });
 });
