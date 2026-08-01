@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Building2,
+  Clock3,
   ListFilter,
   RefreshCw,
   Settings2,
@@ -16,9 +17,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
 import { resolveDashboardPageSearch } from "~/features/dashboard/page-search";
+import { AgencyReportingTimezoneForm } from "~/features/settings/agency-reporting-timezone-form";
 import { GhlConfigurationManager } from "~/features/settings/ghl-configuration-manager";
 import { LeadClassificationManager } from "~/features/settings/lead-classification-manager";
 import { RevenueRuleManager } from "~/features/settings/revenue-rule-manager";
+import { getReportingTimezoneOptions } from "~/features/settings/reporting-timezone";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -50,21 +53,23 @@ export default async function SettingsPage({
     rawClassificationClientId,
   ).data;
   const status = optionalStatus.safeParse(rawStatus).data;
-  const [classificationRules, rules, ghlStatus] = await Promise.all([
-    api.settings.leadClassificationRules({
-      clientId: classificationClientId,
-      limit: 100,
-    }),
-    api.settings.revenueRules({
-      clientId,
-      status,
-      page: search.rulePage,
-      pageSize: 25,
-    }),
-    user.role === "owner"
-      ? api.settings.ghlConfigurationStatus()
-      : Promise.resolve([]),
-  ]);
+  const [reportingSettings, classificationRules, rules, ghlStatus] =
+    await Promise.all([
+      api.settings.reportingTimezone(),
+      api.settings.leadClassificationRules({
+        clientId: classificationClientId,
+        limit: 100,
+      }),
+      api.settings.revenueRules({
+        clientId,
+        status,
+        page: search.rulePage,
+        pageSize: 25,
+      }),
+      user.role === "owner"
+        ? api.settings.ghlConfigurationStatus()
+        : Promise.resolve([]),
+    ]);
   const operations = [
     {
       title: "Clients",
@@ -96,7 +101,7 @@ export default async function SettingsPage({
       <PageHeader
         eyebrow="Agency operations"
         title="Settings"
-        description="Operational destinations, revenue rules, and redacted integration health."
+        description="Agency reporting, operational destinations, revenue rules, and redacted integration health."
       />
       <section className="grid gap-4 md:grid-cols-3">
         {operations.map((operation) => {
@@ -132,6 +137,29 @@ export default async function SettingsPage({
           );
         })}
       </section>
+      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
+          <div className="flex items-center gap-3">
+            <span className="bg-primary/10 text-primary ring-primary/10 grid size-10 shrink-0 place-items-center rounded-[0.625rem] ring-1">
+              <Clock3 className="size-5" />
+            </span>
+            <div>
+              <CardTitle className="tracking-tight">
+                Reporting timezone
+              </CardTitle>
+              <p className="text-muted-foreground mt-1 text-sm">
+                One calendar-day boundary for every client dashboard and report.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          <AgencyReportingTimezoneForm
+            initialTimezone={reportingSettings.reportingTimezone}
+            timezones={getReportingTimezoneOptions()}
+          />
+        </CardContent>
+      </Card>
       <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
         <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card border-b bg-gradient-to-r px-6 py-5">
           <div className="flex items-center gap-3">

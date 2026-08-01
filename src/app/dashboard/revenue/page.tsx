@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
-import { formatClientDate } from "~/features/dashboard/date-format";
+import { formatReportingDate } from "~/features/dashboard/date-format";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
@@ -27,8 +27,15 @@ export default async function RevenuePage({
 }) {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
-  const rawSearch = await searchParams;
-  const search = resolveDashboardPageSearch(rawSearch);
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const search = resolveDashboardPageSearch(
+    rawSearch,
+    new Date(),
+    reportingContext.reportingTimezone,
+  );
   const filters = {
     from: search.from,
     to: search.to,
@@ -51,7 +58,8 @@ export default async function RevenuePage({
         description="Auditable estimated revenue from active client tag rules on won GHL opportunities."
         meta={
           <span className="text-muted-foreground text-xs">
-            {search.from} through {search.to} · client-local dates · USD
+            {search.from} through {search.to} · {options.reportingTimezone} ·
+            USD
           </span>
         }
       />
@@ -95,7 +103,9 @@ export default async function RevenuePage({
             <Table className="min-w-[48rem]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Client local date</TableHead>
+                  <TableHead className="pl-6">
+                    {options.reportingTimezone} date
+                  </TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Opportunity</TableHead>
                   <TableHead>Tags</TableHead>
@@ -108,7 +118,7 @@ export default async function RevenuePage({
                 {revenue.rows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="pl-6 whitespace-nowrap tabular-nums">
-                      {formatClientDate(row.wonAt, row.timezone)}
+                      {formatReportingDate(row.wonAt, row.timezone)}
                     </TableCell>
                     <TableCell>{row.client}</TableCell>
                     <TableCell className="font-medium">

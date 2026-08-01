@@ -14,6 +14,7 @@ import { db } from "~/server/db";
 import {
   adGroups,
   adPerformanceDaily,
+  agencySettings,
   ads,
   campaigns,
   clients,
@@ -33,6 +34,10 @@ let clientId = "";
 
 describe("dashboard queries", () => {
   beforeAll(async () => {
+    await db
+      .update(agencySettings)
+      .set({ reportingTimezone: "America/New_York" })
+      .where(eq(agencySettings.id, 1));
     await db.delete(clients).where(eq(clients.slug, slug));
     await db
       .delete(sourceAccounts)
@@ -243,6 +248,10 @@ describe("dashboard queries", () => {
 
   afterAll(async () => {
     await db.delete(clients).where(eq(clients.id, clientId));
+    await db
+      .update(agencySettings)
+      .set({ reportingTimezone: "UTC" })
+      .where(eq(agencySettings.id, 1));
     await db
       .delete(sourceAccounts)
       .where(

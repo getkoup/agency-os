@@ -31,6 +31,8 @@ export function SalesCommissionFilters({
     classificationStatus?: string;
   };
   options: {
+    reportingTimezone: string;
+    today: string;
     clients: Array<{ id: string; name: string }>;
     globalSalespeople: Array<{
       id: string;
@@ -95,18 +97,21 @@ export function SalesCommissionFilters({
           <div>
             <p className="text-sm font-semibold">Reporting controls</p>
             <p className="text-muted-foreground text-xs">
-              One option per global salesperson; dates use each client&apos;s
-              local timezone.
+              One option per global salesperson; dates use the fixed agency
+              reporting timezone.
             </p>
           </div>
         </div>
-        <Badge variant="outline">USD · attributed values</Badge>
+        <Badge variant="outline">
+          {options.reportingTimezone} · USD · attributed values
+        </Badge>
       </div>
       <div className="grid items-end gap-4 p-5 md:grid-cols-2 xl:grid-cols-12">
         <DateRangeFilter
           from={values.from}
           to={values.to}
           preset={preset}
+          reportingToday={options.today}
           onChange={updateDates}
           className="md:col-span-2 xl:col-span-4"
         />

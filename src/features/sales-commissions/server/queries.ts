@@ -14,6 +14,10 @@ import {
   formatUsdCents,
   parseUsdToCents,
 } from "~/features/revenue/calculations";
+import {
+  agencyReportingTimezoneSql,
+  getAgencyReportingContext,
+} from "~/features/settings/server/reporting-timezone";
 import { db } from "~/server/db";
 import {
   clients,
@@ -156,17 +160,18 @@ export async function getSalesCommissionReport(input: ReportInput) {
     );
   }
 
-  const appointmentLocalDate = sql<string>`timezone(${integrationMappings.timezone}, ${ghlAppointments.startsAt})::date`;
+  const appointmentReportingDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.startsAt})::date`;
   const appointmentConditions = and(
     eq(ghlAppointments.deleted, false),
     eq(clients.status, "active"),
-    gte(appointmentLocalDate, input.from),
-    lte(appointmentLocalDate, input.to),
+    gte(appointmentReportingDate, input.from),
+    lte(appointmentReportingDate, input.to),
     input.clientId ? eq(clients.id, input.clientId) : undefined,
     input.status ? eq(ghlAppointments.status, input.status) : undefined,
   );
 
   const [
+    reportingContext,
     appointmentRows,
     clientRows,
     settingRows,
@@ -174,12 +179,13 @@ export async function getSalesCommissionReport(input: ReportInput) {
     offerRows,
     rateRows,
   ] = await Promise.all([
+    getAgencyReportingContext(),
     db
       .select({
         id: ghlAppointments.id,
         clientId: clients.id,
         clientName: clients.name,
-        timezone: integrationMappings.timezone,
+        timezone: agencyReportingTimezoneSql,
         contactName: ghlContacts.fullName,
         status: ghlAppointments.status,
         title: ghlAppointments.title,
@@ -530,6 +536,7 @@ export async function getSalesCommissionReport(input: ReportInput) {
     .sort((left, right) => left.name.localeCompare(right.name));
 
   return {
+    ...reportingContext,
     summary: presentSummary(summary),
     clientGroups: [...clientGroups.values()]
       .map((client) => ({

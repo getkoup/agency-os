@@ -44,8 +44,11 @@ function parseDate(value: string): Date {
   return new Date(`${value}T12:00:00`);
 }
 
-function presetRange(preset: Exclude<DatePreset, "custom">): DateRange {
-  const today = new Date();
+function presetRange(
+  preset: Exclude<DatePreset, "custom">,
+  reportingToday: string,
+): DateRange {
+  const today = parseDate(reportingToday);
   switch (preset) {
     case "last3":
       return { from: subDays(today, 2), to: today };
@@ -77,12 +80,14 @@ export function DateRangeFilter({
   from,
   to,
   preset,
+  reportingToday,
   onChange,
   className,
 }: {
   from: string;
   to: string;
   preset: DatePreset;
+  reportingToday: string;
   onChange: (from: string, to: string, preset: DatePreset) => void;
   className?: string;
 }) {
@@ -98,7 +103,7 @@ export function DateRangeFilter({
       setCalendarOpen(true);
       return;
     }
-    const range = presetRange(value);
+    const range = presetRange(value, reportingToday);
     if (!range.from || !range.to) return;
     onChange(
       format(range.from, "yyyy-MM-dd"),

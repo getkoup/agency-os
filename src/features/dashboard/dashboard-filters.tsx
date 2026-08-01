@@ -26,7 +26,9 @@ interface DashboardFiltersProps {
     campaignId?: string;
   };
   options: {
-    clients: Array<{ id: string; name: string; timezone: string }>;
+    reportingTimezone: string;
+    today: string;
+    clients: Array<{ id: string; name: string }>;
     includeUnassigned: boolean;
     platforms: string[];
     campaigns: Array<{ id: string; name: string }>;
@@ -74,13 +76,7 @@ export function DashboardFilters({
     (!searchParams.has("from") && !searchParams.has("to")
       ? defaultDatePreset
       : "custom")) as DatePreset;
-  const selectedClient = options.clients.find(
-    (client) => client.id === values.clientId,
-  );
-  const timezoneLabel =
-    values.clientId === "unassigned"
-      ? "UTC"
-      : (selectedClient?.timezone ?? "Each client’s local timezone");
+  const timezoneLabel = options.reportingTimezone;
 
   function updateFilter(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
@@ -111,7 +107,7 @@ export function DashboardFilters({
               Reporting controls
             </p>
             <p className="text-muted-foreground text-[0.8125rem]">
-              Dates follow each client&apos;s local timezone.
+              Dates follow the fixed agency reporting timezone.
             </p>
           </div>
         </div>
@@ -128,6 +124,7 @@ export function DashboardFilters({
           from={values.from}
           to={values.to}
           preset={datePreset}
+          reportingToday={options.today}
           onChange={updateDateRange}
           className={dateColumnClass}
         />

@@ -141,6 +141,13 @@
       "when": 1785595901111,
       "tag": "0019_smart_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785604848422,
+      "tag": "0020_far_changeling",
+      "breakpoints": true
     }
   ]
 }

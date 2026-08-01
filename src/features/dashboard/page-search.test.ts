@@ -14,6 +14,19 @@ describe("dashboard page search", () => {
     });
   });
 
+  it("uses the agency timezone for default date boundaries", () => {
+    expect(
+      resolveDashboardPageSearch(
+        {},
+        new Date("2026-07-12T01:00:00.000Z"),
+        "America/Los_Angeles",
+      ),
+    ).toMatchObject({
+      from: "2026-07-05",
+      to: "2026-07-11",
+    });
+  });
+
   it("coerces independent pagination without changing filters", () => {
     expect(
       resolveDashboardPageSearch({

@@ -1,4 +1,4 @@
-export function formatClientDateTime(date: Date, timeZone: string): string {
+export function formatReportingDateTime(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -10,7 +10,7 @@ export function formatClientDateTime(date: Date, timeZone: string): string {
   }).format(date);
 }
 
-export function formatClientDate(date: Date, timeZone: string): string {
+export function formatReportingDate(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",

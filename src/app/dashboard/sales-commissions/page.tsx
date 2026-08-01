@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { formatClientDateTime } from "~/features/dashboard/date-format";
+import { formatReportingDateTime } from "~/features/dashboard/date-format";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
@@ -72,13 +72,8 @@ const classificationLabels = {
   missing_description: "Missing text",
 } as const;
 
-function defaultDates() {
-  const now = new Date();
-  const to = now.toISOString().slice(0, 10);
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-    .toISOString()
-    .slice(0, 10);
-  return { from, to };
+function defaultDates(today: string) {
+  return { from: `${today.slice(0, 7)}-01`, to: today };
 }
 
 function reportViewHref(
@@ -106,8 +101,11 @@ export default async function SalesCommissionsPage({
 }) {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
-  const rawSearch = await searchParams;
-  const defaults = defaultDates();
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const defaults = defaultDates(reportingContext.today);
   const parsed = searchSchema.safeParse({
     from: rawSearch.from ?? defaults.from,
     to: rawSearch.to ?? defaults.to,
@@ -187,7 +185,11 @@ export default async function SalesCommissionsPage({
           categoryId: search.categoryId,
           classificationStatus: search.classificationStatus,
         }}
-        options={report.options}
+        options={{
+          ...report.options,
+          reportingTimezone: report.reportingTimezone,
+          today: report.today,
+        }}
       />
       {report.isTruncated ? (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
@@ -392,10 +394,12 @@ export default async function SalesCommissionsPage({
                     )}
                   >
                     <TableCell className="pl-6 whitespace-nowrap">
-                      <p>{formatClientDateTime(row.startsAt, row.timezone)}</p>
+                      <p>
+                        {formatReportingDateTime(row.startsAt, row.timezone)}
+                      </p>
                       <p className="text-muted-foreground mt-1 text-xs">
                         Booked{" "}
-                        {formatClientDateTime(row.bookedAt, row.timezone)}
+                        {formatReportingDateTime(row.bookedAt, row.timezone)}
                       </p>
                     </TableCell>
                     <TableCell>{row.clientName}</TableCell>

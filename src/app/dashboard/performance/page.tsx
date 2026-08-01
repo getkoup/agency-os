@@ -20,8 +20,15 @@ export default async function PerformancePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const rawSearch = await searchParams;
-  const search = resolveDashboardPageSearch(rawSearch);
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const search = resolveDashboardPageSearch(
+    rawSearch,
+    new Date(),
+    reportingContext.reportingTimezone,
+  );
   const filters = {
     from: search.from,
     to: search.to,
@@ -50,7 +57,7 @@ export default async function PerformancePage({
         description="Daily creative and ad-level results across every account you can access."
         meta={
           <span className="text-muted-foreground text-xs">
-            {search.from} through {search.to} · client-local dates
+            {search.from} through {search.to} · {options.reportingTimezone}
           </span>
         }
       />

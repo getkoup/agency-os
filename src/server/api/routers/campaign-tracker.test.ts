@@ -49,6 +49,8 @@ describe("campaign tracker router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getCampaignTrackerRows).mockResolvedValue({
+      reportingTimezone: "UTC",
+      today: date,
       focusDate: date,
       dates: ["2026-07-15", "2026-07-16", "2026-07-17", date],
       rows: [],

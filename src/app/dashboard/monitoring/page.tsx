@@ -85,13 +85,24 @@ export default async function MonitoringPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const rawSearch = await searchParams;
-  const defaultRange = resolveMonitoringDateRange();
-  const search = resolveDashboardPageSearch({
-    ...rawSearch,
-    from: rawSearch.from ?? defaultRange.from,
-    to: rawSearch.to ?? defaultRange.to,
-  });
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const now = new Date();
+  const defaultRange = resolveMonitoringDateRange(
+    now,
+    reportingContext.reportingTimezone,
+  );
+  const search = resolveDashboardPageSearch(
+    {
+      ...rawSearch,
+      from: rawSearch.from ?? defaultRange.from,
+      to: rawSearch.to ?? defaultRange.to,
+    },
+    now,
+    reportingContext.reportingTimezone,
+  );
   const filters = {
     from: search.from,
     to: search.to,
@@ -134,7 +145,8 @@ export default async function MonitoringPage({
         description="Campaign, ad set, and ad performance for the selected reporting dates."
         meta={
           <span className="text-muted-foreground text-xs">
-            {monitoring.from} through {monitoring.to}
+            {monitoring.from} through {monitoring.to} ·{" "}
+            {options.reportingTimezone}
           </span>
         }
       />

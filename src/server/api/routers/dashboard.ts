@@ -23,6 +23,7 @@ import {
   dashboardListInputSchema,
   filterOptionsInputSchema,
 } from "~/features/dashboard/server/schemas";
+import { getAgencyReportingContext } from "~/features/settings/server/reporting-timezone";
 import { getAllClientSyncRuns } from "~/features/synchronization/server/queries";
 import {
   agencyProcedure,
@@ -41,6 +42,7 @@ import { scheduleSyncWorker } from "~/server/sync/schedule-worker";
 
 export const dashboardRouter = createTRPCRouter({
   currentUser: protectedProcedure.query(({ ctx }) => ctx.currentUser),
+  reportingContext: protectedProcedure.query(() => getAgencyReportingContext()),
   filterOptions: protectedProcedure
     .input(filterOptionsInputSchema)
     .query(async ({ ctx, input }) => {

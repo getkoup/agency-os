@@ -33,12 +33,15 @@ export default async function CampaignTrackerPage({
 }) {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
-  const rawSearch = await searchParams;
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
   const rawDate = Array.isArray(rawSearch.date)
     ? rawSearch.date[0]
     : rawSearch.date;
-  const today = new Date().toISOString().slice(0, 10);
-  const focusDate = z.string().date().safeParse(rawDate).data ?? today;
+  const focusDate =
+    z.string().date().safeParse(rawDate).data ?? reportingContext.today;
   const result = await api.campaignTracker.daily({ date: focusDate });
   const clientGroupsById = new Map<
     string,
@@ -68,7 +71,7 @@ export default async function CampaignTrackerPage({
         meta={
           <Badge variant="secondary" className="rounded-[0.35rem]">
             {result.rows.length} active campaign
-            {result.rows.length === 1 ? "" : "s"}
+            {result.rows.length === 1 ? "" : "s"} · {result.reportingTimezone}
           </Badge>
         }
       />
@@ -80,7 +83,7 @@ export default async function CampaignTrackerPage({
             </CardTitle>
             <p className="text-muted-foreground text-sm">
               Review daily CPL, lead movement, campaign type, and operator
-              remarks by client.
+              remarks by client in {result.reportingTimezone}.
             </p>
           </div>
           <CampaignTrackerDateFilter date={focusDate} />

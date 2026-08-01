@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getAgencyReportingContext } from "~/features/settings/server/reporting-timezone";
 import { type UserRole } from "~/lib/roles";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { createCallerFactory } from "~/server/api/trpc";
@@ -11,6 +12,9 @@ import { scheduleSyncWorker } from "~/server/sync/schedule-worker";
 vi.mock("~/server/db", () => ({ db: {} }));
 vi.mock("~/server/auth", () => ({ auth: vi.fn() }));
 vi.mock("~/server/auth/current-user", () => ({ getCurrentUser: vi.fn() }));
+vi.mock("~/features/settings/server/reporting-timezone", () => ({
+  getAgencyReportingContext: vi.fn(),
+}));
 vi.mock("~/features/dashboard/server/client-scope", () => ({
   resolveAccessibleClientScope: vi.fn(),
 }));
@@ -89,6 +93,31 @@ function callerFor(role: UserRole | null) {
     currentUser,
   });
 }
+
+describe("dashboard reporting context authorization", () => {
+  beforeEach(() => {
+    vi.mocked(getAgencyReportingContext).mockResolvedValue({
+      reportingTimezone: "UTC",
+      today: "2026-07-30",
+    });
+  });
+
+  it.each(["owner", "admin", "manager", "client"] as const)(
+    "allows %s callers",
+    async (role) => {
+      await expect(callerFor(role).reportingContext()).resolves.toEqual({
+        reportingTimezone: "UTC",
+        today: "2026-07-30",
+      });
+    },
+  );
+
+  it("rejects anonymous callers", async () => {
+    await expect(callerFor(null).reportingContext()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+});
 
 describe("dashboard.syncAllClients authorization", () => {
   beforeEach(() => {

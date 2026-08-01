@@ -125,6 +125,35 @@ try {
   `;
   await applyMigration(test, "drizzle/0018_polite_bloodstorm.sql");
   await applyMigration(test, "drizzle/0019_smart_sugar_man.sql");
+  await applyMigration(test, "drizzle/0020_far_changeling.sql");
+  const [agencySetting] = await test`
+    select "id", "reportingTimezone"
+    from "agency_os_setting"
+  `;
+  if (
+    !agencySetting ||
+    agencySetting.id !== 1 ||
+    agencySetting.reportingTimezone !== "UTC"
+  ) {
+    throw new Error("Agency reporting timezone was not seeded as UTC");
+  }
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_setting" ("id", "reportingTimezone")
+        values (2, 'UTC')
+      `,
+    "agency setting singleton",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        update "agency_os_setting"
+        set "reportingTimezone" = '   '
+        where "id" = 1
+      `,
+    "non-blank reporting timezone",
+  );
   const globalSalespersonBackfill = await test`
     select i."externalUserId",
       count(distinct i."globalSalespersonId")::int "globalCount",

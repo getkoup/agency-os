@@ -5,14 +5,17 @@ import {
   createRevenueRule,
   removeGhlClientConfiguration,
   saveGhlClientConfiguration,
+  updateAgencyReportingTimezone,
   updateLeadClassificationRule,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
+import { reportingTimezoneSchema } from "~/features/settings/reporting-timezone";
 import {
   getGhlConfigurationStatus,
   listLeadClassificationRules,
   listRevenueRules,
 } from "~/features/settings/server/queries";
+import { getAgencyReportingSettings } from "~/features/settings/server/reporting-timezone";
 import {
   agencyProcedure,
   createTRPCRouter,
@@ -33,6 +36,15 @@ const matchMode = z.enum(["any", "all"]);
 const priority = z.number().int().min(0).max(1_000);
 
 export const settingsRouter = createTRPCRouter({
+  reportingTimezone: agencyProcedure.query(() => getAgencyReportingSettings()),
+  updateReportingTimezone: agencyProcedure
+    .input(z.object({ reportingTimezone: reportingTimezoneSchema }))
+    .mutation(({ ctx, input }) =>
+      updateAgencyReportingTimezone({
+        ...input,
+        userId: ctx.currentUser.id,
+      }),
+    ),
   leadClassificationRules: agencyProcedure
     .input(
       z.object({

@@ -30,8 +30,15 @@ export default async function ClientsPage({
 }) {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
-  const rawSearch = await searchParams;
-  const search = resolveDashboardPageSearch(rawSearch);
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const search = resolveDashboardPageSearch(
+    rawSearch,
+    new Date(),
+    reportingContext.reportingTimezone,
+  );
   const canManage = user.role === "owner";
   const [result, managed, options, unassignedAccounts] = await Promise.all([
     api.dashboard.clients({

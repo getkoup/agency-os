@@ -7,6 +7,7 @@ import {
   createRevenueRule,
   removeGhlClientConfiguration,
   saveGhlClientConfiguration,
+  updateAgencyReportingTimezone,
   updateLeadClassificationRule,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
@@ -15,6 +16,7 @@ import {
   listLeadClassificationRules,
   listRevenueRules,
 } from "~/features/settings/server/queries";
+import { getAgencyReportingSettings } from "~/features/settings/server/reporting-timezone";
 import { settingsRouter } from "~/server/api/routers/settings";
 import { createCallerFactory } from "~/server/api/trpc";
 import { db } from "~/server/db";
@@ -27,6 +29,7 @@ vi.mock("~/features/settings/server/actions", () => ({
   createRevenueRule: vi.fn(),
   removeGhlClientConfiguration: vi.fn(),
   saveGhlClientConfiguration: vi.fn(),
+  updateAgencyReportingTimezone: vi.fn(),
   updateLeadClassificationRule: vi.fn(),
   updateRevenueRule: vi.fn(),
 }));
@@ -34,6 +37,9 @@ vi.mock("~/features/settings/server/queries", () => ({
   listLeadClassificationRules: vi.fn(),
   listRevenueRules: vi.fn(),
   getGhlConfigurationStatus: vi.fn(),
+}));
+vi.mock("~/features/settings/server/reporting-timezone", () => ({
+  getAgencyReportingSettings: vi.fn(),
 }));
 
 const createCaller = createCallerFactory(settingsRouter);
@@ -71,6 +77,10 @@ const clientId = "00000000-0000-4000-8000-000000000001";
 describe("settings router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getAgencyReportingSettings).mockResolvedValue({
+      reportingTimezone: "UTC",
+      updatedAt: null,
+    });
     vi.mocked(listLeadClassificationRules).mockResolvedValue({
       rows: [],
       clientOptions: [],
@@ -96,6 +106,9 @@ describe("settings router", () => {
         lastSuccessfulSyncAt: null,
       },
     ]);
+    vi.mocked(updateAgencyReportingTimezone).mockResolvedValue({
+      reportingTimezone: "America/Los_Angeles",
+    });
     vi.mocked(createLeadClassificationRule).mockResolvedValue({
       id: "classification-rule-1",
     });
@@ -120,6 +133,32 @@ describe("settings router", () => {
       ).resolves.toMatchObject({ rows: [] });
     },
   );
+
+  it.each(["owner", "admin"] as const)(
+    "allows %s to configure the agency reporting timezone",
+    async (role) => {
+      await expect(callerFor(role).reportingTimezone()).resolves.toEqual({
+        reportingTimezone: "UTC",
+        updatedAt: null,
+      });
+      await callerFor(role).updateReportingTimezone({
+        reportingTimezone: "America/Los_Angeles",
+      });
+      expect(updateAgencyReportingTimezone).toHaveBeenCalledWith({
+        reportingTimezone: "America/Los_Angeles",
+        userId: "user-1",
+      });
+    },
+  );
+
+  it("validates the reporting timezone before the action", async () => {
+    await expect(
+      callerFor("owner").updateReportingTimezone({
+        reportingTimezone: "Not/A_Timezone",
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(updateAgencyReportingTimezone).not.toHaveBeenCalled();
+  });
 
   it("keeps GHL credential management owner-only", async () => {
     const status = await callerFor("owner").ghlConfigurationStatus();
@@ -153,6 +192,12 @@ describe("settings router", () => {
   it.each(["manager", "client"] as const)("rejects %s access", async (role) => {
     await expect(
       callerFor(role).revenueRules({ page: 1, pageSize: 25 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(callerFor(role).reportingTimezone()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(
+      callerFor(role).updateReportingTimezone({ reportingTimezone: "UTC" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 

@@ -47,6 +47,14 @@ import {
 } from "~/features/dashboard/lead-classification";
 import { type DashboardFilters } from "~/features/dashboard/server/schemas";
 import { calculateClientHealth } from "~/features/dashboard/health";
+import {
+  DEFAULT_REPORTING_TIMEZONE,
+  getCalendarDateInTimezone,
+} from "~/features/settings/reporting-timezone";
+import {
+  agencyReportingTimezoneSql,
+  getAgencyReportingContext,
+} from "~/features/settings/server/reporting-timezone";
 
 export interface AccessibleScope {
   includeUnassigned: boolean;
@@ -71,23 +79,9 @@ function opportunityScopeCondition(scope: AccessibleScope): SQL | undefined {
     ? inArray(integrationMappings.clientId, scope.clientIds)
     : sql`false`;
 }
-const sourceAccountTimezoneSql = sql<string>`coalesce((
-  select mapping."timezone"
-  from ${integrationMappings} mapping
-  where mapping."clientId" = ${sourceAccounts.clientId}
-    and mapping."provider" = 'ghl'
-  limit 1
-), 'UTC')`;
-const leadLocalDateSql = sql<string>`timezone(${sourceAccountTimezoneSql}, ${leads.occurredAt})::date`;
-const opportunityLocalDateSql = sql<string>`timezone(${integrationMappings.timezone}, ${ghlOpportunities.wonAt})::date`;
-const appointmentLocalDateSql = sql<string>`timezone(${integrationMappings.timezone}, ${ghlAppointments.startsAt})::date`;
-const clientTimezoneSql = sql<string>`coalesce((
-  select mapping."timezone"
-  from ${integrationMappings} mapping
-  where mapping."clientId" = ${clients.id}
-    and mapping."provider" = 'ghl'
-  limit 1
-), 'UTC')`;
+const leadReportingDateSql = sql<string>`timezone(${agencyReportingTimezoneSql}, ${leads.occurredAt})::date`;
+const opportunityReportingDateSql = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlOpportunities.wonAt})::date`;
+const appointmentReportingDateSql = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.startsAt})::date`;
 
 function appointmentConditions(
   filters: DashboardFilters,
@@ -96,8 +90,8 @@ function appointmentConditions(
   return [
     opportunityScopeCondition(scope),
     eq(ghlAppointments.deleted, false),
-    sql`${appointmentLocalDateSql} >= ${filters.from}::date`,
-    sql`${appointmentLocalDateSql} <= ${filters.to}::date`,
+    sql`${appointmentReportingDateSql} >= ${filters.from}::date`,
+    sql`${appointmentReportingDateSql} <= ${filters.to}::date`,
     filters.platform
       ? eq(sourceAccounts.platform, filters.platform)
       : undefined,
@@ -111,8 +105,8 @@ function opportunityConditions(
 ): Array<SQL | undefined> {
   return [
     opportunityScopeCondition(scope),
-    sql`${opportunityLocalDateSql} >= ${filters.from}::date`,
-    sql`${opportunityLocalDateSql} <= ${filters.to}::date`,
+    sql`${opportunityReportingDateSql} >= ${filters.from}::date`,
+    sql`${opportunityReportingDateSql} <= ${filters.to}::date`,
     filters.platform
       ? eq(sourceAccounts.platform, filters.platform)
       : undefined,
@@ -165,8 +159,8 @@ function leadConditions(
 ): Array<SQL | undefined> {
   return [
     clientScopeCondition(scope),
-    sql`${leadLocalDateSql} >= ${filters.from}::date`,
-    sql`${leadLocalDateSql} <= ${filters.to}::date`,
+    sql`${leadReportingDateSql} >= ${filters.from}::date`,
+    sql`${leadReportingDateSql} <= ${filters.to}::date`,
     filters.platform
       ? eq(sourceAccounts.platform, filters.platform)
       : undefined,
@@ -315,7 +309,7 @@ export async function getPerformanceRows(
         select count(*)::int
         from ${leads} creative_lead
         where creative_lead."adId" = ${adPerformanceDaily.adId}
-          and timezone(${sourceAccountTimezoneSql}, creative_lead."occurredAt")::date = ${adPerformanceDaily.date}::date
+          and timezone(${agencyReportingTimezoneSql}, creative_lead."occurredAt")::date = ${adPerformanceDaily.date}::date
       )`,
     })
     .from(adPerformanceDaily)
@@ -364,7 +358,7 @@ export async function getLeadRows(
     .select({
       id: leads.id,
       occurredAt: leads.occurredAt,
-      timezone: sourceAccountTimezoneSql,
+      timezone: agencyReportingTimezoneSql,
       client: clients.name,
       platform: sourceAccounts.platform,
       sourceAccount: sourceAccounts.externalAccountName,
@@ -436,14 +430,14 @@ export async function getLeadAnalytics(
     .where(bookingWhere);
   const leadDays = await db
     .select({
-      date: sql<string>`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`,
       leads: count(),
     })
     .from(leads)
     .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(leadWhere)
-    .groupBy(sql`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`);
+    .groupBy(sql`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`);
   const dmDays = await db
     .select({
       date: adPerformanceDaily.date,
@@ -459,7 +453,7 @@ export async function getLeadAnalytics(
     .groupBy(adPerformanceDaily.date);
   const bookingDays = await db
     .select({
-      date: sql<string>`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${appointmentReportingDateSql}, 'YYYY-MM-DD')`,
       bookings: count(),
     })
     .from(ghlAppointments)
@@ -475,7 +469,7 @@ export async function getLeadAnalytics(
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(bookingWhere)
-    .groupBy(sql`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`);
+    .groupBy(sql`to_char(${appointmentReportingDateSql}, 'YYYY-MM-DD')`);
   const [formCampaignRows, dmCampaignRows, bookingCategoryRows] =
     await Promise.all([
       db
@@ -815,7 +809,7 @@ export async function getRevenueRows(
     .select({
       id: ghlOpportunities.id,
       wonAt: ghlOpportunities.wonAt,
-      timezone: integrationMappings.timezone,
+      timezone: agencyReportingTimezoneSql,
       clientId: clients.id,
       client: clients.name,
       opportunity: ghlOpportunities.name,
@@ -877,11 +871,11 @@ export async function getFilterOptions(
   scope: AccessibleScope,
   clientOptionScope: AccessibleScope = scope,
 ) {
+  const reportingContext = await getAgencyReportingContext();
   const scopeCondition = clientScopeCondition(scope);
   const clientSelection = {
     id: clients.id,
     name: clients.name,
-    timezone: clientTimezoneSql,
   };
   const clientRows =
     clientOptionScope.clientIds === null
@@ -918,6 +912,7 @@ export async function getFilterOptions(
     )
     .orderBy(asc(campaigns.name));
   return {
+    ...reportingContext,
     clients: clientRows,
     includeUnassigned: clientOptionScope.includeUnassigned,
     platforms: platforms.map((platform) => platform.value),
@@ -946,17 +941,17 @@ export async function getTrend(
     .orderBy(asc(adPerformanceDaily.date));
   const capturedRows = await db
     .select({
-      date: sql<string>`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`,
       facebookLeadFormLeads: count(),
     })
     .from(leads)
     .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(and(...leadConditions(filters, scope)))
-    .groupBy(sql`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`);
+    .groupBy(sql`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`);
   const wonOpportunityRows = await db
     .select({
-      date: sql<string>`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${appointmentReportingDateSql}, 'YYYY-MM-DD')`,
       wonOpportunities: count(),
     })
     .from(ghlAppointments)
@@ -972,7 +967,7 @@ export async function getTrend(
     .leftJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
     .leftJoin(campaigns, eq(leads.campaignId, campaigns.id))
     .where(and(...appointmentConditions(filters, scope)))
-    .groupBy(sql`to_char(${appointmentLocalDateSql}, 'YYYY-MM-DD')`);
+    .groupBy(sql`to_char(${appointmentReportingDateSql}, 'YYYY-MM-DD')`);
   const byDate = new Map(performanceRows.map((row) => [row.date, row]));
   const facebookLeadFormsByDate = new Map(
     capturedRows.map((row) => [row.date, row.facebookLeadFormLeads]),
@@ -1001,8 +996,11 @@ export async function getTrend(
   return rows;
 }
 
-export function resolveMonitoringDateRange(now = new Date()) {
-  const to = now.toISOString().slice(0, 10);
+export function resolveMonitoringDateRange(
+  now = new Date(),
+  reportingTimezone = DEFAULT_REPORTING_TIMEZONE,
+) {
+  const to = getCalendarDateInTimezone(now, reportingTimezone);
   const fromDate = new Date(`${to}T00:00:00.000Z`);
   fromDate.setUTCDate(fromDate.getUTCDate() - 2);
   return { from: fromDate.toISOString().slice(0, 10), to };
@@ -1070,8 +1068,8 @@ export async function getMonitoringCampaigns(
         and(
           clientScopeCondition(scope),
           isNotNull(leads.adId),
-          sql`${leadLocalDateSql} >= ${input.from}::date`,
-          sql`${leadLocalDateSql} <= ${input.to}::date`,
+          sql`${leadReportingDateSql} >= ${input.from}::date`,
+          sql`${leadReportingDateSql} <= ${input.to}::date`,
         ),
       )
       .groupBy(leads.adId),
@@ -1402,13 +1400,7 @@ export async function getClientAnalytics(input: {
   priorFrom.setUTCDate(priorFrom.getUTCDate() - dayCount);
   const priorFromDate = priorFrom.toISOString().slice(0, 10);
   const outerClientId = sql.raw('"agency_os_client"."id"');
-  const outerClientTimezone = sql<string>`coalesce((
-    select local_mapping."timezone"
-    from ${integrationMappings} local_mapping
-    where local_mapping."clientId" = ${outerClientId}
-      and local_mapping."provider" = 'ghl'
-    limit 1
-  ), 'UTC')`;
+  const reportingTimezone = agencyReportingTimezoneSql;
   const where = and(
     input.query ? sql`${clients.name} ilike ${`%${input.query}%`}` : undefined,
     input.status ? eq(clients.status, input.status) : undefined,
@@ -1427,17 +1419,17 @@ export async function getClientAnalytics(input: {
       id: clients.id,
       name: clients.name,
       status: clients.status,
-      timezone: outerClientTimezone,
+      timezone: reportingTimezone,
       sourceAccountCount: sql<number>`(select count(*)::int from ${sourceAccounts} sa where sa."clientId" = ${outerClientId})`,
       spend: sql<string>`coalesce((select sum(p."spend") from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${input.from} and p."date" <= ${input.to}), 0)::numeric(14,2)`,
       priorSpend: sql<string>`coalesce((select sum(p."spend") from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${priorFromDate} and p."date" < ${input.from}), 0)::numeric(14,2)`,
       platformLeads: sql<number>`coalesce((select sum(p."leads")::int from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${input.from} and p."date" <= ${input.to}), 0)::int`,
-      facebookLeadFormLeads: sql<number>`(select count(*)::int from ${leads} l inner join ${sourceAccounts} sa on l."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and timezone(${outerClientTimezone}, l."occurredAt")::date >= ${input.from}::date and timezone(${outerClientTimezone}, l."occurredAt")::date <= ${input.to}::date)`,
+      facebookLeadFormLeads: sql<number>`(select count(*)::int from ${leads} l inner join ${sourceAccounts} sa on l."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and timezone(${reportingTimezone}, l."occurredAt")::date >= ${input.from}::date and timezone(${reportingTimezone}, l."occurredAt")::date <= ${input.to}::date)`,
       dmLeads: sql<number>`coalesce((select sum(p."messagingConversations")::int from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${input.from} and p."date" <= ${input.to}), 0)::int`,
-      priorFacebookLeadFormLeads: sql<number>`(select count(*)::int from ${leads} l inner join ${sourceAccounts} sa on l."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and timezone(${outerClientTimezone}, l."occurredAt")::date >= ${priorFromDate}::date and timezone(${outerClientTimezone}, l."occurredAt")::date < ${input.from}::date)`,
+      priorFacebookLeadFormLeads: sql<number>`(select count(*)::int from ${leads} l inner join ${sourceAccounts} sa on l."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and timezone(${reportingTimezone}, l."occurredAt")::date >= ${priorFromDate}::date and timezone(${reportingTimezone}, l."occurredAt")::date < ${input.from}::date)`,
       priorDmLeads: sql<number>`coalesce((select sum(p."messagingConversations")::int from ${adPerformanceDaily} p inner join ${sourceAccounts} sa on p."sourceAccountId" = sa."id" where sa."clientId" = ${outerClientId} and p."date" >= ${priorFromDate} and p."date" < ${input.from}), 0)::int`,
-      bookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(im."timezone", a."startsAt")::date >= ${input.from}::date and timezone(im."timezone", a."startsAt")::date <= ${input.to}::date)`,
-      priorBookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(im."timezone", a."startsAt")::date >= ${priorFromDate}::date and timezone(im."timezone", a."startsAt")::date < ${input.from}::date)`,
+      bookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(${reportingTimezone}, a."startsAt")::date >= ${input.from}::date and timezone(${reportingTimezone}, a."startsAt")::date <= ${input.to}::date)`,
+      priorBookings: sql<number>`(select count(*)::int from ${ghlAppointments} a inner join ${integrationMappings} im on a."integrationMappingId" = im."id" where im."clientId" = ${outerClientId} and not a."deleted" and timezone(${reportingTimezone}, a."startsAt")::date >= ${priorFromDate}::date and timezone(${reportingTimezone}, a."startsAt")::date < ${input.from}::date)`,
       estimatedRevenue: sql<string>`coalesce((
         select sum(coalesce((
           select sum(rr."revenueValue")
@@ -1453,8 +1445,8 @@ export async function getClientAnalytics(input: {
         from ${ghlOpportunities} o
         inner join ${integrationMappings} im on o."integrationMappingId" = im."id"
         where im."clientId" = ${outerClientId}
-          and timezone(im."timezone", o."wonAt")::date >= ${input.from}::date
-          and timezone(im."timezone", o."wonAt")::date <= ${input.to}::date
+          and timezone(${reportingTimezone}, o."wonAt")::date >= ${input.from}::date
+          and timezone(${reportingTimezone}, o."wonAt")::date <= ${input.to}::date
       ), 0)::numeric(14,2)`,
     })
     .from(clients)
@@ -1472,8 +1464,8 @@ export async function getClientAnalytics(input: {
          inner join ${sourceAccounts} benchmark_source
            on benchmark_lead."sourceAccountId" = benchmark_source."id"
          where benchmark_source."clientId" = ${outerClientId}
-           and timezone(${outerClientTimezone}, benchmark_lead."occurredAt")::date >= ${input.from}::date
-           and timezone(${outerClientTimezone}, benchmark_lead."occurredAt")::date <= ${input.to}::date)
+           and timezone(${reportingTimezone}, benchmark_lead."occurredAt")::date >= ${input.from}::date
+           and timezone(${reportingTimezone}, benchmark_lead."occurredAt")::date <= ${input.to}::date)
         +
         (select coalesce(sum(benchmark_performance."messagingConversations"), 0)
          from ${adPerformanceDaily} benchmark_performance
@@ -1490,8 +1482,8 @@ export async function getClientAnalytics(input: {
           on benchmark_appointment."integrationMappingId" = benchmark_mapping."id"
         where benchmark_mapping."clientId" = ${outerClientId}
           and not benchmark_appointment."deleted"
-          and timezone(benchmark_mapping."timezone", benchmark_appointment."startsAt")::date >= ${input.from}::date
-          and timezone(benchmark_mapping."timezone", benchmark_appointment."startsAt")::date <= ${input.to}::date
+          and timezone(${reportingTimezone}, benchmark_appointment."startsAt")::date >= ${input.from}::date
+          and timezone(${reportingTimezone}, benchmark_appointment."startsAt")::date <= ${input.to}::date
       )), 0)::int`,
     })
     .from(clients)

@@ -89,6 +89,26 @@ export const users = createTable(
   (t) => [uniqueIndex("user_email_lower_idx").on(sql`lower(${t.email})`)],
 );
 
+export const agencySettings = createTable(
+  "setting",
+  (d) => ({
+    id: d.integer().default(1).primaryKey(),
+    reportingTimezone: d.varchar({ length: 100 }).default("UTC").notNull(),
+    updatedByUserId: d
+      .varchar({ length: 255 })
+      .references(() => users.id, { onDelete: "set null" }),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    check("setting_singleton", sql`${t.id} = 1`),
+    check(
+      "setting_reporting_timezone_not_blank",
+      sql`length(trim(${t.reportingTimezone})) > 0`,
+    ),
+  ],
+);
+
 export const accounts = createTable(
   "account",
   (d) => ({

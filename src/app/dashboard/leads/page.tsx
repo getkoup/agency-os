@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { DashboardFilters } from "~/features/dashboard/dashboard-filters";
-import { formatClientDateTime } from "~/features/dashboard/date-format";
+import { formatReportingDateTime } from "~/features/dashboard/date-format";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
@@ -29,8 +29,15 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const rawSearch = await searchParams;
-  const search = resolveDashboardPageSearch(rawSearch);
+  const [rawSearch, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
+  const search = resolveDashboardPageSearch(
+    rawSearch,
+    new Date(),
+    reportingContext.reportingTimezone,
+  );
   const filters = {
     from: search.from,
     to: search.to,
@@ -56,7 +63,7 @@ export default async function LeadsPage({
         description="Total lead events combine Facebook lead forms and attributed DM conversations."
         meta={
           <span className="text-muted-foreground text-xs">
-            {search.from} through {search.to} · client-local dates
+            {search.from} through {search.to} · {options.reportingTimezone}
           </span>
         }
       />
@@ -272,7 +279,9 @@ export default async function LeadsPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Local date</TableHead>
+                  <TableHead className="pl-6">
+                    {options.reportingTimezone} date
+                  </TableHead>
                   <TableHead className="text-right">Facebook forms</TableHead>
                   <TableHead className="text-right">DM leads</TableHead>
                   <TableHead className="text-right">Total leads</TableHead>
@@ -325,8 +334,8 @@ export default async function LeadsPage({
                   <TableHead>Lead</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead>Client local created</TableHead>
-                  <TableHead>Timezone</TableHead>
+                  <TableHead>Agency reporting created</TableHead>
+                  <TableHead>Reporting timezone</TableHead>
                   <TableHead className="pr-6">UTC created</TableHead>
                 </TableRow>
               </TableHeader>
@@ -351,7 +360,7 @@ export default async function LeadsPage({
                     </TableCell>
                     <TableCell>{row.sourceAccount}</TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap tabular-nums">
-                      {formatClientDateTime(row.occurredAt, row.timezone)}
+                      {formatReportingDateTime(row.occurredAt, row.timezone)}
                     </TableCell>
                     <TableCell>{row.timezone}</TableCell>
                     <TableCell className="text-muted-foreground pr-6 whitespace-nowrap tabular-nums">

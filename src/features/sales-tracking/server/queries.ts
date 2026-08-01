@@ -2,6 +2,10 @@ import "server-only";
 
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 
+import {
+  agencyReportingTimezoneSql,
+  getAgencyReportingContext,
+} from "~/features/settings/server/reporting-timezone";
 import { db } from "~/server/db";
 import {
   clients,
@@ -59,8 +63,9 @@ export async function getSalesTrackingRows(input: {
   const dates = resolveSalesTrackingDates(input.date, input.groupSize);
   const from = dates[0];
   if (!from) throw new Error("Sales tracking date range is empty");
-  const appointmentCreatedDate = sql<string>`timezone(${integrationMappings.timezone}, ${ghlAppointments.providerCreatedAt})::date`;
-  const [clientRows, bookingRows] = await Promise.all([
+  const appointmentCreatedDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.providerCreatedAt})::date`;
+  const [reportingContext, clientRows, bookingRows] = await Promise.all([
+    getAgencyReportingContext(),
     db
       .select({
         id: clients.id,
@@ -136,5 +141,11 @@ export async function getSalesTrackingRows(input: {
         (right.attainment ?? Number.POSITIVE_INFINITY) ||
       left.name.localeCompare(right.name),
   );
-  return { focusDate: input.date, dates, dateGroups, rows };
+  return {
+    ...reportingContext,
+    focusDate: input.date,
+    dates,
+    dateGroups,
+    rows,
+  };
 }

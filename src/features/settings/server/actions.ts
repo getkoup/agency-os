@@ -8,8 +8,11 @@ import {
   formatUsdCents,
   parseUsdToCents,
 } from "~/features/revenue/calculations";
+import { reportingTimezoneSchema } from "~/features/settings/reporting-timezone";
+import { AGENCY_SETTING_ID } from "~/features/settings/server/reporting-timezone";
 import { db } from "~/server/db";
 import {
+  agencySettings,
   clients,
   ghlClientConfigurations,
   integrationMappings,
@@ -214,6 +217,40 @@ export async function updateRevenueRule(input: {
     }
     throw error;
   }
+}
+
+export async function updateAgencyReportingTimezone(input: {
+  reportingTimezone: string;
+  userId: string;
+}) {
+  const parsed = reportingTimezoneSchema.safeParse(input.reportingTimezone);
+  if (!parsed.success) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Select a valid IANA timezone",
+      cause: parsed.error,
+    });
+  }
+  const [settings] = await db
+    .insert(agencySettings)
+    .values({
+      id: AGENCY_SETTING_ID,
+      reportingTimezone: parsed.data,
+      updatedByUserId: input.userId,
+    })
+    .onConflictDoUpdate({
+      target: agencySettings.id,
+      set: {
+        reportingTimezone: parsed.data,
+        updatedByUserId: input.userId,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ reportingTimezone: agencySettings.reportingTimezone });
+  if (!settings) {
+    throw new Error("Agency reporting timezone update returned no row");
+  }
+  return settings;
 }
 
 export async function saveGhlClientConfiguration(input: {

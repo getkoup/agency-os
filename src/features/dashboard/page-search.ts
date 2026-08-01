@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  DEFAULT_REPORTING_TIMEZONE,
+  getCalendarDateInTimezone,
+} from "~/features/settings/reporting-timezone";
+
 const dashboardPageSearchSchema = z.object({
   from: z.string().date().optional(),
   to: z.string().date().optional(),
@@ -29,8 +34,9 @@ export interface DashboardPageSearch {
 export function resolveDashboardPageSearch(
   search: Record<string, string | string[] | undefined>,
   now = new Date(),
+  reportingTimezone = DEFAULT_REPORTING_TIMEZONE,
 ): DashboardPageSearch {
-  const today = now.toISOString().slice(0, 10);
+  const today = getCalendarDateInTimezone(now, reportingTimezone);
   const fromDate = new Date(`${today}T00:00:00.000Z`);
   fromDate.setUTCDate(fromDate.getUTCDate() - 6);
   const parsed = dashboardPageSearchSchema.parse({

@@ -55,11 +55,14 @@ export default async function SalesTrackingPage({
 }) {
   const user = await getAuthenticatedUser();
   if (user.role === "client") notFound();
-  const search = await searchParams;
+  const [search, reportingContext] = await Promise.all([
+    searchParams,
+    api.dashboard.reportingContext(),
+  ]);
   const rawDate = Array.isArray(search.date) ? search.date[0] : search.date;
   const rawGroup = Array.isArray(search.group) ? search.group[0] : search.group;
-  const today = new Date().toISOString().slice(0, 10);
-  const date = z.string().date().safeParse(rawDate).data ?? today;
+  const date =
+    z.string().date().safeParse(rawDate).data ?? reportingContext.today;
   const groupSize =
     z.coerce
       .number()
@@ -90,7 +93,7 @@ export default async function SalesTrackingPage({
         description="Booking creation performance against each client's configured goal."
         meta={
           <Badge variant="secondary" className="rounded-[0.35rem]">
-            {result.rows.length} active clients
+            {result.rows.length} active clients · {result.reportingTimezone}
           </Badge>
         }
       />
@@ -138,7 +141,7 @@ export default async function SalesTrackingPage({
             </CardTitle>
             <p className="text-muted-foreground text-sm">
               Ranked progress against each client&apos;s booking goal for the
-              four reporting periods.
+              four reporting periods in {result.reportingTimezone}.
             </p>
           </div>
           <SalesTrackingControls date={date} groupSize={groupSize} />

@@ -6,26 +6,22 @@ import {
   classifyCampaign,
   type LeadClassificationRule,
 } from "~/features/dashboard/lead-classification";
+import {
+  agencyReportingTimezoneSql,
+  getAgencyReportingContext,
+} from "~/features/settings/server/reporting-timezone";
 import { db } from "~/server/db";
 import {
   adPerformanceDaily,
   campaignDailyRemarks,
   campaigns,
   clients,
-  integrationMappings,
   leadClassificationRules,
   leads,
   sourceAccounts,
 } from "~/server/db/schema";
 
-const sourceAccountTimezoneSql = sql<string>`coalesce((
-  select mapping."timezone"
-  from ${integrationMappings} mapping
-  where mapping."clientId" = ${sourceAccounts.clientId}
-    and mapping."provider" = 'ghl'
-  limit 1
-), 'UTC')`;
-const leadLocalDateSql = sql<string>`timezone(${sourceAccountTimezoneSql}, ${leads.occurredAt})::date`;
+const leadReportingDateSql = sql<string>`timezone(${agencyReportingTimezoneSql}, ${leads.occurredAt})::date`;
 
 export function resolveCampaignTrackerDates(focusDate: string) {
   const end = new Date(`${focusDate}T00:00:00.000Z`);
@@ -46,6 +42,7 @@ export async function getCampaignTrackerRows(focusDate: string) {
   const from = dates[0];
   if (!from) throw new Error("Campaign tracker date range is empty");
   const campaignLimit = 500;
+  const reportingContext = await getAgencyReportingContext();
   const activeCampaignRows = await db
     .select({
       id: campaigns.id,
@@ -78,7 +75,7 @@ export async function getCampaignTrackerRows(focusDate: string) {
     ...new Set(activeCampaigns.map(({ clientId }) => clientId)),
   ];
   if (!campaignIds.length) {
-    return { focusDate, dates, rows: [], isTruncated };
+    return { ...reportingContext, focusDate, dates, rows: [], isTruncated };
   }
   const [performanceRows, formLeadRows, ruleRows, remarkRows] =
     await Promise.all([
@@ -101,7 +98,7 @@ export async function getCampaignTrackerRows(focusDate: string) {
       db
         .select({
           campaignId: leads.campaignId,
-          date: sql<string>`to_char(${leadLocalDateSql}, 'YYYY-MM-DD')`,
+          date: sql<string>`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`,
           facebookLeadFormLeads: count(),
         })
         .from(leads)
@@ -109,11 +106,11 @@ export async function getCampaignTrackerRows(focusDate: string) {
         .where(
           and(
             inArray(leads.campaignId, campaignIds),
-            sql`${leadLocalDateSql} >= ${from}::date`,
-            sql`${leadLocalDateSql} <= ${focusDate}::date`,
+            sql`${leadReportingDateSql} >= ${from}::date`,
+            sql`${leadReportingDateSql} <= ${focusDate}::date`,
           ),
         )
-        .groupBy(leads.campaignId, sql`${leadLocalDateSql}`),
+        .groupBy(leads.campaignId, sql`${leadReportingDateSql}`),
       db
         .select({
           id: leadClassificationRules.id,
@@ -182,6 +179,7 @@ export async function getCampaignTrackerRows(focusDate: string) {
     metricsByCampaignDate.set(key, metric);
   }
   return {
+    ...reportingContext,
     focusDate,
     dates,
     isTruncated,
