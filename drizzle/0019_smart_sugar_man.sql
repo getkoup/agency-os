@@ -1,0 +1,1 @@
+CREATE INDEX "salesperson_external_user_idx" ON "agency_os_salesperson" USING btree ("externalUserId");

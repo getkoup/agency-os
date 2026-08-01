@@ -127,6 +127,20 @@
       "when": 1785552650915,
       "tag": "0017_worthless_gamora",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785594384175,
+      "tag": "0018_polite_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785595901111,
+      "tag": "0019_smart_sugar_man",
+      "breakpoints": true
     }
   ]
 }

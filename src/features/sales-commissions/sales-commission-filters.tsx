@@ -24,8 +24,10 @@ export function SalesCommissionFilters({
   values: {
     from: string;
     to: string;
+    view: "client" | "salesperson";
     clientId?: string;
     salespersonId?: string;
+    globalSalespersonId?: string;
     status?: string;
     categoryId?: string;
     classificationStatus?: string;
@@ -37,6 +39,12 @@ export function SalesCommissionFilters({
       clientId: string;
       name: string;
       isUnnamed: boolean;
+    }>;
+    globalSalespeople: Array<{
+      id: string;
+      name: string;
+      isUnnamed: boolean;
+      clientIds: string[];
     }>;
     categories: Array<{ id: string; clientId: string; name: string }>;
   };
@@ -53,6 +61,11 @@ export function SalesCommissionFilters({
         (person) => person.clientId === values.clientId,
       )
     : options.salespeople;
+  const visibleGlobalSalespeople = values.clientId
+    ? options.globalSalespeople.filter((person) =>
+        person.clientIds.includes(values.clientId!),
+      )
+    : options.globalSalespeople;
   const visibleCategories = values.clientId
     ? options.categories.filter(
         (category) => category.clientId === values.clientId,
@@ -70,6 +83,7 @@ export function SalesCommissionFilters({
     else next.set(key, value);
     if (key === "clientId") {
       next.delete("salespersonId");
+      next.delete("globalSalespersonId");
       next.delete("categoryId");
     }
     navigate(next);
@@ -121,14 +135,30 @@ export function SalesCommissionFilters({
           ]}
         />
         <FilterSelect
-          label="Salesperson"
-          value={values.salespersonId ?? "all"}
-          onChange={(value) => update("salespersonId", value)}
+          label={
+            values.view === "salesperson" ? "Global salesperson" : "Salesperson"
+          }
+          value={
+            values.view === "salesperson"
+              ? (values.globalSalespersonId ?? "all")
+              : (values.salespersonId ?? "all")
+          }
+          onChange={(value) =>
+            update(
+              values.view === "salesperson"
+                ? "globalSalespersonId"
+                : "salespersonId",
+              value,
+            )
+          }
           className="xl:col-span-2"
           options={[
             { value: "all", label: "All salespeople" },
             { value: "unassigned", label: "Unassigned / widget" },
-            ...visibleSalespeople.map((person) => ({
+            ...(values.view === "salesperson"
+              ? visibleGlobalSalespeople
+              : visibleSalespeople
+            ).map((person) => ({
               value: person.id,
               label: person.name,
             })),

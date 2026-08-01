@@ -6,6 +6,12 @@ import {
   saveSalesCommissionSettings,
 } from "~/features/sales-commissions/server/actions";
 import {
+  getGlobalSalespeople,
+  linkSalespersonToGlobal,
+  separateSalespersonIdentity,
+  updateGlobalSalesperson,
+} from "~/features/sales-commissions/server/global-salespeople";
+import {
   getSalesCommissionReport,
   getSalesCommissionSetup,
 } from "~/features/sales-commissions/server/queries";
@@ -20,6 +26,12 @@ vi.mock("~/features/sales-commissions/server/queries", () => ({
   getSalesCommissionReport: vi.fn(),
   getSalesCommissionSetup: vi.fn(),
 }));
+vi.mock("~/features/sales-commissions/server/global-salespeople", () => ({
+  getGlobalSalespeople: vi.fn(),
+  linkSalespersonToGlobal: vi.fn(),
+  separateSalespersonIdentity: vi.fn(),
+  updateGlobalSalesperson: vi.fn(),
+}));
 vi.mock("~/features/sales-commissions/server/actions", () => ({
   createSalesCategory: vi.fn(),
   createSalesOffer: vi.fn(),
@@ -33,6 +45,8 @@ vi.mock("~/features/sales-commissions/server/actions", () => ({
 
 const createCaller = createCallerFactory(salesCommissionsRouter);
 const clientId = "00000000-0000-4000-8000-000000000001";
+const salespersonId = "00000000-0000-4000-8000-000000000002";
+const globalSalespersonId = "00000000-0000-4000-8000-000000000003";
 
 function callerFor(role: UserRole | null) {
   const currentUser = role
@@ -62,6 +76,12 @@ describe("sales commissions router", () => {
     vi.clearAllMocks();
     vi.mocked(getSalesCommissionReport).mockResolvedValue({} as never);
     vi.mocked(getSalesCommissionSetup).mockResolvedValue({} as never);
+    vi.mocked(getGlobalSalespeople).mockResolvedValue({} as never);
+    vi.mocked(updateGlobalSalesperson).mockResolvedValue({ success: true });
+    vi.mocked(linkSalespersonToGlobal).mockResolvedValue({ success: true });
+    vi.mocked(separateSalespersonIdentity).mockResolvedValue({
+      globalSalespersonId,
+    });
     vi.mocked(createSalesCategory).mockResolvedValue({ id: "category-1" });
     vi.mocked(saveSalesCommissionSettings).mockResolvedValue({ success: true });
   });
@@ -103,7 +123,21 @@ describe("sales commissions router", () => {
         name: "Ceramic",
         sortOrder: 0,
       });
+      await callerFor(role).globalSalespeople({ page: 1, pageSize: 25 });
+      await callerFor(role).updateGlobalSalesperson({
+        globalSalespersonId,
+        displayName: "Closer A",
+      });
+      await callerFor(role).linkSalespersonToGlobal({
+        salespersonId,
+        targetGlobalSalespersonId: globalSalespersonId,
+      });
+      await callerFor(role).separateSalespersonIdentity({ salespersonId });
       expect(getSalesCommissionSetup).toHaveBeenCalledWith({ clientId });
+      expect(getGlobalSalespeople).toHaveBeenCalledOnce();
+      expect(updateGlobalSalesperson).toHaveBeenCalledOnce();
+      expect(linkSalespersonToGlobal).toHaveBeenCalledOnce();
+      expect(separateSalespersonIdentity).toHaveBeenCalledOnce();
       expect(saveSalesCommissionSettings).toHaveBeenCalledOnce();
       expect(createSalesCategory).toHaveBeenCalledOnce();
     },
@@ -121,6 +155,9 @@ describe("sales commissions router", () => {
         name: "Ceramic",
         sortOrder: 0,
       }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      callerFor("manager").globalSalespeople({ page: 1, pageSize: 25 }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

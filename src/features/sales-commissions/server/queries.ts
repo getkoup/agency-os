@@ -19,6 +19,8 @@ import {
   clients,
   ghlAppointments,
   ghlContacts,
+  globalSalespeople,
+  globalSalespersonIdentities,
   integrationMappings,
   salesCategories,
   salesCommissionSettings,
@@ -37,6 +39,7 @@ type ReportInput = {
   to: string;
   clientId?: string;
   salespersonId?: string;
+  globalSalespersonId?: string;
   status?: AppointmentStatus;
   categoryId?: string;
   classificationStatus?: AppointmentClassificationStatus;
@@ -74,6 +77,22 @@ type ClientGroup = {
   name: string;
   summary: MoneySummary;
   salespeople: Map<string, SalespersonGroup>;
+};
+
+type GlobalSalespersonClientGroup = {
+  id: string;
+  name: string;
+  localSalespersonNames: Set<string>;
+  summary: MoneySummary;
+};
+
+type GlobalSalespersonGroup = {
+  id: string | null;
+  name: string;
+  isUnnamed: boolean;
+  hasCustomDisplayName: boolean;
+  summary: MoneySummary;
+  clients: Map<string, GlobalSalespersonClientGroup>;
 };
 
 function emptySummary(): MoneySummary {
@@ -201,8 +220,27 @@ export async function getSalesCommissionReport(input: ReportInput) {
         providerName: salespeople.providerName,
         displayName: salespeople.displayName,
         status: salespeople.status,
+        globalSalespersonId: globalSalespersonIdentities.globalSalespersonId,
+        globalDisplayName: globalSalespeople.displayName,
       })
       .from(salespeople)
+      .leftJoin(
+        globalSalespersonIdentities,
+        and(
+          eq(globalSalespersonIdentities.provider, "ghl"),
+          eq(
+            globalSalespersonIdentities.externalUserId,
+            salespeople.externalUserId,
+          ),
+        ),
+      )
+      .leftJoin(
+        globalSalespeople,
+        eq(
+          globalSalespersonIdentities.globalSalespersonId,
+          globalSalespeople.id,
+        ),
+      )
       .orderBy(
         asc(
           sql`coalesce(${salespeople.displayName}, ${salespeople.providerName}, ${salespeople.externalUserId})`,
@@ -252,6 +290,37 @@ export async function getSalesCommissionReport(input: ReportInput) {
       `${row.clientId}:${row.externalUserId}`,
       row,
     ]),
+  );
+  const salespersonRowsByGlobalId = new Map<string, typeof salespersonRows>();
+  for (const salesperson of salespersonRows) {
+    if (!salesperson.globalSalespersonId) continue;
+    const values =
+      salespersonRowsByGlobalId.get(salesperson.globalSalespersonId) ?? [];
+    values.push(salesperson);
+    salespersonRowsByGlobalId.set(salesperson.globalSalespersonId, values);
+  }
+  const globalSalespersonById = new Map(
+    [...salespersonRowsByGlobalId].map(([id, rows]) => {
+      const globalDisplayName = rows.find(
+        (row) => row.globalDisplayName,
+      )?.globalDisplayName;
+      const providerName = rows.find((row) => row.providerName)?.providerName;
+      const localDisplayName = rows.find((row) => row.displayName)?.displayName;
+      return [
+        id,
+        {
+          id,
+          name:
+            globalDisplayName ??
+            providerName ??
+            localDisplayName ??
+            `Unnamed • ${id.slice(-6)}`,
+          isUnnamed: !globalDisplayName && !providerName && !localDisplayName,
+          hasCustomDisplayName: Boolean(globalDisplayName),
+          clientIds: new Set(rows.map((row) => row.clientId)),
+        },
+      ] as const;
+    }),
   );
   const offersByClient = new Map<string, SalesOfferInput[]>();
   for (const offer of offerRows) {
@@ -333,6 +402,10 @@ export async function getSalesCommissionReport(input: ReportInput) {
                 salesperson.displayName === null &&
                 salesperson.providerName === null,
               hasCustomDisplayName: salesperson.displayName !== null,
+              globalSalesperson: salesperson.globalSalespersonId
+                ? (globalSalespersonById.get(salesperson.globalSalespersonId) ??
+                  null)
+                : null,
             }
           : null,
         ...financials,
@@ -348,6 +421,14 @@ export async function getSalesCommissionReport(input: ReportInput) {
           : row.salesperson?.id === input.salespersonId,
     )
     .filter((row) =>
+      input.globalSalespersonId === undefined
+        ? true
+        : input.globalSalespersonId === "unassigned"
+          ? row.salesperson === null
+          : row.salesperson?.globalSalesperson?.id ===
+            input.globalSalespersonId,
+    )
+    .filter((row) =>
       input.categoryId === undefined
         ? true
         : row.offer?.categoryId === input.categoryId,
@@ -360,6 +441,7 @@ export async function getSalesCommissionReport(input: ReportInput) {
 
   const summary = emptySummary();
   const clientGroups = new Map<string, ClientGroup>();
+  const globalSalespersonGroups = new Map<string, GlobalSalespersonGroup>();
   for (const row of evaluatedRows) {
     addRowToSummary(summary, row);
     let client = clientGroups.get(row.clientId);
@@ -393,6 +475,43 @@ export async function getSalesCommissionReport(input: ReportInput) {
     }
     client.salespeople.set(salespersonKey, person);
     clientGroups.set(client.id, client);
+
+    const globalSalesperson = row.salesperson?.globalSalesperson ?? null;
+    const globalSalespersonKey = globalSalesperson
+      ? globalSalesperson.id
+      : row.salesperson
+        ? `local:${row.salesperson.id}`
+        : "unassigned";
+    let globalPerson = globalSalespersonGroups.get(globalSalespersonKey);
+    globalPerson ??= {
+      id: globalSalesperson?.id ?? null,
+      name:
+        globalSalesperson?.name ??
+        row.salesperson?.name ??
+        "Unassigned / Booking widget",
+      isUnnamed:
+        globalSalesperson?.isUnnamed ?? row.salesperson?.isUnnamed ?? false,
+      hasCustomDisplayName:
+        globalSalesperson?.hasCustomDisplayName ??
+        row.salesperson?.hasCustomDisplayName ??
+        false,
+      summary: emptySummary(),
+      clients: new Map<string, GlobalSalespersonClientGroup>(),
+    };
+    addRowToSummary(globalPerson.summary, row);
+    let globalClient = globalPerson.clients.get(row.clientId);
+    globalClient ??= {
+      id: row.clientId,
+      name: row.clientName,
+      localSalespersonNames: new Set<string>(),
+      summary: emptySummary(),
+    };
+    if (row.salesperson) {
+      globalClient.localSalespersonNames.add(row.salesperson.name);
+    }
+    addRowToSummary(globalClient.summary, row);
+    globalPerson.clients.set(globalClient.id, globalClient);
+    globalSalespersonGroups.set(globalSalespersonKey, globalPerson);
   }
 
   const total = evaluatedRows.length;
@@ -441,6 +560,31 @@ export async function getSalesCommissionReport(input: ReportInput) {
           }),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
+    globalSalespersonGroups: [...globalSalespersonGroups.values()]
+      .map((person) => ({
+        id: person.id,
+        name: person.name,
+        isUnnamed: person.isUnnamed,
+        hasCustomDisplayName: person.hasCustomDisplayName,
+        summary: presentSummary(person.summary),
+        clients: [...person.clients.values()]
+          .map((client) => ({
+            id: client.id,
+            name: client.name,
+            localSalespersonNames: [...client.localSalespersonNames].sort(
+              (left, right) => left.localeCompare(right),
+            ),
+            summary: presentSummary(client.summary),
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      }))
+      .sort((left, right) => {
+        const leftCommission = parseUsdToCents(left.summary.commission);
+        const rightCommission = parseUsdToCents(right.summary.commission);
+        if (rightCommission > leftCommission) return 1;
+        if (rightCommission < leftCommission) return -1;
+        return left.name.localeCompare(right.name);
+      }),
     rows,
     total,
     isTruncated,
@@ -455,6 +599,14 @@ export async function getSalesCommissionReport(input: ReportInput) {
           `Unnamed • ${row.externalUserId.slice(-6)}`,
         isUnnamed: row.displayName === null && row.providerName === null,
       })),
+      globalSalespeople: [...globalSalespersonById.values()]
+        .map((person) => ({
+          id: person.id,
+          name: person.name,
+          isUnnamed: person.isUnnamed,
+          clientIds: [...person.clientIds],
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
       categories: categoryOptions,
     },
   };

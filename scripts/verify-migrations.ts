@@ -112,6 +112,55 @@ try {
   ) {
     throw new Error("Salesperson display-name migration is incorrect");
   }
+  const [secondSalesClient] = await test`
+    insert into "agency_os_client" ("slug", "name")
+    values ('second-sales-client', 'Second Sales Client')
+    returning "id"
+  `;
+  if (!secondSalesClient) throw new Error("Second sales client is missing");
+  await test`
+    insert into "agency_os_salesperson"
+      ("clientId", "externalUserId", "providerName")
+    values (${secondSalesClient.id}, 'placeholder-user', 'Shared User')
+  `;
+  await applyMigration(test, "drizzle/0018_polite_bloodstorm.sql");
+  await applyMigration(test, "drizzle/0019_smart_sugar_man.sql");
+  const globalSalespersonBackfill = await test`
+    select i."externalUserId",
+      count(distinct i."globalSalespersonId")::int "globalCount",
+      count(s.id)::int "assignmentCount"
+    from "agency_os_global_salesperson_identity" i
+    join "agency_os_salesperson" s on s."externalUserId" = i."externalUserId"
+    where i.provider = 'ghl'
+    group by i."externalUserId"
+    order by i."externalUserId"
+  `;
+  if (
+    JSON.stringify(globalSalespersonBackfill) !==
+    JSON.stringify([
+      {
+        externalUserId: "custom-user",
+        globalCount: 1,
+        assignmentCount: 1,
+      },
+      {
+        externalUserId: "placeholder-user",
+        globalCount: 1,
+        assignmentCount: 2,
+      },
+    ])
+  ) {
+    throw new Error("Global salesperson identity backfill is incorrect");
+  }
+  const invalidGlobalSalespersonIds = await test`
+    select "id"
+    from "agency_os_global_salesperson"
+    where "id"::text !~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  `;
+  if (invalidGlobalSalespersonIds.length) {
+    throw new Error("Global salesperson backfill produced invalid UUIDs");
+  }
   const [backfillMapping] = await test`
     select "lastSuccessfulSyncAt"
     from "agency_os_integration_mapping"

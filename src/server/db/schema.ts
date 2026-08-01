@@ -714,6 +714,31 @@ export const salesCommissionSettings = createTable(
   }),
 );
 
+export const globalSalespeople = createTable("global_salesperson", (d) => ({
+  id: d.uuid().defaultRandom().primaryKey(),
+  displayName: d.varchar({ length: 255 }),
+  createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+}));
+
+export const globalSalespersonIdentities = createTable(
+  "global_salesperson_identity",
+  (d) => ({
+    globalSalespersonId: d
+      .uuid()
+      .notNull()
+      .references(() => globalSalespeople.id, { onDelete: "cascade" }),
+    provider: integrationProvider().notNull(),
+    externalUserId: d.varchar({ length: 255 }).notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    primaryKey({ columns: [t.provider, t.externalUserId] }),
+    index("global_salesperson_identity_person_idx").on(t.globalSalespersonId),
+  ],
+);
+
 export const salespeople = createTable(
   "salesperson",
   (d) => ({
@@ -738,6 +763,7 @@ export const salespeople = createTable(
       t.clientId,
       t.externalUserId,
     ),
+    index("salesperson_external_user_idx").on(t.externalUserId),
     index("salesperson_client_status_idx").on(t.clientId, t.status),
   ],
 );

@@ -7,6 +7,7 @@ import {
   ghlAppointments,
   ghlContacts,
   ghlOpportunities,
+  globalSalespersonIdentities,
   ghlOpportunityMatches,
   integrationMappings,
   leads,
@@ -475,5 +476,17 @@ describe("processGhlLocationSyncChunk", () => {
       ["salesperson-1", "Salesperson One"],
       ["salesperson-2", "Salesperson Two"],
     ]);
+    const globalIdentities = await db
+      .select({
+        externalUserId: globalSalespersonIdentities.externalUserId,
+        globalSalespersonId: globalSalespersonIdentities.globalSalespersonId,
+      })
+      .from(globalSalespersonIdentities)
+      .where(eq(globalSalespersonIdentities.provider, "ghl"));
+    expect(
+      globalIdentities.filter((identity) =>
+        ["salesperson-1", "salesperson-2"].includes(identity.externalUserId),
+      ),
+    ).toHaveLength(2);
   });
 });

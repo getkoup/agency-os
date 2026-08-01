@@ -5,6 +5,7 @@ import {
   HandCoins,
   Percent,
   ReceiptText,
+  UsersRound,
   UserRoundCheck,
   UserRoundX,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
+import { GlobalSalespersonReport } from "~/features/sales-commissions/global-salesperson-report";
 import { SalesCommissionFilters } from "~/features/sales-commissions/sales-commission-filters";
 import { cn } from "~/lib/utils";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
@@ -36,8 +38,12 @@ import { api } from "~/trpc/server";
 const searchSchema = z.object({
   from: z.string().date(),
   to: z.string().date(),
+  view: z.enum(["client", "salesperson"]).default("client"),
   clientId: z.string().uuid().optional(),
   salespersonId: z
+    .union([z.string().uuid(), z.literal("unassigned")])
+    .optional(),
+  globalSalespersonId: z
     .union([z.string().uuid(), z.literal("unassigned")])
     .optional(),
   appointmentStatus: z
@@ -78,6 +84,25 @@ function defaultDates() {
   return { from, to };
 }
 
+function reportViewHref(
+  search: Record<string, string | string[] | undefined>,
+  view: "client" | "salesperson",
+): string {
+  const next = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (Array.isArray(value)) {
+      for (const item of value) next.append(key, item);
+    } else if (value !== undefined) {
+      next.set(key, value);
+    }
+  }
+  next.set("view", view);
+  next.delete("salespersonId");
+  next.delete("globalSalespersonId");
+  next.set("salesCommissionPage", "1");
+  return `/dashboard/sales-commissions?${next.toString()}`;
+}
+
 export default async function SalesCommissionsPage({
   searchParams,
 }: {
@@ -90,8 +115,10 @@ export default async function SalesCommissionsPage({
   const parsed = searchSchema.safeParse({
     from: rawSearch.from ?? defaults.from,
     to: rawSearch.to ?? defaults.to,
+    view: rawSearch.view,
     clientId: rawSearch.clientId,
     salespersonId: rawSearch.salespersonId,
+    globalSalespersonId: rawSearch.globalSalespersonId,
     appointmentStatus: rawSearch.appointmentStatus,
     categoryId: rawSearch.categoryId,
     classificationStatus: rawSearch.classificationStatus,
@@ -104,7 +131,9 @@ export default async function SalesCommissionsPage({
     from: search.from,
     to: search.to,
     clientId: search.clientId,
-    salespersonId: search.salespersonId,
+    salespersonId: search.view === "client" ? search.salespersonId : undefined,
+    globalSalespersonId:
+      search.view === "salesperson" ? search.globalSalespersonId : undefined,
     status: search.appointmentStatus,
     categoryId: search.categoryId,
     classificationStatus: search.classificationStatus,
@@ -129,12 +158,40 @@ export default async function SalesCommissionsPage({
           )
         }
       />
+      <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-2">
+        <div className="px-2">
+          <p className="text-sm font-semibold">Report view</p>
+          <p className="text-muted-foreground text-xs">
+            Keep the client report or consolidate linked identities.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            asChild
+            variant={search.view === "client" ? "default" : "ghost"}
+          >
+            <Link href={reportViewHref(rawSearch, "client")}>
+              <ReceiptText aria-hidden="true" /> By client
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant={search.view === "salesperson" ? "default" : "ghost"}
+          >
+            <Link href={reportViewHref(rawSearch, "salesperson")}>
+              <UsersRound aria-hidden="true" /> By salesperson
+            </Link>
+          </Button>
+        </div>
+      </div>
       <SalesCommissionFilters
         values={{
           from: search.from,
           to: search.to,
+          view: search.view,
           clientId: search.clientId,
           salespersonId: search.salespersonId,
+          globalSalespersonId: search.globalSalespersonId,
           status: search.appointmentStatus,
           categoryId: search.categoryId,
           classificationStatus: search.classificationStatus,
@@ -204,7 +261,9 @@ export default async function SalesCommissionsPage({
         />
       </section>
 
-      {report.clientGroups.length ? (
+      {search.view === "salesperson" ? (
+        <GlobalSalespersonReport groups={report.globalSalespersonGroups} />
+      ) : report.clientGroups.length ? (
         <section className="space-y-4" aria-label="Sales grouped by client">
           {report.clientGroups.map((client) => (
             <details

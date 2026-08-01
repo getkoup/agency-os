@@ -11,6 +11,12 @@ import {
   upsertSalespersonCommissionRate,
 } from "~/features/sales-commissions/server/actions";
 import {
+  getGlobalSalespeople,
+  linkSalespersonToGlobal,
+  separateSalespersonIdentity,
+  updateGlobalSalesperson,
+} from "~/features/sales-commissions/server/global-salespeople";
+import {
   getSalesCommissionReport,
   getSalesCommissionSetup,
 } from "~/features/sales-commissions/server/queries";
@@ -68,6 +74,7 @@ export const salesCommissionsRouter = createTRPCRouter({
         to: z.string().date(),
         clientId: id.optional(),
         salespersonId: z.union([id, z.literal("unassigned")]).optional(),
+        globalSalespersonId: z.union([id, z.literal("unassigned")]).optional(),
         status: appointmentStatus.optional(),
         categoryId: id.optional(),
         classificationStatus: classificationStatus.optional(),
@@ -79,6 +86,34 @@ export const salesCommissionsRouter = createTRPCRouter({
   setup: agencyProcedure
     .input(z.object({ clientId: id.optional() }))
     .query(({ input }) => getSalesCommissionSetup(input)),
+  globalSalespeople: agencyProcedure
+    .input(
+      z.object({
+        search: z.string().trim().max(100).optional(),
+        page: z.number().int().positive().default(1),
+        pageSize: z.number().int().positive().max(100).default(25),
+      }),
+    )
+    .query(({ input }) => getGlobalSalespeople(input)),
+  updateGlobalSalesperson: agencyProcedure
+    .input(
+      z.object({
+        globalSalespersonId: id,
+        displayName: z.string().trim().max(255),
+      }),
+    )
+    .mutation(({ input }) => updateGlobalSalesperson(input)),
+  linkSalespersonToGlobal: agencyProcedure
+    .input(
+      z.object({
+        salespersonId: id,
+        targetGlobalSalespersonId: id,
+      }),
+    )
+    .mutation(({ input }) => linkSalespersonToGlobal(input)),
+  separateSalespersonIdentity: agencyProcedure
+    .input(z.object({ salespersonId: id }))
+    .mutation(({ input }) => separateSalespersonIdentity(input)),
   saveSettings: agencyProcedure
     .input(z.object({ clientId: id, attributionMode }))
     .mutation(({ input }) => saveSalesCommissionSettings(input)),

@@ -8,6 +8,8 @@ import {
   ghlAppointments,
   ghlCalendars,
   ghlContacts,
+  globalSalespeople,
+  globalSalespersonIdentities,
   leads,
   salespeople,
   sourceAccounts,
@@ -192,6 +194,63 @@ export async function upsertGhlAppointmentBatch(input: {
       ),
     ];
     if (externalUserIds.length > 0) {
+      const storedIdentities = await tx
+        .select({
+          externalUserId: globalSalespersonIdentities.externalUserId,
+        })
+        .from(globalSalespersonIdentities)
+        .where(
+          and(
+            eq(globalSalespersonIdentities.provider, "ghl"),
+            inArray(
+              globalSalespersonIdentities.externalUserId,
+              externalUserIds,
+            ),
+          ),
+        );
+      const storedExternalUserIds = new Set(
+        storedIdentities.map((identity) => identity.externalUserId),
+      );
+      const missingExternalUserIds = externalUserIds.filter(
+        (externalUserId) => !storedExternalUserIds.has(externalUserId),
+      );
+      if (missingExternalUserIds.length > 0) {
+        const candidates = missingExternalUserIds.map((externalUserId) => ({
+          globalSalespersonId: crypto.randomUUID(),
+          externalUserId,
+        }));
+        await tx.insert(globalSalespeople).values(
+          candidates.map(({ globalSalespersonId }) => ({
+            id: globalSalespersonId,
+          })),
+        );
+        const insertedIdentities = await tx
+          .insert(globalSalespersonIdentities)
+          .values(
+            candidates.map(({ globalSalespersonId, externalUserId }) => ({
+              globalSalespersonId,
+              provider: "ghl" as const,
+              externalUserId,
+            })),
+          )
+          .onConflictDoNothing()
+          .returning({
+            globalSalespersonId:
+              globalSalespersonIdentities.globalSalespersonId,
+          });
+        const linkedGlobalSalespersonIds = new Set(
+          insertedIdentities.map((identity) => identity.globalSalespersonId),
+        );
+        const orphanedGlobalSalespersonIds = candidates
+          .map((candidate) => candidate.globalSalespersonId)
+          .filter((id) => !linkedGlobalSalespersonIds.has(id));
+        if (orphanedGlobalSalespersonIds.length > 0) {
+          await tx
+            .delete(globalSalespeople)
+            .where(inArray(globalSalespeople.id, orphanedGlobalSalespersonIds));
+        }
+      }
+
       await tx
         .insert(salespeople)
         .values(
