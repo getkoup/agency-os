@@ -15,6 +15,7 @@ import {
 } from "~/components/ui/table";
 import { EmptyState } from "~/features/dashboard/empty-state";
 import { PageHeader } from "~/features/dashboard/page-header";
+import { filterRankedClients } from "~/features/sales-tracking/client-search";
 import { GoalCell } from "~/features/sales-tracking/goal-cell";
 import { SalesTrackingControls } from "~/features/sales-tracking/sales-tracking-controls";
 import { cn } from "~/lib/utils";
@@ -61,6 +62,7 @@ export default async function SalesTrackingPage({
   ]);
   const rawDate = Array.isArray(search.date) ? search.date[0] : search.date;
   const rawGroup = Array.isArray(search.group) ? search.group[0] : search.group;
+  const rawQuery = Array.isArray(search.query) ? search.query[0] : search.query;
   const date =
     z.string().date().safeParse(rawDate).data ?? reportingContext.today;
   const groupSize =
@@ -70,7 +72,9 @@ export default async function SalesTrackingPage({
       .min(1)
       .max(90)
       .safeParse(rawGroup ?? 1).data ?? 1;
+  const query = z.string().trim().max(100).safeParse(rawQuery).data ?? "";
   const result = await api.salesTracking.daily({ date, groupSize });
+  const visibleRows = filterRankedClients(result.rows, query);
   const counts = result.rows.reduce(
     (summary, row) => {
       summary[row.status] += 1;
@@ -93,7 +97,10 @@ export default async function SalesTrackingPage({
         description="Booking creation performance against each client's configured goal."
         meta={
           <Badge variant="secondary" className="rounded-[0.35rem]">
-            {result.rows.length} active clients · {result.reportingTimezone}
+            {query
+              ? `${visibleRows.length} of ${result.rows.length}`
+              : result.rows.length}{" "}
+            active clients · {result.reportingTimezone}
           </Badge>
         }
       />
@@ -134,7 +141,7 @@ export default async function SalesTrackingPage({
         ))}
       </section>
       <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
-        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card flex flex-col gap-5 border-b bg-gradient-to-r px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card flex flex-col gap-5 border-b bg-gradient-to-r px-6 py-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-1">
             <CardTitle className="tracking-tight">
               Client booking performance
@@ -144,12 +151,19 @@ export default async function SalesTrackingPage({
               four reporting periods in {result.reportingTimezone}.
             </p>
           </div>
-          <SalesTrackingControls date={date} groupSize={groupSize} />
+          <SalesTrackingControls
+            date={date}
+            groupSize={groupSize}
+            query={query}
+          />
         </CardHeader>
-        <CardContent className="overflow-x-auto px-0">
-          {result.rows.length ? (
-            <Table className="min-w-[64rem]">
-              <TableHeader>
+        <CardContent className="px-0">
+          {visibleRows.length ? (
+            <Table
+              className="min-w-[64rem]"
+              containerClassName="max-h-[70vh] overflow-auto"
+            >
+              <TableHeader className="[&_th]:bg-muted [&_th]:sticky [&_th]:top-0 [&_th]:z-10">
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="w-16 pl-5">Rank</TableHead>
                   <TableHead className="min-w-56">Client</TableHead>
@@ -166,10 +180,10 @@ export default async function SalesTrackingPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {result.rows.map((row, index) => (
+                {visibleRows.map(({ rank, row }) => (
                   <TableRow key={row.id}>
                     <TableCell className="pl-5 font-semibold tabular-nums">
-                      #{index + 1}
+                      #{rank}
                     </TableCell>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
@@ -217,8 +231,12 @@ export default async function SalesTrackingPage({
             <div className="p-6">
               <EmptyState
                 icon={Target}
-                title="No active clients"
-                description="No active clients are available for sales tracking."
+                title={query ? "No matching clients" : "No active clients"}
+                description={
+                  query
+                    ? `No active client matches “${query}”.`
+                    : "No active clients are available for sales tracking."
+                }
               />
             </div>
           )}
