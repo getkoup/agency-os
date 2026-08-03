@@ -91,6 +91,8 @@ const PERFORMANCE_FIELDS = [
   "ctr",
 ].join(",");
 
+const WINDSOR_REQUEST_TIMEOUT_MS = 30_000;
+
 const LEAD_FIELDS = [
   "id",
   "created_time",
@@ -146,7 +148,9 @@ export class WindsorClient {
 
   async #request(url: URL): Promise<unknown> {
     try {
-      const response = await this.#fetch(url);
+      const response = await this.#fetch(url, {
+        signal: AbortSignal.timeout(WINDSOR_REQUEST_TIMEOUT_MS),
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -172,20 +176,26 @@ export class WindsorClient {
 
   async fetchPerformance(
     selectAccounts: readonly string[],
+    options: { lookbackDays?: number } = {},
   ): Promise<PerformanceRow[]> {
     const rows = await this.#fetchData(
       "facebook",
       selectAccounts,
       PERFORMANCE_FIELDS,
+      options.lookbackDays ?? 8,
     );
     return z.array(performanceRowSchema).parse(rows);
   }
 
-  async fetchLeads(selectAccounts: readonly string[]): Promise<LeadRow[]> {
+  async fetchLeads(
+    selectAccounts: readonly string[],
+    options: { lookbackDays?: number } = {},
+  ): Promise<LeadRow[]> {
     const rows = await this.#fetchData(
       "facebook_leads",
       selectAccounts,
       LEAD_FIELDS,
+      options.lookbackDays ?? 8,
     );
     return z.array(leadRowSchema).parse(rows);
   }
@@ -194,12 +204,16 @@ export class WindsorClient {
     connector: string,
     selectAccounts: readonly string[],
     fields: string,
+    lookbackDays: number,
   ): Promise<unknown[]> {
+    if (!Number.isInteger(lookbackDays) || lookbackDays < 1) {
+      throw new WindsorClientError("Windsor lookback days must be positive");
+    }
     const url = new URL("/all", this.#environment.WINDSOR_DATA_BASE_URL);
     url.searchParams.set("api_key", this.#environment.WINDSOR_API_KEY);
     const through = this.#now();
     const from = new Date(through);
-    from.setUTCDate(from.getUTCDate() - 8);
+    from.setUTCDate(from.getUTCDate() - lookbackDays);
     url.searchParams.set("date_from", from.toISOString().slice(0, 10));
     url.searchParams.set("date_to", through.toISOString().slice(0, 10));
     url.searchParams.set("fields", fields);

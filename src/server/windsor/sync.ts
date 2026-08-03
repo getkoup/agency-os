@@ -16,6 +16,10 @@ import {
   upsertLeadBatch,
   upsertPerformanceBatch,
 } from "~/server/windsor/persistence";
+import {
+  type SynchronizationMode,
+  windsorLookbackDays,
+} from "~/server/sync/sync-mode";
 
 const DISCOVERY_WRITE_CHUNK_SIZE = 500;
 
@@ -168,9 +172,11 @@ export async function discoverWindsorSourceAccounts(
 export async function syncWindsorData(
   client: WindsorClient,
   scope: { kind: "all-active" } | { kind: "client"; clientId: string },
+  mode: SynchronizationMode = "full",
 ): Promise<WindsorDataSummary> {
   let performanceRowCount = 0;
   let leadRowCount = 0;
+  const lookbackDays = windsorLookbackDays(mode);
   try {
     const activeAccounts = await db
       .select({
@@ -194,12 +200,12 @@ export async function syncWindsorData(
       .filter((account) => account.connector === "facebook_leads")
       .map((account) => account.connectorAccountId);
     for (const batch of chunkValues(performanceAccounts, 20)) {
-      const rows = await client.fetchPerformance(batch);
+      const rows = await client.fetchPerformance(batch, { lookbackDays });
       await upsertPerformanceBatch(rows, batch);
       performanceRowCount += rows.length;
     }
     for (const batch of chunkValues(leadAccounts, 20)) {
-      const rows = await client.fetchLeads(batch);
+      const rows = await client.fetchLeads(batch, { lookbackDays });
       await upsertLeadBatch(rows, batch);
       leadRowCount += rows.length;
     }

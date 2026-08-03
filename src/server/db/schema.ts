@@ -49,6 +49,18 @@ export const allClientSyncTargetStatus = pgEnum(
   "agency_os_all_client_sync_target_status",
   ["pending", "running", "succeeded", "failed", "skipped"],
 );
+export const synchronizationMode = pgEnum("agency_os_synchronization_mode", [
+  "fresh",
+  "full",
+]);
+export const synchronizationScope = pgEnum("agency_os_synchronization_scope", [
+  "all",
+  "client",
+]);
+export const synchronizationTrigger = pgEnum(
+  "agency_os_synchronization_trigger",
+  ["scheduled", "manual", "retry"],
+);
 export const opportunityMatchStatus = pgEnum(
   "agency_os_opportunity_match_status",
   ["matched", "unmatched", "ambiguous"],
@@ -951,8 +963,13 @@ export const allClientSyncRuns = createTable(
     id: d.uuid().defaultRandom().primaryKey(),
     requestedByUserId: d
       .varchar({ length: 255 })
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+      .references(() => users.id, { onDelete: "set null" }),
+    requestedClientId: d
+      .uuid()
+      .references(() => clients.id, { onDelete: "set null" }),
+    mode: synchronizationMode().default("full").notNull(),
+    scope: synchronizationScope().default("all").notNull(),
+    trigger: synchronizationTrigger().default("manual").notNull(),
     status: allClientSyncStatus().default("running").notNull(),
     startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     heartbeatAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -970,9 +987,11 @@ export const allClientSyncRuns = createTable(
     errorMessage: d.text(),
   }),
   (t) => [
-    uniqueIndex("all_client_sync_one_running_idx")
-      .on(t.status)
-      .where(sql`${t.status} = 'running'`),
+    index("all_client_sync_run_status_started_idx").on(t.status, t.startedAt),
+    index("all_client_sync_run_requested_client_idx").on(
+      t.requestedClientId,
+      t.startedAt,
+    ),
   ],
 );
 
@@ -991,11 +1010,13 @@ export const allClientSyncTargets = createTable(
     clientSlug: d.varchar({ length: 100 }).notNull(),
     clientName: d.varchar({ length: 255 }).notNull(),
     provider: d.varchar({ length: 50 }).notNull(),
+    priority: d.integer().default(0).notNull(),
     status: allClientSyncTargetStatus().default("pending").notNull(),
     startedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     heartbeatAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     availableAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     leaseExpiresAt: d.timestamp({ withTimezone: true }),
+    leaseToken: d.uuid(),
     completedAt: d.timestamp({ withTimezone: true }),
     failureCount: d.integer().default(0).notNull(),
     checkpoint: d.jsonb().$type<unknown>(),
@@ -1013,11 +1034,49 @@ export const allClientSyncTargets = createTable(
       t.clientSlug,
       t.provider,
     ),
+    uniqueIndex("all_client_sync_target_one_active_provider_idx")
+      .on(t.clientId, t.provider)
+      .where(
+        sql`${t.clientId} is not null and ${t.status} in ('pending', 'running')`,
+      ),
     index("all_client_sync_target_run_idx").on(t.runId),
-    index("all_client_sync_target_queue_idx").on(t.status, t.availableAt),
+    index("all_client_sync_target_queue_idx").on(
+      t.status,
+      t.priority,
+      t.availableAt,
+    ),
     check(
       "all_client_sync_target_failure_count_nonnegative",
       sql`${t.failureCount} >= 0`,
+    ),
+    check(
+      "all_client_sync_target_priority_nonnegative",
+      sql`${t.priority} >= 0`,
+    ),
+  ],
+);
+
+export const clientSynchronizationStates = createTable(
+  "client_synchronization_state",
+  (d) => ({
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    provider: d.varchar({ length: 50 }).notNull(),
+    lastAttemptAt: d.timestamp({ withTimezone: true }),
+    lastSucceededAt: d.timestamp({ withTimezone: true }),
+    lastFailedAt: d.timestamp({ withTimezone: true }),
+    lastErrorMessage: d.text(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    primaryKey({ columns: [t.clientId, t.provider] }),
+    index("client_sync_state_last_succeeded_idx").on(t.lastSucceededAt),
+    check(
+      "client_sync_state_provider",
+      sql`${t.provider} in ('ghl', 'windsor')`,
     ),
   ],
 );

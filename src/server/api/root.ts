@@ -4,6 +4,7 @@ import { managementRouter } from "~/server/api/routers/management";
 import { salesCommissionsRouter } from "~/server/api/routers/sales-commissions";
 import { salesTrackingRouter } from "~/server/api/routers/sales-tracking";
 import { settingsRouter } from "~/server/api/routers/settings";
+import { synchronizationRouter } from "~/server/api/routers/synchronization";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 export const appRouter = createTRPCRouter({
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   salesCommissions: salesCommissionsRouter,
   salesTracking: salesTrackingRouter,
   settings: settingsRouter,
+  synchronization: synchronizationRouter,
 });
 
 export type AppRouter = typeof appRouter;

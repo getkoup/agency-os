@@ -148,6 +148,13 @@
       "when": 1785604848422,
       "tag": "0020_far_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785775908103,
+      "tag": "0021_bright_rockslide",
+      "breakpoints": true
     }
   ]
 }

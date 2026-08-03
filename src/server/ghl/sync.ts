@@ -12,11 +12,13 @@ import { db } from "~/server/db";
 import { integrationMappings } from "~/server/db/schema";
 import { upsertGhlOpportunityPage } from "~/server/ghl/persistence";
 import { mapInBatches } from "~/server/sync/batch";
+import {
+  ghlAppointmentRange,
+  ghlOpportunityFloor,
+  type SynchronizationMode,
+} from "~/server/sync/sync-mode";
 
-const REPLAY_OVERLAP_MS = 5 * 60 * 1000;
 const GHL_CONTACT_FETCH_BATCH_SIZE = 20;
-const APPOINTMENT_HISTORY_MS = 90 * 24 * 60 * 60 * 1_000;
-const APPOINTMENT_FUTURE_MS = 180 * 24 * 60 * 60 * 1_000;
 const APPOINTMENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
 const GHL_SYNC_CHECKPOINT_VERSION = 1;
 
@@ -106,6 +108,7 @@ async function prepareLocation(input: {
   client: GhlClient;
   clientId: string;
   locationId: string;
+  mode: SynchronizationMode;
   token: string;
   runStartedAt: Date;
 }): Promise<GhlSyncCheckpoint> {
@@ -129,17 +132,16 @@ async function prepareLocation(input: {
     .returning({
       id: integrationMappings.id,
       syncFromAt: integrationMappings.syncFromAt,
-      lastSuccessfulSyncAt: integrationMappings.lastSuccessfulSyncAt,
       externalLocationId: integrationMappings.externalLocationId,
     });
   if (mapping?.externalLocationId !== input.locationId) {
     throw new Error("GHL mapping identity conflict");
   }
-  const replayFloor = mapping.lastSuccessfulSyncAt
-    ? new Date(mapping.lastSuccessfulSyncAt.getTime() - REPLAY_OVERLAP_MS)
-    : mapping.syncFromAt;
-  const floor =
-    replayFloor < mapping.syncFromAt ? mapping.syncFromAt : replayFloor;
+  const floor = ghlOpportunityFloor({
+    mode: input.mode,
+    runStartedAt: input.runStartedAt,
+    syncFromAt: mapping.syncFromAt,
+  });
   return {
     version: GHL_SYNC_CHECKPOINT_VERSION,
     phase: "opportunities",
@@ -155,9 +157,9 @@ async function prepareLocation(input: {
 function appointmentWindows(
   calendars: readonly GhlCalendar[],
   runStartedAt: Date,
+  mode: SynchronizationMode,
 ): Array<{ calendarId: string; start: string; end: string }> {
-  const floor = new Date(runStartedAt.getTime() - APPOINTMENT_HISTORY_MS);
-  const through = new Date(runStartedAt.getTime() + APPOINTMENT_FUTURE_MS);
+  const { floor, through } = ghlAppointmentRange(runStartedAt, mode);
   return calendars.flatMap((calendar) => {
     const windows: Array<{ calendarId: string; start: string; end: string }> =
       [];
@@ -185,6 +187,7 @@ async function processOpportunityPage(input: {
   client: GhlClient;
   clientId: string;
   locationId: string;
+  mode: SynchronizationMode;
   token: string;
   checkpoint: Extract<GhlSyncCheckpoint, { phase: "opportunities" }>;
   onProgress?: () => Promise<void>;
@@ -253,6 +256,7 @@ async function processOpportunityPage(input: {
       windows: appointmentWindows(
         calendars,
         new Date(input.checkpoint.through),
+        input.mode,
       ),
       nextWindowIndex: 0,
       progress,
@@ -362,6 +366,7 @@ export async function processGhlLocationSyncChunk(input: {
   client: GhlClient;
   clientId: string;
   locationId: string;
+  mode?: SynchronizationMode;
   token: string;
   runStartedAt: Date;
   checkpoint: unknown;
@@ -370,14 +375,15 @@ export async function processGhlLocationSyncChunk(input: {
   const checkpoint = ghlSyncCheckpointSchema.parse(
     input.checkpoint ?? initialCheckpoint(),
   );
+  const mode = input.mode ?? "full";
   if (checkpoint.phase === "initialize") {
     return {
       done: false,
-      checkpoint: await prepareLocation(input),
+      checkpoint: await prepareLocation({ ...input, mode }),
     };
   }
   if (checkpoint.phase === "opportunities") {
-    return processOpportunityPage({ ...input, checkpoint });
+    return processOpportunityPage({ ...input, checkpoint, mode });
   }
   return processAppointmentWindow({ ...input, checkpoint });
 }

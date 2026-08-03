@@ -130,6 +130,13 @@ export async function upsertGhlOpportunityPage(input: {
     const now = new Date();
     const contactValues = new Map<string, typeof ghlContacts.$inferInsert>();
     for (const value of prepared) {
+      const existing = contactValues.get(value.row.contact.id);
+      if (
+        existing?.providerUpdatedAt &&
+        existing.providerUpdatedAt >= value.providerUpdatedAt
+      ) {
+        continue;
+      }
       contactValues.set(value.row.contact.id, {
         integrationMappingId: input.mappingId,
         externalId: value.row.contact.id,
@@ -162,6 +169,7 @@ export async function upsertGhlOpportunityPage(input: {
           normalizedPhone: sql`excluded."normalizedPhone"`,
           tags: sql`excluded."tags"`,
           providerUpdatedAt: sql`excluded."providerUpdatedAt"`,
+          rawPayload: sql`excluded."rawPayload"`,
           updatedAt: now,
         },
       })

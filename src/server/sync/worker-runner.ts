@@ -5,6 +5,7 @@ export interface SyncWorkerConfig {
   errorRetryMs: number;
   idlePollMs: number;
   maxChunks: number;
+  scheduleIntervalMs: number;
   timeBudgetMs: number;
 }
 
@@ -20,6 +21,7 @@ interface SyncWorkerDependencies {
   processTargets: (
     input: ProcessTargetsInput,
   ) => Promise<{ processedChunkCount: number }>;
+  scheduleHourlySync?: () => Promise<{ id: string } | null>;
   wait?: (delayMs: number, signal: AbortSignal) => Promise<void>;
 }
 
@@ -28,6 +30,7 @@ const DEFAULT_CONFIG: SyncWorkerConfig = {
   errorRetryMs: 30_000,
   idlePollMs: 5_000,
   maxChunks: 1_000,
+  scheduleIntervalMs: 5 * 60_000,
   timeBudgetMs: 4 * 60 * 1_000,
 };
 
@@ -64,6 +67,11 @@ const workerEnvironmentSchema = z.object({
     minimum: 1,
     maximum: 10_000,
   }),
+  SYNC_WORKER_SCHEDULE_INTERVAL_MS: integerEnvironmentValue({
+    defaultValue: DEFAULT_CONFIG.scheduleIntervalMs,
+    minimum: 10_000,
+    maximum: 10 * 60 * 1_000,
+  }),
   SYNC_WORKER_TIME_BUDGET_MS: integerEnvironmentValue({
     defaultValue: DEFAULT_CONFIG.timeBudgetMs,
     minimum: 1_000,
@@ -80,6 +88,7 @@ export function parseSyncWorkerConfig(
     errorRetryMs: parsed.SYNC_WORKER_ERROR_RETRY_MS,
     idlePollMs: parsed.SYNC_WORKER_IDLE_POLL_MS,
     maxChunks: parsed.SYNC_WORKER_MAX_CHUNKS,
+    scheduleIntervalMs: parsed.SYNC_WORKER_SCHEDULE_INTERVAL_MS,
     timeBudgetMs: parsed.SYNC_WORKER_TIME_BUDGET_MS,
   };
 }
@@ -120,11 +129,35 @@ export async function runSyncWorker(input: {
     event: "sync_worker_started",
     concurrency: input.config.concurrency,
     maxChunks: input.config.maxChunks,
+    scheduleIntervalMs: input.config.scheduleIntervalMs,
     timeBudgetMs: input.config.timeBudgetMs,
   });
 
+  let lastScheduleAt: Date | null = null;
   while (!input.signal.aborted) {
     const startedAt = now();
+    if (
+      input.dependencies.scheduleHourlySync &&
+      (!lastScheduleAt ||
+        startedAt.getTime() - lastScheduleAt.getTime() >=
+          input.config.scheduleIntervalMs)
+    ) {
+      lastScheduleAt = startedAt;
+      try {
+        const queued = await input.dependencies.scheduleHourlySync();
+        if (queued) {
+          input.dependencies.log({
+            event: "sync_worker_hourly_sync_queued",
+            runId: queued.id,
+          });
+        }
+      } catch (error) {
+        input.dependencies.log({
+          event: "sync_worker_hourly_schedule_failed",
+          ...errorDetails(error),
+        });
+      }
+    }
     try {
       const result = await input.dependencies.processTargets({
         concurrency: input.config.concurrency,

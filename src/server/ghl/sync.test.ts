@@ -16,6 +16,7 @@ import {
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
 import { processGhlLocationSyncChunk } from "~/server/ghl/sync";
+import { type SynchronizationMode } from "~/server/sync/sync-mode";
 
 const clientSlug = "ghl-sync-test-client";
 let clientId = "";
@@ -89,12 +90,14 @@ async function syncGhlLocation(input: {
   locationId: string;
   token: string;
   runStartedAt: Date;
+  mode?: SynchronizationMode;
   onPage?: () => Promise<void>;
 }) {
   let checkpoint: unknown = null;
   while (true) {
     const result = await processGhlLocationSyncChunk({
       ...input,
+      mode: input.mode ?? "fresh",
       checkpoint,
       onProgress: input.onPage,
     });
@@ -192,8 +195,8 @@ describe("processGhlLocationSyncChunk", () => {
       runStartedAt: secondStartedAt,
     });
     expect(secondSummary).toMatchObject({
-      contactRowCount: 1,
-      opportunityRowCount: 1,
+      contactRowCount: 2,
+      opportunityRowCount: 2,
       matchedOpportunityCount: 1,
     });
 
@@ -425,7 +428,7 @@ describe("processGhlLocationSyncChunk", () => {
     });
     expect(maximumCalendarConcurrency).toBe(1);
     expect(maximumContactConcurrency).toBe(20);
-    expect(onPage).toHaveBeenCalledTimes(42);
+    expect(onPage).toHaveBeenCalledTimes(8);
 
     const [storedAppointment] = await db
       .select({

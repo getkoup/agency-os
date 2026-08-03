@@ -90,10 +90,10 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
   },
   {
     href: "/dashboard/synchronization",
-    label: "Synchronization",
+    label: "Data Sync",
     icon: DatabaseZap,
-    roles: ["owner", "admin"],
-    group: "Administration",
+    roles: ["owner", "admin", "client"],
+    group: "Workspace",
   },
   {
     href: "/dashboard/settings",

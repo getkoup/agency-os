@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { env } from "~/env";
 import { processPendingSyncTargets } from "~/server/sync/sync-worker";
+import { queueHourlyFreshSynchronization } from "~/server/sync/synchronization-queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,9 +31,30 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let queuedRunId: string | null = null;
+  let schedulingError: unknown = null;
+  try {
+    queuedRunId = (await queueHourlyFreshSynchronization())?.id ?? null;
+  } catch (error) {
+    schedulingError = error;
+    console.error("Hourly synchronization scheduling failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : "Unknown synchronization scheduling error",
+    });
+  }
+
   try {
     const result = await processPendingSyncTargets();
-    return Response.json(result);
+    if (schedulingError) {
+      return Response.json(
+        { error: "Hourly synchronization scheduling failed", ...result },
+        { status: 500 },
+      );
+    }
+    return Response.json({ queuedRunId, ...result });
   } catch (error) {
     console.error("Synchronization worker failed", {
       errorName: error instanceof Error ? error.name : "UnknownError",

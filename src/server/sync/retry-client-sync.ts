@@ -9,11 +9,8 @@ import {
   clients,
   syncRuns,
 } from "~/server/db/schema";
-import {
-  getSyncRun,
-  recoverStaleSyncRuns,
-  SyncAlreadyRunningError,
-} from "~/server/sync/sync-all-clients";
+import { getSyncRun } from "~/server/sync/sync-run";
+import { SyncAlreadyRunningError } from "~/server/sync/synchronization-queue";
 
 export class FailedClientSyncTargetsNotFoundError extends Error {
   constructor() {
@@ -37,7 +34,10 @@ export async function retryClientSync(input: {
   sourceRunId: string;
 }) {
   const [sourceRun] = await db
-    .select({ startedAt: allClientSyncRuns.startedAt })
+    .select({
+      mode: allClientSyncRuns.mode,
+      startedAt: allClientSyncRuns.startedAt,
+    })
     .from(allClientSyncRuns)
     .where(eq(allClientSyncRuns.id, input.sourceRunId));
   if (!sourceRun) throw new FailedClientSyncTargetsNotFoundError();
@@ -92,7 +92,6 @@ export async function retryClientSync(input: {
   }
 
   const startedAt = new Date();
-  await recoverStaleSyncRuns(startedAt);
 
   let runId: string;
   try {
@@ -101,6 +100,10 @@ export async function retryClientSync(input: {
         .insert(allClientSyncRuns)
         .values({
           requestedByUserId: input.requestedByUserId,
+          requestedClientId: input.clientId,
+          mode: sourceRun.mode,
+          scope: "client",
+          trigger: "retry",
           startedAt,
           heartbeatAt: startedAt,
           discoveredAccountCount: failedTargets.reduce(
@@ -133,6 +136,7 @@ export async function retryClientSync(input: {
           clientSlug: target.clientSlug,
           clientName: target.clientName,
           provider: target.provider,
+          priority: 20,
           status: "pending" as const,
           startedAt,
           heartbeatAt: startedAt,

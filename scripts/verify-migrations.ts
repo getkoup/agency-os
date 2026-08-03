@@ -126,6 +126,30 @@ try {
   await applyMigration(test, "drizzle/0018_polite_bloodstorm.sql");
   await applyMigration(test, "drizzle/0019_smart_sugar_man.sql");
   await applyMigration(test, "drizzle/0020_far_changeling.sql");
+  const [legacySyncRun] = await test`
+    insert into "agency_os_all_client_sync_run"
+      ("requestedByUserId", "status", "completedAt")
+    values ('legacy-owner', 'succeeded', now())
+    returning "id"
+  `;
+  if (!legacySyncRun) throw new Error("Legacy sync run was not created");
+  await test`
+    insert into "agency_os_all_client_sync_target"
+      ("runId", "clientId", "clientSlug", "clientName", "provider",
+       "status", "completedAt")
+    values
+      (${legacySyncRun.id}, ${backfillClient.id}, 'tint-lab', 'Tint Lab',
+       'ghl', 'succeeded', now())
+  `;
+  await applyMigration(test, "drizzle/0021_bright_rockslide.sql");
+  const [backfilledSyncState] = await test`
+    select "lastSucceededAt"
+    from "agency_os_client_synchronization_state"
+    where "clientId" = ${backfillClient.id} and "provider" = 'ghl'
+  `;
+  if (!backfilledSyncState?.lastSucceededAt) {
+    throw new Error("Client synchronization state was not backfilled");
+  }
   const [agencySetting] = await test`
     select "id", "reportingTimezone"
     from "agency_os_setting"
@@ -400,17 +424,34 @@ try {
       `,
     "one provider mapping per client",
   );
-  await test`
+  const [firstSyncRun] = await test`
     insert into "agency_os_all_client_sync_run" ("requestedByUserId")
     values ('legacy-owner')
+    returning "id"
+  `;
+  const [secondSyncRun] = await test`
+    insert into "agency_os_all_client_sync_run" ("requestedByUserId")
+    values ('legacy-owner')
+    returning "id"
+  `;
+  if (!firstSyncRun || !secondSyncRun) {
+    throw new Error("Synchronization runs were not created");
+  }
+  await test`
+    insert into "agency_os_all_client_sync_target"
+      ("runId", "clientId", "clientSlug", "clientName", "provider")
+    values
+      (${firstSyncRun.id}, ${client.id}, 'legacy-client', 'Legacy Client', 'ghl')
   `;
   await expectConstraintViolation(
     () =>
       test!`
-        insert into "agency_os_all_client_sync_run" ("requestedByUserId")
-        values ('legacy-owner')
+        insert into "agency_os_all_client_sync_target"
+          ("runId", "clientId", "clientSlug", "clientName", "provider")
+        values
+          (${secondSyncRun.id}, ${client.id}, 'legacy-client', 'Legacy Client', 'ghl')
       `,
-    "one running all-client sync",
+    "one active synchronization target per client provider",
   );
   console.info("All migrations verified successfully.");
 } finally {

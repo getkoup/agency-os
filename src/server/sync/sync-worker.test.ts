@@ -13,6 +13,7 @@ import { db } from "~/server/db";
 import {
   allClientSyncRuns,
   allClientSyncTargets,
+  clientSynchronizationStates,
   clients,
   integrationMappings,
   syncRuns,
@@ -20,8 +21,8 @@ import {
 } from "~/server/db/schema";
 import { GhlClient } from "~/server/ghl/client";
 import type { GhlConfig } from "~/server/ghl/env";
-import { syncAllClients } from "~/server/sync/sync-all-clients";
 import { processPendingSyncTargets } from "~/server/sync/sync-worker";
+import { queueSynchronization } from "~/server/sync/synchronization-queue";
 import { WindsorClient } from "~/server/windsor/client";
 
 const userId = "resumable-worker-test-user";
@@ -48,6 +49,20 @@ const emptyWindsor = new WindsorClient(
   },
   vi.fn<typeof fetch>().mockResolvedValue(Response.json([])),
 );
+
+async function queueWorkerSync() {
+  const run = await queueSynchronization(
+    {
+      mode: "full",
+      requestedByUserId: userId,
+      scope: { kind: "client", clientId },
+      trigger: "manual",
+    },
+    { ghlConfig },
+  );
+  if (!run) throw new Error("Worker synchronization was not queued");
+  return run;
+}
 
 function createGhlClient() {
   let calendarRequestCount = 0;
@@ -212,10 +227,7 @@ describe("processPendingSyncTargets", () => {
   });
 
   it("checkpoints a target and resumes it in later worker calls", async () => {
-    const run = await syncAllClients(userId, {
-      windsorClient: emptyWindsor,
-      ghlConfig,
-    });
+    const run = await queueWorkerSync();
     const ghl = createGhlClient();
 
     await expect(
@@ -307,6 +319,17 @@ describe("processPendingSyncTargets", () => {
       })
       .from(integrationMappings)
       .where(eq(integrationMappings.clientId, clientId));
+    const [synchronizationState] = await db
+      .select({
+        lastSucceededAt: clientSynchronizationStates.lastSucceededAt,
+      })
+      .from(clientSynchronizationStates)
+      .where(
+        and(
+          eq(clientSynchronizationStates.clientId, clientId),
+          eq(clientSynchronizationStates.provider, "ghl"),
+        ),
+      );
     expect(completedRun?.status).toBe("succeeded");
     expect(completedTarget).toMatchObject({
       status: "succeeded",
@@ -314,13 +337,92 @@ describe("processPendingSyncTargets", () => {
       opportunityRowCount: 1,
     });
     expect(mapping?.lastSuccessfulSyncAt).toEqual(run.startedAt);
+    expect(synchronizationState?.lastSucceededAt).toBeInstanceOf(Date);
   });
 
-  it("does not overlap a worker that already holds the run lease", async () => {
-    const run = await syncAllClients(userId, {
-      windsorClient: emptyWindsor,
-      ghlConfig,
+  it("prevents a stale worker from overwriting a recovered target lease", async () => {
+    const run = await queueWorkerSync();
+    const initializer = createGhlClient();
+    await processPendingSyncTargets(
+      { runId: run.id, maxChunks: 1 },
+      {
+        ghlClient: initializer.client,
+        ghlConfig,
+        windsorClient: emptyWindsor,
+      },
+    );
+    const [target] = await db
+      .select({ id: allClientSyncTargets.id })
+      .from(allClientSyncTargets)
+      .where(
+        and(
+          eq(allClientSyncTargets.runId, run.id),
+          eq(allClientSyncTargets.provider, "ghl"),
+        ),
+      );
+    if (!target) throw new Error("Lease test target disappeared");
+
+    let releaseProvider: () => void = () => undefined;
+    let markProviderStarted: () => void = () => undefined;
+    const providerGate = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
     });
+    const providerStarted = new Promise<void>((resolve) => {
+      markProviderStarted = resolve;
+    });
+    const delayedFetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => {
+        markProviderStarted();
+        await providerGate;
+        return Response.json({ opportunities: [], meta: {} });
+      });
+    const processing = processPendingSyncTargets(
+      { runId: run.id, maxChunks: 1 },
+      {
+        ghlClient: new GhlClient(ghlConfig.baseUrl, delayedFetcher),
+        ghlConfig,
+        windsorClient: emptyWindsor,
+      },
+    );
+    await providerStarted;
+    const [claimed] = await db
+      .select({ leaseToken: allClientSyncTargets.leaseToken })
+      .from(allClientSyncTargets)
+      .where(eq(allClientSyncTargets.id, target.id));
+    expect(claimed?.leaseToken).toBeTruthy();
+
+    await db
+      .update(allClientSyncTargets)
+      .set({
+        status: "pending",
+        leaseExpiresAt: null,
+        leaseToken: null,
+        errorMessage: "Recovered by another worker",
+      })
+      .where(eq(allClientSyncTargets.id, target.id));
+    releaseProvider();
+    await expect(processing).resolves.toEqual({ processedChunkCount: 1 });
+
+    const [recovered] = await db
+      .select({
+        checkpoint: allClientSyncTargets.checkpoint,
+        errorMessage: allClientSyncTargets.errorMessage,
+        failureCount: allClientSyncTargets.failureCount,
+        status: allClientSyncTargets.status,
+      })
+      .from(allClientSyncTargets)
+      .where(eq(allClientSyncTargets.id, target.id));
+    expect(recovered).toMatchObject({
+      checkpoint: { phase: "opportunities", pageUrl: null },
+      errorMessage: "Recovered by another worker",
+      failureCount: 0,
+      status: "pending",
+    });
+  });
+
+  it("ignores legacy run leases and relies on target-level claims", async () => {
+    const run = await queueWorkerSync();
     await db
       .update(allClientSyncRuns)
       .set({ workerLeaseExpiresAt: new Date(Date.now() + 60_000) })
@@ -336,8 +438,8 @@ describe("processPendingSyncTargets", () => {
           windsorClient: emptyWindsor,
         },
       ),
-    ).resolves.toEqual({ processedChunkCount: 0 });
-    expect(ghl.fetcher).not.toHaveBeenCalled();
+    ).resolves.toEqual({ processedChunkCount: 1 });
+    expect(ghl.fetcher).toHaveBeenCalledTimes(1);
 
     await db.delete(allClientSyncRuns).where(eq(allClientSyncRuns.id, run.id));
     if (run.windsorSyncRunId) {
@@ -348,10 +450,7 @@ describe("processPendingSyncTargets", () => {
   it.each([400, 401])(
     "retries transient status %i before permanently failing the target",
     async (status) => {
-      const run = await syncAllClients(userId, {
-        windsorClient: emptyWindsor,
-        ghlConfig,
-      });
+      const run = await queueWorkerSync();
       const fetcher = vi
         .fn<typeof fetch>()
         .mockResolvedValue(new Response(null, { status }));
@@ -408,10 +507,7 @@ describe("processPendingSyncTargets", () => {
   );
 
   it("fails permanent provider errors without retrying the target", async () => {
-    const run = await syncAllClients(userId, {
-      windsorClient: emptyWindsor,
-      ghlConfig,
-    });
+    const run = await queueWorkerSync();
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(null, { status: 403 }));

@@ -13,7 +13,7 @@ import {
   FailedClientSyncTargetsNotFoundError,
   retryClientSync,
 } from "~/server/sync/retry-client-sync";
-import { SyncAlreadyRunningError } from "~/server/sync/sync-all-clients";
+import { SyncAlreadyRunningError } from "~/server/sync/synchronization-queue";
 
 const userId = "client-retry-test-user";
 const clientSlug = "client-retry-test-client";
@@ -245,9 +245,26 @@ describe("retryClientSync", () => {
     ).rejects.toBeInstanceOf(FailedClientSyncTargetsNotFoundError);
   });
 
-  it("does not overlap another active synchronization run", async () => {
+  it("does not overlap another active provider target for the client", async () => {
+    const activeStartedAt = new Date(Date.now() - 1_000);
+    const [activeRun] = await db
+      .insert(allClientSyncRuns)
+      .values({
+        requestedByUserId: userId,
+        startedAt: activeStartedAt,
+        heartbeatAt: activeStartedAt,
+      })
+      .returning({ id: allClientSyncRuns.id });
+    if (!activeRun) throw new Error("Could not create active retry test run");
+    await db.insert(allClientSyncTargets).values({
+      runId: activeRun.id,
+      clientId,
+      clientSlug,
+      clientName: "Client Retry Test",
+      provider: "ghl",
+      status: "pending",
+    });
     const sourceRun = await createSourceRun("failed");
-    await db.insert(allClientSyncRuns).values({ requestedByUserId: userId });
 
     await expect(
       retryClientSync({

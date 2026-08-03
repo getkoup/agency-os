@@ -3,6 +3,7 @@ import "server-only";
 import { loadStoredGhlConfig } from "~/server/ghl/configuration";
 import { WindsorClient } from "~/server/windsor/client";
 import { processPendingSyncTargets } from "~/server/sync/sync-worker";
+import { queueHourlyFreshSynchronization } from "~/server/sync/synchronization-queue";
 import {
   parseSyncWorkerConfig,
   runSyncWorker,
@@ -74,6 +75,10 @@ async function main(): Promise<void> {
     dependencies: {
       log: writeLog,
       processTargets,
+      scheduleHourlySync: async () => {
+        const run = await queueHourlyFreshSynchronization();
+        return run ? { id: run.id } : null;
+      },
     },
   });
 }

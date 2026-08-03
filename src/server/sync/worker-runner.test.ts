@@ -11,6 +11,7 @@ const config: SyncWorkerConfig = {
   errorRetryMs: 30_000,
   idlePollMs: 5_000,
   maxChunks: 1_000,
+  scheduleIntervalMs: 300_000,
   timeBudgetMs: 240_000,
 };
 
@@ -26,6 +27,7 @@ describe("parseSyncWorkerConfig", () => {
         SYNC_WORKER_ERROR_RETRY_MS: "10000",
         SYNC_WORKER_IDLE_POLL_MS: "2000",
         SYNC_WORKER_MAX_CHUNKS: "2000",
+        SYNC_WORKER_SCHEDULE_INTERVAL_MS: "120000",
         SYNC_WORKER_TIME_BUDGET_MS: "300000",
       }),
     ).toEqual({
@@ -33,6 +35,7 @@ describe("parseSyncWorkerConfig", () => {
       errorRetryMs: 10_000,
       idlePollMs: 2_000,
       maxChunks: 2_000,
+      scheduleIntervalMs: 120_000,
       timeBudgetMs: 300_000,
     });
   });
@@ -48,6 +51,33 @@ describe("parseSyncWorkerConfig", () => {
 });
 
 describe("runSyncWorker", () => {
+  it("queues hourly synchronization before processing targets", async () => {
+    const controller = new AbortController();
+    const scheduleHourlySync = vi
+      .fn()
+      .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000001" });
+    const processTargets = vi.fn(async () => {
+      controller.abort();
+      return { processedChunkCount: 1 };
+    });
+    const log = vi.fn();
+
+    await runSyncWorker({
+      config,
+      signal: controller.signal,
+      dependencies: { log, processTargets, scheduleHourlySync },
+    });
+
+    expect(scheduleHourlySync).toHaveBeenCalledTimes(1);
+    expect(scheduleHourlySync.mock.invocationCallOrder[0]).toBeLessThan(
+      processTargets.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(log).toHaveBeenCalledWith({
+      event: "sync_worker_hourly_sync_queued",
+      runId: "00000000-0000-4000-8000-000000000001",
+    });
+  });
+
   it("continues immediately while chunks are being processed", async () => {
     const controller = new AbortController();
     const wait =

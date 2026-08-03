@@ -18,7 +18,7 @@ export function RetryClientSyncButton({
   sourceRunId: string;
 }) {
   const router = useRouter();
-  const mutation = api.dashboard.retryClientSync.useMutation({
+  const mutation = api.synchronization.retryClient.useMutation({
     onSuccess: () => router.refresh(),
   });
 
@@ -31,7 +31,7 @@ export function RetryClientSyncButton({
         disabled={disabled || mutation.isPending || mutation.isSuccess}
         title={
           disabled
-            ? "Wait for the active synchronization to finish"
+            ? "Wait for this client synchronization to finish"
             : `Retry failed synchronization for ${clientName}`
         }
         onClick={() => mutation.mutate({ clientId, sourceRunId })}
