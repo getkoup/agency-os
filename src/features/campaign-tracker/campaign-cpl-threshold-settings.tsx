@@ -49,8 +49,10 @@ export function CampaignCplThresholdSettings({
     criticalThreshold !== savedThresholds.criticalThreshold;
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-sm font-medium">CPL colors</p>
+    <div className="w-full space-y-2 xl:w-44">
+      <p className="text-foreground/75 px-0.5 text-xs font-medium">
+        CPL colors
+      </p>
       <Dialog
         open={open}
         onOpenChange={(nextOpen) => {
@@ -59,7 +61,7 @@ export function CampaignCplThresholdSettings({
         }}
       >
         <DialogTrigger asChild>
-          <Button type="button" size="sm" variant="outline">
+          <Button type="button" variant="outline" className="w-full">
             <Settings2 aria-hidden="true" />
             Thresholds
           </Button>

@@ -21,3 +21,20 @@ export function groupCampaignsByClient(
   }
   return [...groupsById.values()];
 }
+
+export function filterCampaignClientGroups(
+  groups: readonly CampaignClientGroup[],
+  query: string,
+): CampaignClientGroup[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [...groups];
+  return groups.flatMap((group) => {
+    if (group.name.toLocaleLowerCase().includes(normalizedQuery)) {
+      return [group];
+    }
+    const matchingRows = group.rows.filter((row) =>
+      row.campaignName.toLocaleLowerCase().includes(normalizedQuery),
+    );
+    return matchingRows.length ? [{ ...group, rows: matchingRows }] : [];
+  });
+}

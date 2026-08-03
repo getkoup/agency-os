@@ -7,7 +7,6 @@ import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Calendar } from "~/components/ui/calendar";
-import { Label } from "~/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -29,8 +28,10 @@ export function CampaignTrackerDateFilter({ date }: { date: string }) {
   }
 
   return (
-    <div className="w-full space-y-1.5 sm:w-52">
-      <Label>Latest date</Label>
+    <div className="w-full space-y-2 xl:w-52">
+      <p className="text-foreground/75 px-0.5 text-xs font-medium">
+        Latest date
+      </p>
       <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
         <PopoverTrigger asChild>
           <Button

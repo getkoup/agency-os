@@ -14,4 +14,14 @@ describe("campaign tracker view URLs", () => {
       "/dashboard/campaign-tracker?date=2026-08-03&view=table",
     );
   });
+
+  it("preserves a trimmed search when changing views", () => {
+    expect(
+      campaignTrackerViewHref({
+        date: "2026-08-03",
+        query: "  tint  ",
+        view: "table",
+      }),
+    ).toBe("/dashboard/campaign-tracker?date=2026-08-03&query=tint&view=table");
+  });
 });

@@ -7,9 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { CampaignCplThresholdSettings } from "~/features/campaign-tracker/campaign-cpl-threshold-settings";
 import { CampaignTrackerDateFilter } from "~/features/campaign-tracker/campaign-tracker-date-filter";
 import { CampaignTrackerGroupedView } from "~/features/campaign-tracker/campaign-tracker-grouped-view";
+import { CampaignTrackerSearch } from "~/features/campaign-tracker/campaign-tracker-search";
 import { CampaignTrackerTableView } from "~/features/campaign-tracker/campaign-tracker-table-view";
 import { CampaignTrackerViewToggle } from "~/features/campaign-tracker/campaign-tracker-view-toggle";
-import { groupCampaignsByClient } from "~/features/campaign-tracker/client-groups";
+import {
+  filterCampaignClientGroups,
+  groupCampaignsByClient,
+} from "~/features/campaign-tracker/client-groups";
 import { formatCplThresholdLabel } from "~/features/campaign-tracker/cpl-thresholds";
 import { campaignTrackerViewSchema } from "~/features/campaign-tracker/view";
 import { EmptyState } from "~/features/dashboard/empty-state";
@@ -34,14 +38,25 @@ export default async function CampaignTrackerPage({
   const rawView = Array.isArray(rawSearch.view)
     ? rawSearch.view[0]
     : rawSearch.view;
+  const rawQuery = Array.isArray(rawSearch.query)
+    ? rawSearch.query[0]
+    : rawSearch.query;
   const focusDate =
     z.string().date().safeParse(rawDate).data ?? reportingContext.today;
   const view = campaignTrackerViewSchema.safeParse(rawView).data ?? "grouped";
+  const query = z.string().trim().max(100).safeParse(rawQuery).data ?? "";
   const [result, thresholds] = await Promise.all([
     api.campaignTracker.daily({ date: focusDate }),
     api.campaignTracker.cplThresholds(),
   ]);
-  const clientGroups = groupCampaignsByClient(result.rows);
+  const clientGroups = filterCampaignClientGroups(
+    groupCampaignsByClient(result.rows),
+    query,
+  );
+  const visibleCampaignCount = clientGroups.reduce(
+    (total, client) => total + client.rows.length,
+    0,
+  );
   const canConfigureThresholds = user.role === "owner" || user.role === "admin";
 
   return (
@@ -52,13 +67,16 @@ export default async function CampaignTrackerPage({
         description="Daily CPL and lead movement for campaigns with activity in the four-day window."
         meta={
           <Badge variant="secondary" className="rounded-[0.35rem]">
-            {result.rows.length} active campaign
-            {result.rows.length === 1 ? "" : "s"} · {result.reportingTimezone}
+            {query
+              ? `${visibleCampaignCount} of ${result.rows.length}`
+              : result.rows.length}{" "}
+            active campaign{result.rows.length === 1 ? "" : "s"} ·{" "}
+            {result.reportingTimezone}
           </Badge>
         }
       />
       <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
-        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card flex flex-col gap-5 border-b bg-gradient-to-r px-6 py-5 xl:flex-row xl:items-end xl:justify-between">
+        <CardHeader className="border-border/70 from-primary/[0.06] via-secondary/30 to-card gap-0 border-b bg-gradient-to-r px-6 py-5">
           <div className="space-y-1">
             <CardTitle className="tracking-tight">
               Four-day campaign performance
@@ -68,8 +86,15 @@ export default async function CampaignTrackerPage({
               remarks by client in {result.reportingTimezone}.
             </p>
           </div>
-          <div className="flex w-full flex-wrap items-end gap-3 xl:w-auto xl:justify-end">
-            <CampaignTrackerViewToggle date={focusDate} view={view} />
+        </CardHeader>
+        <div className="border-border/70 bg-card/70 border-b px-6 py-4">
+          <div className="grid w-full items-end gap-4 sm:grid-cols-2 xl:flex xl:flex-row">
+            <CampaignTrackerSearch key={query} initialQuery={query} />
+            <CampaignTrackerViewToggle
+              date={focusDate}
+              query={query}
+              view={view}
+            />
             {canConfigureThresholds ? (
               <CampaignCplThresholdSettings
                 key={`${thresholds.warningThreshold}:${thresholds.criticalThreshold}`}
@@ -78,7 +103,7 @@ export default async function CampaignTrackerPage({
             ) : null}
             <CampaignTrackerDateFilter date={focusDate} />
           </div>
-        </CardHeader>
+        </div>
         <div className="border-border/70 bg-muted/15 text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-6 py-3 text-xs">
           <span className="flex items-center gap-2">
             <span className="size-3 rounded-[0.2rem] bg-orange-500/40" /> CPL
@@ -115,8 +140,12 @@ export default async function CampaignTrackerPage({
           ) : (
             <EmptyState
               icon={TableProperties}
-              title="No active campaigns"
-              description="No campaign performance was recorded in the selected four-day window."
+              title={query ? "No matching campaigns" : "No active campaigns"}
+              description={
+                query
+                  ? `No client or campaign matches “${query}”.`
+                  : "No campaign performance was recorded in the selected four-day window."
+              }
             />
           )}
         </CardContent>

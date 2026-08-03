@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { groupCampaignsByClient } from "~/features/campaign-tracker/client-groups";
+import {
+  filterCampaignClientGroups,
+  groupCampaignsByClient,
+} from "~/features/campaign-tracker/client-groups";
 import { type CampaignTrackerRow } from "~/features/campaign-tracker/server/queries";
 
 function campaign(input: {
@@ -17,17 +20,48 @@ function campaign(input: {
   };
 }
 
-describe("groupCampaignsByClient", () => {
-  it("groups adjacent campaign rows while preserving client and row order", () => {
-    const rows = [
-      campaign({ id: "campaign-b", clientId: "client-1", clientName: "One" }),
-      campaign({ id: "campaign-a", clientId: "client-1", clientName: "One" }),
-      campaign({ id: "campaign-c", clientId: "client-2", clientName: "Two" }),
-    ];
+const rows = [
+  campaign({
+    id: "Spring Leads",
+    clientId: "client-1",
+    clientName: "Alpha Auto",
+  }),
+  campaign({
+    id: "Retargeting",
+    clientId: "client-1",
+    clientName: "Alpha Auto",
+  }),
+  campaign({
+    id: "Spring Leads",
+    clientId: "client-2",
+    clientName: "Beta Dental",
+  }),
+];
 
+describe("campaign client groups", () => {
+  it("groups campaign rows while preserving client and row order", () => {
     expect(groupCampaignsByClient(rows)).toEqual([
-      { id: "client-1", name: "One", rows: [rows[0], rows[1]] },
-      { id: "client-2", name: "Two", rows: [rows[2]] },
+      { id: "client-1", name: "Alpha Auto", rows: [rows[0], rows[1]] },
+      { id: "client-2", name: "Beta Dental", rows: [rows[2]] },
     ]);
+  });
+
+  it("keeps every campaign when the client name matches", () => {
+    const groups = groupCampaignsByClient(rows);
+    expect(filterCampaignClientGroups(groups, "ALPHA")).toEqual([groups[0]]);
+  });
+
+  it("keeps only matching campaigns when the client does not match", () => {
+    const groups = groupCampaignsByClient(rows);
+    expect(filterCampaignClientGroups(groups, "spring")).toEqual([
+      { ...groups[0]!, rows: [rows[0]!] },
+      { ...groups[1]!, rows: [rows[2]!] },
+    ]);
+  });
+
+  it("returns no groups when neither client nor campaign matches", () => {
+    expect(
+      filterCampaignClientGroups(groupCampaignsByClient(rows), "missing"),
+    ).toEqual([]);
   });
 });
