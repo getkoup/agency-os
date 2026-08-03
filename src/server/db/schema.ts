@@ -106,6 +106,14 @@ export const agencySettings = createTable(
   (d) => ({
     id: d.integer().default(1).primaryKey(),
     reportingTimezone: d.varchar({ length: 100 }).default("UTC").notNull(),
+    campaignCplWarningThreshold: d
+      .numeric({ precision: 12, scale: 2 })
+      .default("15.00")
+      .notNull(),
+    campaignCplCriticalThreshold: d
+      .numeric({ precision: 12, scale: 2 })
+      .default("25.00")
+      .notNull(),
     updatedByUserId: d
       .varchar({ length: 255 })
       .references(() => users.id, { onDelete: "set null" }),
@@ -117,6 +125,14 @@ export const agencySettings = createTable(
     check(
       "setting_reporting_timezone_not_blank",
       sql`length(trim(${t.reportingTimezone})) > 0`,
+    ),
+    check(
+      "setting_campaign_cpl_warning_nonnegative",
+      sql`${t.campaignCplWarningThreshold} >= 0`,
+    ),
+    check(
+      "setting_campaign_cpl_critical_above_warning",
+      sql`${t.campaignCplCriticalThreshold} > ${t.campaignCplWarningThreshold}`,
     ),
   ],
 );

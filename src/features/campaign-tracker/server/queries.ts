@@ -212,3 +212,8 @@ export async function getCampaignTrackerRows(focusDate: string) {
     })),
   };
 }
+
+export type CampaignTrackerResult = Awaited<
+  ReturnType<typeof getCampaignTrackerRows>
+>;
+export type CampaignTrackerRow = CampaignTrackerResult["rows"][number];

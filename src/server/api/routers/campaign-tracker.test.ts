@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { saveCampaignRemark } from "~/features/campaign-tracker/server/actions";
+import {
+  getCampaignCplThresholds,
+  updateCampaignCplThresholds,
+} from "~/features/campaign-tracker/server/cpl-thresholds";
 import { getCampaignTrackerRows } from "~/features/campaign-tracker/server/queries";
 import { type UserRole } from "~/lib/roles";
 import { campaignTrackerRouter } from "~/server/api/routers/campaign-tracker";
@@ -12,6 +16,10 @@ vi.mock("~/server/auth", () => ({ auth: vi.fn() }));
 vi.mock("~/server/auth/current-user", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("~/features/campaign-tracker/server/actions", () => ({
   saveCampaignRemark: vi.fn(),
+}));
+vi.mock("~/features/campaign-tracker/server/cpl-thresholds", () => ({
+  getCampaignCplThresholds: vi.fn(),
+  updateCampaignCplThresholds: vi.fn(),
 }));
 vi.mock("~/features/campaign-tracker/server/queries", () => ({
   getCampaignTrackerRows: vi.fn(),
@@ -57,6 +65,14 @@ describe("campaign tracker router", () => {
       isTruncated: false,
     });
     vi.mocked(saveCampaignRemark).mockResolvedValue({ success: true });
+    vi.mocked(getCampaignCplThresholds).mockResolvedValue({
+      warningThreshold: "15.00",
+      criticalThreshold: "25.00",
+    });
+    vi.mocked(updateCampaignCplThresholds).mockResolvedValue({
+      warningThreshold: "20.00",
+      criticalThreshold: "30.00",
+    });
   });
 
   it.each(["owner", "admin", "manager"] as const)(
@@ -67,6 +83,49 @@ describe("campaign tracker router", () => {
       });
     },
   );
+
+  it("allows staff to view CPL thresholds", async () => {
+    await expect(callerFor("manager").cplThresholds()).resolves.toEqual({
+      warningThreshold: "15.00",
+      criticalThreshold: "25.00",
+    });
+  });
+
+  it.each(["owner", "admin"] as const)(
+    "allows %s to update CPL thresholds",
+    async (role) => {
+      await expect(
+        callerFor(role).updateCplThresholds({
+          warningThreshold: "20",
+          criticalThreshold: "30",
+        }),
+      ).resolves.toEqual({
+        warningThreshold: "20.00",
+        criticalThreshold: "30.00",
+      });
+      expect(updateCampaignCplThresholds).toHaveBeenCalledWith({
+        warningThreshold: "20.00",
+        criticalThreshold: "30.00",
+        userId: "user-1",
+      });
+    },
+  );
+
+  it("rejects invalid or manager-authored CPL thresholds", async () => {
+    await expect(
+      callerFor("owner").updateCplThresholds({
+        warningThreshold: "30",
+        criticalThreshold: "20",
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      callerFor("manager").updateCplThresholds({
+        warningThreshold: "20",
+        criticalThreshold: "30",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(updateCampaignCplThresholds).not.toHaveBeenCalled();
+  });
 
   it("lets managers save dated remarks", async () => {
     await expect(
@@ -91,10 +150,22 @@ describe("campaign tracker router", () => {
     await expect(
       callerFor("client").saveRemark({ campaignId, date, remark: "No" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(callerFor("client").cplThresholds()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(
+      callerFor("client").updateCplThresholds({
+        warningThreshold: "20",
+        criticalThreshold: "30",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("rejects anonymous access", async () => {
     await expect(callerFor(null).daily({ date })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(callerFor(null).cplThresholds()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
   });

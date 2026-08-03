@@ -155,6 +155,13 @@
       "when": 1785775908103,
       "tag": "0021_bright_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785781293019,
+      "tag": "0022_majestic_lady_ursula",
+      "breakpoints": true
     }
   ]
 }

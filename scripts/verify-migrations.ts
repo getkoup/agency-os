@@ -150,16 +150,20 @@ try {
   if (!backfilledSyncState?.lastSucceededAt) {
     throw new Error("Client synchronization state was not backfilled");
   }
+  await applyMigration(test, "drizzle/0022_majestic_lady_ursula.sql");
   const [agencySetting] = await test`
-    select "id", "reportingTimezone"
+    select "id", "reportingTimezone", "campaignCplWarningThreshold",
+      "campaignCplCriticalThreshold"
     from "agency_os_setting"
   `;
   if (
     !agencySetting ||
     agencySetting.id !== 1 ||
-    agencySetting.reportingTimezone !== "UTC"
+    agencySetting.reportingTimezone !== "UTC" ||
+    agencySetting.campaignCplWarningThreshold !== "15.00" ||
+    agencySetting.campaignCplCriticalThreshold !== "25.00"
   ) {
-    throw new Error("Agency reporting timezone was not seeded as UTC");
+    throw new Error("Agency settings defaults were not seeded correctly");
   }
   await expectConstraintViolation(
     () =>
@@ -177,6 +181,24 @@ try {
         where "id" = 1
       `,
     "non-blank reporting timezone",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        update "agency_os_setting"
+        set "campaignCplWarningThreshold" = -0.01
+        where "id" = 1
+      `,
+    "non-negative campaign CPL warning threshold",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        update "agency_os_setting"
+        set "campaignCplCriticalThreshold" = "campaignCplWarningThreshold"
+        where "id" = 1
+      `,
+    "campaign CPL critical threshold ordering",
   );
   const globalSalespersonBackfill = await test`
     select i."externalUserId",

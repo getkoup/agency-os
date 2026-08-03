@@ -1,0 +1,4 @@
+ALTER TABLE "agency_os_setting" ADD COLUMN "campaignCplWarningThreshold" numeric(12, 2) DEFAULT '15.00' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agency_os_setting" ADD COLUMN "campaignCplCriticalThreshold" numeric(12, 2) DEFAULT '25.00' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agency_os_setting" ADD CONSTRAINT "setting_campaign_cpl_warning_nonnegative" CHECK ("agency_os_setting"."campaignCplWarningThreshold" >= 0);--> statement-breakpoint
+ALTER TABLE "agency_os_setting" ADD CONSTRAINT "setting_campaign_cpl_critical_above_warning" CHECK ("agency_os_setting"."campaignCplCriticalThreshold" > "agency_os_setting"."campaignCplWarningThreshold");
