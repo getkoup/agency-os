@@ -213,8 +213,11 @@ export default async function SalesTrackingPage({
                         <p className="text-lg font-semibold tabular-nums">
                           {bucket.bookings} bookings
                         </p>
-                        <p className="mt-1 text-xs opacity-80">
-                          Goal {bucket.goal ?? "not set"}
+                        <p
+                          className="mt-1 text-xs opacity-80"
+                          title={bucket.calendarNames.join(", ") || undefined}
+                        >
+                          {bucket.calendarNames.join(", ") || "—"}
                         </p>
                         {bucket.goal ? (
                           <p className="mt-0.5 text-xs font-medium tabular-nums">

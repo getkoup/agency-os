@@ -115,6 +115,9 @@ describe("agency reporting timezone persistence", () => {
     const utcClient = utc.rows.find((row) => row.id === clientId);
     expect(utc.reportingTimezone).toBe("UTC");
     expect(utcClient?.buckets.at(-1)?.bookings).toBe(1);
+    expect(utcClient?.buckets.at(-1)?.calendarNames).toEqual([
+      "Reporting Timezone Calendar",
+    ]);
 
     await updateAgencyReportingTimezone({
       reportingTimezone: "America/Los_Angeles",
@@ -127,7 +130,11 @@ describe("agency reporting timezone persistence", () => {
     const losAngelesClient = losAngeles.rows.find((row) => row.id === clientId);
     expect(losAngeles.reportingTimezone).toBe("America/Los_Angeles");
     expect(losAngelesClient?.buckets.at(-1)?.bookings).toBe(0);
+    expect(losAngelesClient?.buckets.at(-1)?.calendarNames).toEqual([]);
     expect(losAngelesClient?.buckets.at(-2)?.bookings).toBe(1);
+    expect(losAngelesClient?.buckets.at(-2)?.calendarNames).toEqual([
+      "Reporting Timezone Calendar",
+    ]);
 
     const [storedAppointment] = await db
       .select({ providerCreatedAt: ghlAppointments.providerCreatedAt })

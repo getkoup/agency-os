@@ -10,6 +10,7 @@ import { db } from "~/server/db";
 import {
   clients,
   ghlAppointments,
+  ghlCalendars,
   integrationMappings,
 } from "~/server/db/schema";
 
@@ -79,6 +80,9 @@ export async function getSalesTrackingRows(input: {
       .select({
         clientId: integrationMappings.clientId,
         date: sql<string>`to_char(${appointmentCreatedDate}, 'YYYY-MM-DD')`,
+        calendarNames: sql<
+          string[]
+        >`array_agg(distinct ${ghlCalendars.name} order by ${ghlCalendars.name})`,
         bookings: sql<number>`count(*)::int`,
       })
       .from(ghlAppointments)
@@ -86,6 +90,7 @@ export async function getSalesTrackingRows(input: {
         integrationMappings,
         eq(ghlAppointments.integrationMappingId, integrationMappings.id),
       )
+      .innerJoin(ghlCalendars, eq(ghlAppointments.calendarId, ghlCalendars.id))
       .where(
         and(
           eq(ghlAppointments.deleted, false),
@@ -99,20 +104,31 @@ export async function getSalesTrackingRows(input: {
       ),
   ]);
   const bookingsByClientDate = new Map(
-    bookingRows.map((row) => [`${row.clientId}:${row.date}`, row.bookings]),
+    bookingRows.map((row) => [`${row.clientId}:${row.date}`, row]),
   );
   const dateGroups = groupSalesDates(dates, input.groupSize);
   const rows = clientRows.map((client) => {
     const buckets = dateGroups.map((groupDates) => {
       const bookings = groupDates.reduce(
         (total, date) =>
-          total + (bookingsByClientDate.get(`${client.id}:${date}`) ?? 0),
+          total +
+          (bookingsByClientDate.get(`${client.id}:${date}`)?.bookings ?? 0),
         0,
       );
+      const calendarNames = [
+        ...new Set(
+          groupDates.flatMap(
+            (date) =>
+              bookingsByClientDate.get(`${client.id}:${date}`)?.calendarNames ??
+              [],
+          ),
+        ),
+      ].sort((left, right) => left.localeCompare(right));
       return {
         from: groupDates[0]!,
         to: groupDates.at(-1)!,
         bookings,
+        calendarNames,
         goal: client.dailyBookingGoal,
         status: salesStatus(bookings, client.dailyBookingGoal),
       };
