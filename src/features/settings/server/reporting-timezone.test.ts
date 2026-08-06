@@ -51,6 +51,14 @@ beforeAll(async () => {
       name: "Reporting Timezone Calendar",
     })
     .returning({ id: ghlCalendars.id });
+  const [secondCalendar] = await db
+    .insert(ghlCalendars)
+    .values({
+      integrationMappingId: mapping.id,
+      externalId: "reporting-timezone-second-calendar",
+      name: "Second Reporting Calendar",
+    })
+    .returning({ id: ghlCalendars.id });
   const [contact] = await db
     .insert(ghlContacts)
     .values({
@@ -60,21 +68,35 @@ beforeAll(async () => {
       rawPayload: {},
     })
     .returning({ id: ghlContacts.id });
-  if (!calendar || !contact) {
+  if (!calendar || !secondCalendar || !contact) {
     throw new Error("Could not create reporting timezone GHL fixtures");
   }
-  await db.insert(ghlAppointments).values({
-    integrationMappingId: mapping.id,
-    calendarId: calendar.id,
-    contactId: contact.id,
-    externalId: "reporting-timezone-appointment",
-    status: "confirmed",
-    startsAt: new Date("2026-08-02T16:00:00.000Z"),
-    endsAt: new Date("2026-08-02T17:00:00.000Z"),
-    providerCreatedAt: new Date("2026-07-30T00:30:00.000Z"),
-    providerUpdatedAt: new Date("2026-07-30T00:30:00.000Z"),
-    rawPayload: {},
-  });
+  await db.insert(ghlAppointments).values([
+    {
+      integrationMappingId: mapping.id,
+      calendarId: calendar.id,
+      contactId: contact.id,
+      externalId: "reporting-timezone-appointment",
+      status: "confirmed",
+      startsAt: new Date("2026-08-02T16:00:00.000Z"),
+      endsAt: new Date("2026-08-02T17:00:00.000Z"),
+      providerCreatedAt: new Date("2026-07-30T00:30:00.000Z"),
+      providerUpdatedAt: new Date("2026-07-30T00:30:00.000Z"),
+      rawPayload: {},
+    },
+    {
+      integrationMappingId: mapping.id,
+      calendarId: secondCalendar.id,
+      contactId: contact.id,
+      externalId: "reporting-timezone-second-appointment",
+      status: "confirmed",
+      startsAt: new Date("2026-08-02T18:00:00.000Z"),
+      endsAt: new Date("2026-08-02T19:00:00.000Z"),
+      providerCreatedAt: new Date("2026-07-30T00:30:00.000Z"),
+      providerUpdatedAt: new Date("2026-07-30T00:30:00.000Z"),
+      rawPayload: {},
+    },
+  ]);
   await updateAgencyReportingTimezone({ reportingTimezone: "UTC", userId });
 });
 
@@ -114,9 +136,10 @@ describe("agency reporting timezone persistence", () => {
     });
     const utcClient = utc.rows.find((row) => row.id === clientId);
     expect(utc.reportingTimezone).toBe("UTC");
-    expect(utcClient?.buckets.at(-1)?.bookings).toBe(1);
-    expect(utcClient?.buckets.at(-1)?.calendarNames).toEqual([
-      "Reporting Timezone Calendar",
+    expect(utcClient?.buckets.at(-1)?.bookings).toBe(2);
+    expect(utcClient?.buckets.at(-1)?.calendarBreakdown).toEqual([
+      { bookings: 1, calendarName: "Reporting Timezone Calendar" },
+      { bookings: 1, calendarName: "Second Reporting Calendar" },
     ]);
 
     await updateAgencyReportingTimezone({
@@ -130,10 +153,11 @@ describe("agency reporting timezone persistence", () => {
     const losAngelesClient = losAngeles.rows.find((row) => row.id === clientId);
     expect(losAngeles.reportingTimezone).toBe("America/Los_Angeles");
     expect(losAngelesClient?.buckets.at(-1)?.bookings).toBe(0);
-    expect(losAngelesClient?.buckets.at(-1)?.calendarNames).toEqual([]);
-    expect(losAngelesClient?.buckets.at(-2)?.bookings).toBe(1);
-    expect(losAngelesClient?.buckets.at(-2)?.calendarNames).toEqual([
-      "Reporting Timezone Calendar",
+    expect(losAngelesClient?.buckets.at(-1)?.calendarBreakdown).toEqual([]);
+    expect(losAngelesClient?.buckets.at(-2)?.bookings).toBe(2);
+    expect(losAngelesClient?.buckets.at(-2)?.calendarBreakdown).toEqual([
+      { bookings: 1, calendarName: "Reporting Timezone Calendar" },
+      { bookings: 1, calendarName: "Second Reporting Calendar" },
     ]);
 
     const [storedAppointment] = await db

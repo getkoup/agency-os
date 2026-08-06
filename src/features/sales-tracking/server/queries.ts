@@ -80,9 +80,7 @@ export async function getSalesTrackingRows(input: {
       .select({
         clientId: integrationMappings.clientId,
         date: sql<string>`to_char(${appointmentCreatedDate}, 'YYYY-MM-DD')`,
-        calendarNames: sql<
-          string[]
-        >`array_agg(distinct ${ghlCalendars.name} order by ${ghlCalendars.name})`,
+        calendarName: ghlCalendars.name,
         bookings: sql<number>`count(*)::int`,
       })
       .from(ghlAppointments)
@@ -101,34 +99,48 @@ export async function getSalesTrackingRows(input: {
       .groupBy(
         integrationMappings.clientId,
         sql`to_char(${appointmentCreatedDate}, 'YYYY-MM-DD')`,
+        ghlCalendars.name,
       ),
   ]);
-  const bookingsByClientDate = new Map(
-    bookingRows.map((row) => [`${row.clientId}:${row.date}`, row]),
-  );
+  const bookingsByClientDate = new Map<string, typeof bookingRows>();
+  for (const booking of bookingRows) {
+    const key = `${booking.clientId}:${booking.date}`;
+    const existingBookings = bookingsByClientDate.get(key);
+    if (existingBookings) {
+      existingBookings.push(booking);
+    } else {
+      bookingsByClientDate.set(key, [booking]);
+    }
+  }
   const dateGroups = groupSalesDates(dates, input.groupSize);
   const rows = clientRows.map((client) => {
     const buckets = dateGroups.map((groupDates) => {
-      const bookings = groupDates.reduce(
-        (total, date) =>
-          total +
-          (bookingsByClientDate.get(`${client.id}:${date}`)?.bookings ?? 0),
+      const bookingsByCalendar = new Map<string, number>();
+      for (const date of groupDates) {
+        for (const booking of bookingsByClientDate.get(
+          `${client.id}:${date}`,
+        ) ?? []) {
+          bookingsByCalendar.set(
+            booking.calendarName,
+            (bookingsByCalendar.get(booking.calendarName) ?? 0) +
+              booking.bookings,
+          );
+        }
+      }
+      const calendarBreakdown = [...bookingsByCalendar]
+        .map(([calendarName, bookings]) => ({ calendarName, bookings }))
+        .sort((left, right) =>
+          left.calendarName.localeCompare(right.calendarName),
+        );
+      const bookings = calendarBreakdown.reduce(
+        (total, calendar) => total + calendar.bookings,
         0,
       );
-      const calendarNames = [
-        ...new Set(
-          groupDates.flatMap(
-            (date) =>
-              bookingsByClientDate.get(`${client.id}:${date}`)?.calendarNames ??
-              [],
-          ),
-        ),
-      ].sort((left, right) => left.localeCompare(right));
       return {
         from: groupDates[0]!,
         to: groupDates.at(-1)!,
         bookings,
-        calendarNames,
+        calendarBreakdown,
         goal: client.dailyBookingGoal,
         status: salesStatus(bookings, client.dailyBookingGoal),
       };

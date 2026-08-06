@@ -213,12 +213,24 @@ export default async function SalesTrackingPage({
                         <p className="text-lg font-semibold tabular-nums">
                           {bucket.bookings} bookings
                         </p>
-                        <p
-                          className="mt-1 text-xs opacity-80"
-                          title={bucket.calendarNames.join(", ") || undefined}
-                        >
-                          {bucket.calendarNames.join(", ") || "—"}
-                        </p>
+                        <div className="mx-auto mt-1 flex max-w-36 flex-col gap-0.5 text-xs leading-tight whitespace-normal opacity-80">
+                          {bucket.calendarBreakdown.length ? (
+                            bucket.calendarBreakdown.map((calendar) => (
+                              <p
+                                key={calendar.calendarName}
+                                className="break-words"
+                                title={calendar.calendarName}
+                              >
+                                {calendar.calendarName} —{" "}
+                                <span className="font-medium tabular-nums">
+                                  {calendar.bookings}
+                                </span>
+                              </p>
+                            ))
+                          ) : (
+                            <p>—</p>
+                          )}
+                        </div>
                         {bucket.goal ? (
                           <p className="mt-0.5 text-xs font-medium tabular-nums">
                             {Math.round((bucket.bookings / bucket.goal) * 100)}%
