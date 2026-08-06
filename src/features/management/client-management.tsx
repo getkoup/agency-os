@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -340,6 +341,11 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
     onSuccess: close,
     onError: (value) => setError(value.message),
   });
+  const unassign = api.management.unassignClientSourceAccounts.useMutation({
+    onSuccess: close,
+    onError: (value) => setError(value.message),
+  });
+  const isPending = update.isPending || remove.isPending || unassign.isPending;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -395,15 +401,49 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-muted-foreground text-xs leading-5">
-            Deactivate only after all source accounts are unassigned.
-          </p>
+          <section className="bg-muted/35 space-y-3 rounded-lg border p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Source accounts</p>
+              <p className="text-muted-foreground text-xs leading-5">
+                {row.sourceAccountCount
+                  ? `${row.sourceAccountCount} source ${row.sourceAccountCount === 1 ? "account is" : "accounts are"} linked to this client. Unassign them before deactivating or deleting the client.`
+                  : "No source accounts are linked to this client."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" asChild>
+                <Link href={`/dashboard/accounts?clientId=${row.id}`}>
+                  Manage accounts
+                </Link>
+              </Button>
+              {row.sourceAccountCount ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Unassign all ${row.sourceAccountCount} source ${row.sourceAccountCount === 1 ? "account" : "accounts"} from ${row.name}? Historical performance and leads will remain with the accounts, which will become unassigned.`,
+                      )
+                    ) {
+                      unassign.mutate({ clientId: row.id });
+                    }
+                  }}
+                >
+                  {unassign.isPending
+                    ? "Unassigning…"
+                    : `Unassign all (${row.sourceAccountCount})`}
+                </Button>
+              ) : null}
+            </div>
+          </section>
           {error ? <p className="text-destructive text-sm">{error}</p> : null}
           <DialogFooter className="sm:justify-between">
             <Button
               type="button"
               variant="destructive"
-              disabled={update.isPending || remove.isPending}
+              disabled={isPending}
               onClick={() => {
                 if (
                   window.confirm(
@@ -416,7 +456,7 @@ export function ClientEditButton({ row }: { row: ClientRow }) {
             >
               {remove.isPending ? "Deleting…" : "Delete permanently"}
             </Button>
-            <Button size="lg" disabled={update.isPending || remove.isPending}>
+            <Button size="lg" disabled={isPending}>
               {update.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

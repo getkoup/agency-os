@@ -5,6 +5,7 @@ import {
   assignUnassignedSourceAccounts,
   createManagedClient,
   deleteManagedClient,
+  unassignManagedSourceAccounts,
 } from "~/features/management/server/actions";
 import { db } from "~/server/db";
 import { clients, sourceAccounts } from "~/server/db/schema";
@@ -129,8 +130,35 @@ describe("client creation and unassigned account assignment", () => {
       .where(eq(clients.slug, primarySlug));
     if (!client) throw new Error("Primary client is missing");
 
-    await expect(deleteManagedClient(client.id)).rejects.toMatchObject({
-      code: "CONFLICT",
+    const deletion = deleteManagedClient(client.id);
+    await expect(deletion).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(deletion).rejects.toThrow("client editor or Accounts page");
+  });
+
+  it("bulk unassigns client accounts and permits deletion", async () => {
+    const [client] = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.slug, primarySlug));
+    if (!client) throw new Error("Primary client is missing");
+
+    await expect(unassignManagedSourceAccounts(client.id)).resolves.toEqual({
+      success: true,
+      unassignedCount: 2,
+    });
+    const accounts = await db
+      .select({ clientId: sourceAccounts.clientId })
+      .from(sourceAccounts)
+      .where(
+        inArray(sourceAccounts.id, [
+          firstSourceAccountId,
+          secondSourceAccountId,
+        ]),
+      );
+    expect(accounts).toHaveLength(2);
+    expect(accounts.every(({ clientId }) => clientId === null)).toBe(true);
+    await expect(deleteManagedClient(client.id)).resolves.toEqual({
+      success: true,
     });
   });
 });

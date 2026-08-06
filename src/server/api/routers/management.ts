@@ -9,6 +9,7 @@ import {
   deleteManagedClient,
   resetManagedUserPassword,
   updateManagedClient,
+  unassignManagedSourceAccounts,
   updateManagedUser,
 } from "~/features/management/server/actions";
 import {
@@ -96,6 +97,9 @@ export const managementRouter = createTRPCRouter({
   deleteClient: ownerProcedure
     .input(z.object({ clientId: z.string().uuid() }))
     .mutation(({ input }) => deleteManagedClient(input.clientId)),
+  unassignClientSourceAccounts: ownerProcedure
+    .input(z.object({ clientId: z.string().uuid() }))
+    .mutation(({ input }) => unassignManagedSourceAccounts(input.clientId)),
   accountAssignments: ownerProcedure
     .input(
       z.object({

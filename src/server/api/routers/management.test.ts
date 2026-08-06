@@ -4,6 +4,7 @@ import {
   assignUnassignedSourceAccounts,
   createManagedClient,
   deleteManagedClient,
+  unassignManagedSourceAccounts,
 } from "~/features/management/server/actions";
 import {
   listAccountAssignments,
@@ -25,6 +26,7 @@ vi.mock("~/features/management/server/actions", () => ({
   deleteManagedClient: vi.fn(),
   resetManagedUserPassword: vi.fn(),
   updateManagedClient: vi.fn(),
+  unassignManagedSourceAccounts: vi.fn(),
   updateManagedUser: vi.fn(),
 }));
 vi.mock("~/features/management/server/queries", () => ({
@@ -71,6 +73,10 @@ describe("management client and account authorization", () => {
       success: true,
     });
     vi.mocked(deleteManagedClient).mockResolvedValue({ success: true });
+    vi.mocked(unassignManagedSourceAccounts).mockResolvedValue({
+      success: true,
+      unassignedCount: 1,
+    });
   });
 
   it("allows owners to create clients, assign accounts, and delete safely", async () => {
@@ -89,6 +95,10 @@ describe("management client and account authorization", () => {
     await expect(
       callerFor("owner").deleteClient({ clientId }),
     ).resolves.toEqual({ success: true });
+    await expect(
+      callerFor("owner").unassignClientSourceAccounts({ clientId }),
+    ).resolves.toEqual({ success: true, unassignedCount: 1 });
+    expect(unassignManagedSourceAccounts).toHaveBeenCalledWith(clientId);
   });
 
   it.each(["admin", "manager", "client"] as const)(
@@ -102,6 +112,9 @@ describe("management client and account authorization", () => {
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         callerFor(role).accountAssignments({ page: 1, pageSize: 25 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(
+        callerFor(role).unassignClientSourceAccounts({ clientId }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     },
   );

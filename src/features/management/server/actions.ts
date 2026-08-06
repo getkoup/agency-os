@@ -282,6 +282,27 @@ export async function assignUnassignedSourceAccounts(input: {
   });
 }
 
+export async function unassignManagedSourceAccounts(clientId: string) {
+  return db.transaction(async (tx) => {
+    const [client] = await tx
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .for("update");
+    if (!client) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const unassigned = await tx
+      .update(sourceAccounts)
+      .set({ clientId: null })
+      .where(eq(sourceAccounts.clientId, clientId))
+      .returning({ id: sourceAccounts.id });
+    return {
+      success: true as const,
+      unassignedCount: unassigned.length,
+    };
+  });
+}
+
 export async function updateManagedClient(input: {
   clientId: string;
   name: string;
@@ -360,9 +381,13 @@ export async function deleteManagedClient(clientId: string) {
       (mappingCount[0]?.count ?? 0) > 0 ? "integration history" : null,
     ].filter((value): value is string => value !== null);
     if (blockers.length) {
+      const accountGuidance =
+        (accountCount[0]?.count ?? 0) > 0
+          ? " Unassign source accounts from the client editor or Accounts page, then retry."
+          : "";
       throw new TRPCError({
         code: "CONFLICT",
-        message: `Client cannot be permanently deleted while it has ${blockers.join(", ")}. Deactivate it instead.`,
+        message: `Client cannot be permanently deleted while it has ${blockers.join(", ")}. Remove these dependencies first.${accountGuidance}`,
       });
     }
     await tx.delete(clients).where(eq(clients.id, clientId));
