@@ -214,6 +214,7 @@ export async function getGhlConfigurationStatus() {
       clientStatus: row.clientStatus,
       mappingState,
       configured: Boolean(row.locationId),
+      hasGhlIntegration: Boolean(row.mappingLocationId),
       locationId: row.locationId,
       timezone: row.timezone,
       tokenHint: row.tokenLastFour ? `••••${row.tokenLastFour}` : null,

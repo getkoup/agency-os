@@ -6,6 +6,7 @@ import {
   createLeadClassificationRule,
   createRevenueRule,
   removeGhlClientConfiguration,
+  resetGhlClientIntegration,
   saveGhlClientConfiguration,
   updateAgencyReportingTimezone,
   updateLeadClassificationRule,
@@ -28,6 +29,7 @@ vi.mock("~/features/settings/server/actions", () => ({
   createLeadClassificationRule: vi.fn(),
   createRevenueRule: vi.fn(),
   removeGhlClientConfiguration: vi.fn(),
+  resetGhlClientIntegration: vi.fn(),
   saveGhlClientConfiguration: vi.fn(),
   updateAgencyReportingTimezone: vi.fn(),
   updateLeadClassificationRule: vi.fn(),
@@ -99,6 +101,7 @@ describe("settings router", () => {
         clientStatus: "active",
         mappingState: "active",
         configured: true,
+        hasGhlIntegration: true,
         locationId: "location-1",
         timezone: "America/New_York",
         tokenHint: "••••oken",
@@ -119,6 +122,10 @@ describe("settings router", () => {
     });
     vi.mocked(removeGhlClientConfiguration).mockResolvedValue({
       success: true,
+    });
+    vi.mocked(resetGhlClientIntegration).mockResolvedValue({
+      success: true,
+      deletedMappingCount: 1,
     });
   });
 
@@ -177,6 +184,8 @@ describe("settings router", () => {
       token: "pit-private-token",
       userId: "user-1",
     });
+    await callerFor("owner").resetGhlIntegration({ clientId });
+    expect(resetGhlClientIntegration).toHaveBeenCalledWith(clientId);
     await expect(
       callerFor("admin").ghlConfigurationStatus(),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -186,6 +195,9 @@ describe("settings router", () => {
         locationId: "location-1",
         token: "pit-private-token",
       }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      callerFor("admin").resetGhlIntegration({ clientId }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 

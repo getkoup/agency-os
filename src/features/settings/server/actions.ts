@@ -1,7 +1,7 @@
 import "server-only";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { normalizeCampaignText } from "~/features/dashboard/lead-classification";
 import {
@@ -13,7 +13,9 @@ import { AGENCY_SETTING_ID } from "~/features/settings/server/reporting-timezone
 import { db } from "~/server/db";
 import {
   agencySettings,
+  allClientSyncTargets,
   clients,
+  clientSynchronizationStates,
   ghlClientConfigurations,
   integrationMappings,
   leadClassificationRules,
@@ -348,4 +350,60 @@ export async function removeGhlClientConfiguration(clientId: string) {
     .delete(ghlClientConfigurations)
     .where(eq(ghlClientConfigurations.clientId, clientId));
   return { success: true as const };
+}
+
+export async function resetGhlClientIntegration(clientId: string) {
+  return db.transaction(async (tx) => {
+    const [client] = await tx
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .for("update");
+    if (!client) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const [activeTarget] = await tx
+      .select({ id: allClientSyncTargets.id })
+      .from(allClientSyncTargets)
+      .where(
+        and(
+          eq(allClientSyncTargets.clientId, clientId),
+          eq(allClientSyncTargets.provider, "ghl"),
+          inArray(allClientSyncTargets.status, ["pending", "running"]),
+        ),
+      )
+      .limit(1);
+    if (activeTarget) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message:
+          "GHL integration cannot be reset while synchronization is pending or running",
+      });
+    }
+
+    await tx
+      .delete(ghlClientConfigurations)
+      .where(eq(ghlClientConfigurations.clientId, clientId));
+    await tx
+      .delete(clientSynchronizationStates)
+      .where(
+        and(
+          eq(clientSynchronizationStates.clientId, clientId),
+          eq(clientSynchronizationStates.provider, "ghl"),
+        ),
+      );
+    const deletedMappings = await tx
+      .delete(integrationMappings)
+      .where(
+        and(
+          eq(integrationMappings.clientId, clientId),
+          eq(integrationMappings.provider, "ghl"),
+        ),
+      )
+      .returning({ id: integrationMappings.id });
+
+    return {
+      success: true as const,
+      deletedMappingCount: deletedMappings.length,
+    };
+  });
 }

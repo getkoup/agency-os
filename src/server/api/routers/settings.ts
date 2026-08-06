@@ -4,6 +4,7 @@ import {
   createLeadClassificationRule,
   createRevenueRule,
   removeGhlClientConfiguration,
+  resetGhlClientIntegration,
   saveGhlClientConfiguration,
   updateAgencyReportingTimezone,
   updateLeadClassificationRule,
@@ -119,4 +120,7 @@ export const settingsRouter = createTRPCRouter({
   removeGhlConfiguration: ownerProcedure
     .input(z.object({ clientId }))
     .mutation(({ input }) => removeGhlClientConfiguration(input.clientId)),
+  resetGhlIntegration: ownerProcedure
+    .input(z.object({ clientId }))
+    .mutation(({ input }) => resetGhlClientIntegration(input.clientId)),
 });

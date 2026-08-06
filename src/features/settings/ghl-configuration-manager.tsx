@@ -34,6 +34,7 @@ function GhlConfigurationDialog({ row }: { row: Configuration }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetConfirmation, setResetConfirmation] = useState("");
   const save = api.settings.saveGhlConfiguration.useMutation({
     onSuccess: () => {
       setOpen(false);
@@ -50,9 +51,28 @@ function GhlConfigurationDialog({ row }: { row: Configuration }) {
     },
     onError: (value) => setError(value.message),
   });
+  const reset = api.settings.resetGhlIntegration.useMutation({
+    onSuccess: () => {
+      setOpen(false);
+      setError(null);
+      setResetConfirmation("");
+      router.refresh();
+    },
+    onError: (value) => setError(value.message),
+  });
+  const isPending = save.isPending || remove.isPending || reset.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setError(null);
+          setResetConfirmation("");
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button size="sm" variant={row.configured ? "outline" : "default"}>
           {row.configured ? "Edit GHL settings" : "Configure GHL"}
@@ -125,7 +145,7 @@ function GhlConfigurationDialog({ row }: { row: Configuration }) {
               <Button
                 type="button"
                 variant="destructive"
-                disabled={remove.isPending || save.isPending}
+                disabled={isPending}
                 onClick={() => {
                   if (
                     window.confirm(
@@ -141,10 +161,45 @@ function GhlConfigurationDialog({ row }: { row: Configuration }) {
             ) : (
               <span />
             )}
-            <Button disabled={save.isPending || remove.isPending}>
+            <Button disabled={isPending}>
               {save.isPending ? "Verifying…" : "Verify and save"}
             </Button>
           </DialogFooter>
+          {row.hasGhlIntegration ? (
+            <section className="border-destructive/40 bg-destructive/[0.04] space-y-3 rounded-lg border p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">Reset GHL integration</p>
+                <p className="text-muted-foreground text-xs leading-5">
+                  Permanently deletes this client&apos;s stored GHL credentials
+                  and synchronized contacts, opportunities, calendars,
+                  appointments, and matching records. The client, non-GHL data,
+                  and every other client remain unchanged. This cannot be
+                  undone.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`ghl-reset-${row.clientId}`}>
+                  Type <strong>{row.clientName}</strong> to confirm
+                </Label>
+                <Input
+                  id={`ghl-reset-${row.clientId}`}
+                  value={resetConfirmation}
+                  onChange={(event) => setResetConfirmation(event.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isPending || resetConfirmation !== row.clientName}
+                onClick={() => reset.mutate({ clientId: row.clientId })}
+              >
+                {reset.isPending
+                  ? "Resetting…"
+                  : "Delete GHL integration and history"}
+              </Button>
+            </section>
+          ) : null}
         </form>
       </DialogContent>
     </Dialog>
