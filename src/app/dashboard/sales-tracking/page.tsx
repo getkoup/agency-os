@@ -231,11 +231,6 @@ export default async function SalesTrackingPage({
                             <p>—</p>
                           )}
                         </div>
-                        {bucket.goal ? (
-                          <p className="mt-0.5 text-xs font-medium tabular-nums">
-                            {Math.round((bucket.bookings / bucket.goal) * 100)}%
-                          </p>
-                        ) : null}
                       </TableCell>
                     ))}
                   </TableRow>
