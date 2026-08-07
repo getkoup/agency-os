@@ -9,11 +9,13 @@ import { type CampaignCplThresholds } from "~/features/campaign-tracker/cpl-thre
 import { cn } from "~/lib/utils";
 
 export function CampaignTrackerTableView({
+  averageDays,
   clientGroups,
   dates,
   focusDate,
   thresholds,
 }: {
+  averageDays: number;
   clientGroups: CampaignClientGroup[];
   dates: string[];
   focusDate: string;
@@ -22,10 +24,11 @@ export function CampaignTrackerTableView({
   return (
     <Table
       aria-label="Campaign performance grouped by client"
-      className="min-w-[92rem]"
+      className="min-w-[102rem]"
       containerClassName="border-border max-h-[72vh] overflow-auto rounded-[0.75rem] border"
     >
       <CampaignTrackerTableHeader
+        averageDays={averageDays}
         dates={dates}
         focusDate={focusDate}
         showClient

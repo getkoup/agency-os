@@ -10,11 +10,13 @@ import {
 import { type CampaignCplThresholds } from "~/features/campaign-tracker/cpl-thresholds";
 
 export function CampaignTrackerGroupedView({
+  averageDays,
   clientGroups,
   dates,
   focusDate,
   thresholds,
 }: {
+  averageDays: number;
   clientGroups: CampaignClientGroup[];
   dates: string[];
   focusDate: string;
@@ -48,8 +50,9 @@ export function CampaignTrackerGroupedView({
             </Badge>
           </summary>
           <div className="border-border/70 border-t">
-            <Table className="min-w-[80rem]">
+            <Table className="min-w-[90rem]">
               <CampaignTrackerTableHeader
+                averageDays={averageDays}
                 dates={dates}
                 focusDate={focusDate}
                 showClient={false}

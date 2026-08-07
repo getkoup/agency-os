@@ -18,11 +18,13 @@ export function formatCampaignTrackerDate(date: string): string {
 }
 
 export function CampaignTrackerTableHeader({
+  averageDays,
   dates,
   focusDate,
   showClient,
   sticky = false,
 }: {
+  averageDays: number;
   dates: string[];
   focusDate: string;
   showClient: boolean;
@@ -58,6 +60,12 @@ export function CampaignTrackerTableHeader({
             {formatCampaignTrackerDate(date)}
           </TableHead>
         ))}
+        <TableHead className="bg-secondary/35 border-border w-40 border-l text-center">
+          <span className="block">Average spend</span>
+          <span className="text-muted-foreground text-[0.625rem] font-medium tracking-wide uppercase">
+            {averageDays} day{averageDays === 1 ? "" : "s"}
+          </span>
+        </TableHead>
         <TableHead className="bg-muted border-border min-w-80 border-l pr-5">
           {formatCampaignTrackerDate(focusDate)} remarks
         </TableHead>
@@ -116,6 +124,10 @@ export function CampaignTrackerCampaignCells({
           )}
         </TableCell>
       ))}
+      <TableCell className="bg-secondary/20 border-border h-20 border-l text-center align-middle tabular-nums">
+        <p className="font-semibold">${row.averageDailySpend}</p>
+        <p className="text-muted-foreground mt-1 text-xs">spend/day</p>
+      </TableCell>
       <TableCell className="bg-muted/25 border-border border-l py-3 pr-5 align-top">
         <RemarkCell
           key={`${row.id}:${focusDate}`}

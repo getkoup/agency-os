@@ -8,10 +8,12 @@ import {
 } from "~/features/campaign-tracker/view";
 
 export function CampaignTrackerViewToggle({
+  averageDays,
   date,
   query,
   view,
 }: {
+  averageDays: number;
   date: string;
   query: string;
   view: CampaignTrackerView;
@@ -31,7 +33,12 @@ export function CampaignTrackerViewToggle({
           className="flex-1 shadow-none"
         >
           <Link
-            href={campaignTrackerViewHref({ date, query, view: "grouped" })}
+            href={campaignTrackerViewHref({
+              averageDays,
+              date,
+              query,
+              view: "grouped",
+            })}
             aria-current={view === "grouped" ? "page" : undefined}
           >
             <LayoutList aria-hidden="true" />
@@ -45,7 +52,12 @@ export function CampaignTrackerViewToggle({
           className="flex-1 shadow-none"
         >
           <Link
-            href={campaignTrackerViewHref({ date, query, view: "table" })}
+            href={campaignTrackerViewHref({
+              averageDays,
+              date,
+              query,
+              view: "table",
+            })}
             aria-current={view === "table" ? "page" : undefined}
           >
             <Table2 aria-hidden="true" />

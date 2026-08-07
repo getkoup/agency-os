@@ -60,6 +60,7 @@ describe("campaign tracker router", () => {
       reportingTimezone: "UTC",
       today: date,
       focusDate: date,
+      averageDays: 3,
       dates: ["2026-07-15", "2026-07-16", "2026-07-17", date],
       rows: [],
       isTruncated: false,
@@ -81,8 +82,15 @@ describe("campaign tracker router", () => {
       await expect(callerFor(role).daily({ date })).resolves.toMatchObject({
         focusDate: date,
       });
+      expect(getCampaignTrackerRows).toHaveBeenCalledWith(date, 3);
     },
   );
+
+  it("passes arbitrary average periods to the query", async () => {
+    await callerFor("manager").daily({ date, averageDays: 37 });
+
+    expect(getCampaignTrackerRows).toHaveBeenCalledWith(date, 37);
+  });
 
   it("allows staff to view CPL thresholds", async () => {
     await expect(callerFor("manager").cplThresholds()).resolves.toEqual({

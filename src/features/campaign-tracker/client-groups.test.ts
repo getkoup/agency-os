@@ -15,6 +15,7 @@ function campaign(input: {
     ...input,
     campaignName: input.id,
     campaignType: "Uncategorized",
+    averageDailySpend: "0.00",
     remark: "",
     daily: [],
   };
