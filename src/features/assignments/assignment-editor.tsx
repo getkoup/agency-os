@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Textarea } from "~/components/ui/textarea";
 import { getFormString } from "~/lib/form-data";
 import { api, type RouterOutputs } from "~/trpc/react";
 
@@ -86,9 +85,7 @@ export function AssignmentEditor({
             event.preventDefault();
             setError(null);
             const data = new FormData(event.currentTarget);
-            const priority = nullableFormString(data, "priority");
             const clientName = nullableFormString(data, "clientName");
-            const assigneeLabel = nullableFormString(data, "assigneeLabel");
             const statusDefinitionId = nullableFormString(
               data,
               "statusDefinitionId",
@@ -98,9 +95,6 @@ export function AssignmentEditor({
               expectedUpdatedAt: assignment.updatedAt.toISOString(),
               videoName: getFormString(data, "videoName"),
               clientName: clientName === "none" ? null : clientName,
-              assigneeLabel:
-                assigneeLabel === "unassigned" ? null : assigneeLabel,
-              priority: priority ? Number(priority) : null,
               status: assignment.status,
               statusDefinitionId:
                 statusDefinitionId === "legacy" ? null : statusDefinitionId,
@@ -111,7 +105,6 @@ export function AssignmentEditor({
               dateAssigned: nullableFormString(data, "dateAssigned"),
               rawFilesUrl: nullableFormString(data, "rawFilesUrl"),
               finalFileUrl: nullableFormString(data, "finalFileUrl"),
-              notes: nullableFormString(data, "notes"),
               tagIds: data
                 .getAll("tagIds")
                 .filter((value): value is string => typeof value === "string"),
@@ -145,25 +138,6 @@ export function AssignmentEditor({
                   {clientOptions.map((client) => (
                     <SelectItem key={client} value={client}>
                       {client}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Assignee</Label>
-              <Select
-                name="assigneeLabel"
-                defaultValue={assignment.assigneeLabel ?? "unassigned"}
-              >
-                <SelectTrigger className="w-full" aria-label="Assignee">
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {options.assignees.map((assignee) => (
-                    <SelectItem key={assignee} value={assignee}>
-                      {assignee}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -206,19 +180,6 @@ export function AssignmentEditor({
                   <SelectItem value="final_uploaded">Final uploaded</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`assignment-priority-${assignment.id}`}>
-                Priority
-              </Label>
-              <Input
-                id={`assignment-priority-${assignment.id}`}
-                name="priority"
-                type="number"
-                min={1}
-                max={10}
-                defaultValue={assignment.priority ?? ""}
-              />
             </div>
             <div className="space-y-2">
               <Label htmlFor={`assignment-date-${assignment.id}`}>
@@ -281,16 +242,6 @@ export function AssignmentEditor({
               ) : null}
             </div>
           </fieldset>
-          <div className="space-y-2">
-            <Label htmlFor={`assignment-notes-${assignment.id}`}>Notes</Label>
-            <Textarea
-              id={`assignment-notes-${assignment.id}`}
-              name="notes"
-              rows={5}
-              maxLength={10_000}
-              defaultValue={assignment.notes ?? ""}
-            />
-          </div>
           {error ? (
             <p className="text-destructive text-sm" role="alert">
               {error}

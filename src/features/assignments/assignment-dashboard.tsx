@@ -11,7 +11,7 @@ import {
   ExternalLink,
   Pencil,
   Search,
-  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -36,6 +36,7 @@ import {
 } from "~/components/ui/table";
 import { AssignmentEditor } from "~/features/assignments/assignment-editor";
 import { api, type RouterInputs, type RouterOutputs } from "~/trpc/react";
+import { cn } from "~/lib/utils";
 
 type AssignmentList = RouterOutputs["assignments"]["list"];
 type Assignment = AssignmentList["rows"][number];
@@ -52,6 +53,33 @@ const uploadLabels: Record<Assignment["uploadStatus"], string> = {
   raw_uploaded: "Raw uploaded",
   final_uploaded: "Final uploaded",
 };
+const statusColorClasses: Record<string, string> = {
+  slate: "border-slate-200 bg-slate-100 text-slate-800",
+  zinc: "border-zinc-200 bg-zinc-100 text-zinc-800",
+  blue: "border-blue-200 bg-blue-100 text-blue-800",
+  violet: "border-violet-200 bg-violet-100 text-violet-800",
+  amber: "border-amber-200 bg-amber-100 text-amber-800",
+  emerald: "border-emerald-200 bg-emerald-100 text-emerald-800",
+  rose: "border-rose-200 bg-rose-100 text-rose-800",
+};
+
+const uploadColorClasses: Record<Assignment["uploadStatus"], string> = {
+  unknown: "border-slate-200 bg-slate-100 text-slate-800",
+  not_uploaded: "border-rose-200 bg-rose-100 text-rose-800",
+  raw_uploaded: "border-blue-200 bg-blue-100 text-blue-800",
+  final_uploaded: "border-emerald-200 bg-emerald-100 text-emerald-800",
+};
+
+function getStatusColorClass(row: Assignment): string {
+  if (row.statusColor) {
+    return statusColorClasses[row.statusColor] ?? statusColorClasses.slate!;
+  }
+  if (row.status === "done") return statusColorClasses.emerald!;
+  if (row.status === "blocked") return statusColorClasses.rose!;
+  if (row.status === "review") return statusColorClasses.amber!;
+  if (row.status === "in_progress") return statusColorClasses.blue!;
+  return statusColorClasses.slate!;
+}
 
 export function AssignmentDashboard({
   initial,
@@ -150,18 +178,13 @@ export function AssignmentDashboard({
   return (
     <div className="space-y-5">
       <section
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
         aria-label="Assignment workspace overview"
       >
         <MetricCard
           icon={ArrowUpDown}
           value={data.total.toLocaleString()}
           label="Matching assignments"
-        />
-        <MetricCard
-          icon={Users}
-          value={options.assignees.length.toLocaleString()}
-          label="Active assignees"
         />
         <MetricCard
           icon={Building2}
@@ -209,7 +232,7 @@ export function AssignmentDashboard({
               type="search"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search assignments, clients, assignees, or notes"
+              placeholder="Search assignments, clients, statuses, tags, or files"
               aria-label="Search assignments"
               className="pl-9"
             />
@@ -270,7 +293,7 @@ export function AssignmentDashboard({
 
         <Table
           aria-label="Assignments"
-          className="min-w-[100rem]"
+          className="min-w-[72rem]"
           containerClassName="max-h-[68vh] overflow-auto"
         >
           <TableHeader className="[&_th]:bg-muted [&_th]:sticky [&_th]:top-0 [&_th]:z-10">
@@ -278,23 +301,14 @@ export function AssignmentDashboard({
               <TableHead className="min-w-72 pl-5">
                 {sortButton("videoName", "Assignment")}
               </TableHead>
-              <TableHead className="min-w-64">
-                {sortButton("notes", "Notes")}
-              </TableHead>
               <TableHead className="min-w-48">
                 {sortButton("clientName", "Client")}
-              </TableHead>
-              <TableHead className="w-44">
-                {sortButton("assignee", "Assignee")}
               </TableHead>
               <TableHead className="w-44">
                 {sortButton("status", "Status")}
               </TableHead>
               <TableHead className="w-44">
                 {sortButton("uploadStatus", "Upload status")}
-              </TableHead>
-              <TableHead className="w-28">
-                {sortButton("priority", "Priority")}
               </TableHead>
               <TableHead className="w-36">
                 {sortButton("dateAssigned", "Assigned")}
@@ -326,37 +340,8 @@ export function AssignmentDashboard({
                     </div>
                   ) : null}
                 </TableCell>
-                <TableCell className="text-muted-foreground max-w-64 align-top text-sm whitespace-normal">
-                  {row.notes ?? "—"}
-                </TableCell>
                 <TableCell className="align-top">
                   {row.clientName ?? "—"}
-                </TableCell>
-                <TableCell className="align-top">
-                  <Select
-                    value={row.assigneeLabel ?? "unassigned"}
-                    disabled={update.isPending}
-                    onValueChange={(value) =>
-                      updateRow(row, {
-                        assigneeLabel: value === "unassigned" ? null : value,
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      className="w-40"
-                      aria-label={`Assignee for ${row.videoName}`}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {options.assignees.map((assignee) => (
-                        <SelectItem key={assignee} value={assignee}>
-                          {assignee}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </TableCell>
                 <TableCell className="align-top">
                   <Select
@@ -369,7 +354,7 @@ export function AssignmentDashboard({
                     }
                   >
                     <SelectTrigger
-                      className="w-40"
+                      className={cn("w-40", getStatusColorClass(row))}
                       aria-label={`Status for ${row.videoName}`}
                     >
                       <SelectValue />
@@ -397,7 +382,10 @@ export function AssignmentDashboard({
                     }
                   >
                     <SelectTrigger
-                      className="w-40"
+                      className={cn(
+                        "w-40",
+                        uploadColorClasses[row.uploadStatus],
+                      )}
                       aria-label={`Upload status for ${row.videoName}`}
                     >
                       <SelectValue />
@@ -410,9 +398,6 @@ export function AssignmentDashboard({
                       ))}
                     </SelectContent>
                   </Select>
-                </TableCell>
-                <TableCell className="align-top tabular-nums">
-                  {row.priority ? `P${row.priority}` : "—"}
                 </TableCell>
                 <TableCell className="align-top tabular-nums">
                   {row.dateAssigned ?? "—"}
@@ -517,7 +502,7 @@ function MetricCard({
   value,
   label,
 }: {
-  icon: typeof Users;
+  icon: LucideIcon;
   value: string | number;
   label: string;
 }) {

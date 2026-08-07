@@ -159,12 +159,15 @@ describe("shared assignment data module", () => {
         {
           id: assignmentId,
           clientName: "Shared Assignment Client",
-          assigneeLabel: "Maya",
           statusName: "In review",
           tags: [{ id: firstTagId, name: "Paid social", color: "blue" }],
         },
       ],
     });
+    const assignment = result.rows[0];
+    expect(assignment).not.toHaveProperty("assigneeLabel");
+    expect(assignment).not.toHaveProperty("priority");
+    expect(assignment).not.toHaveProperty("notes");
   });
 
   it("returns assignment-owned filter options", async () => {
@@ -176,7 +179,6 @@ describe("shared assignment data module", () => {
       color: "amber",
     });
     expect(options.clients).toContain("Shared Assignment Client");
-    expect(options.assignees).toContain("Maya");
   });
 
   it("updates the shared row, audit fields, and tags", async () => {
@@ -184,8 +186,7 @@ describe("shared assignment data module", () => {
       {
         id: assignmentId,
         expectedUpdatedAt: initialUpdatedAt.toISOString(),
-        assigneeLabel: "Jordan",
-        notes: "Updated from Agency OS",
+        rawFilesUrl: "https://example.com/agency-raw",
         tagIds: [secondTagId],
       },
       "agency-manager",
@@ -194,7 +195,9 @@ describe("shared assignment data module", () => {
     const [row] = await db
       .select({
         assigneeLabel: assignments.assigneeLabel,
+        priority: assignments.priority,
         notes: assignments.notes,
+        rawFilesUrl: assignments.rawFilesUrl,
         locallyEditedAt: assignments.locallyEditedAt,
         updatedByUserId: assignments.updatedByUserId,
       })
@@ -206,8 +209,10 @@ describe("shared assignment data module", () => {
       .where(eq(assignmentTagLinks.assignmentId, assignmentId));
 
     expect(row).toMatchObject({
-      assigneeLabel: "Jordan",
-      notes: "Updated from Agency OS",
+      assigneeLabel: "Maya",
+      priority: 2,
+      notes: "Initial notes",
+      rawFilesUrl: "https://example.com/agency-raw",
       updatedByUserId: "agency-manager",
     });
     expect(row?.locallyEditedAt).toEqual(result.updatedAt);
@@ -219,7 +224,7 @@ describe("shared assignment data module", () => {
       {
         id: assignmentId,
         expectedUpdatedAt: initialUpdatedAt.toISOString(),
-        notes: "Concurrent update",
+        finalFileUrl: "https://example.com/concurrent",
       },
       "other-app-user",
     );
@@ -229,7 +234,7 @@ describe("shared assignment data module", () => {
         {
           id: assignmentId,
           expectedUpdatedAt: initialUpdatedAt.toISOString(),
-          notes: "Stale overwrite",
+          finalFileUrl: "https://example.com/stale",
         },
         "agency-manager",
       ),

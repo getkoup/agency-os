@@ -34,10 +34,21 @@ describe("assignment contracts", () => {
       updateAssignmentSchema.parse({
         id: assignmentId,
         expectedUpdatedAt: "2026-08-07T12:00:00.000Z",
-        notes: "Updated",
         rawFilesUrl: "https://example.com/raw",
       }),
-    ).toMatchObject({ notes: "Updated" });
+    ).toMatchObject({ rawFilesUrl: "https://example.com/raw" });
+  });
+
+  it("rejects fields that Agency OS must not expose or modify", () => {
+    for (const field of ["notes", "assigneeLabel", "priority"]) {
+      expect(() =>
+        updateAssignmentSchema.parse({
+          id: assignmentId,
+          expectedUpdatedAt: "2026-08-07T12:00:00.000Z",
+          [field]: field === "priority" ? 1 : "Private",
+        }),
+      ).toThrow();
+    }
   });
 
   it("rejects unsafe file protocols", () => {
