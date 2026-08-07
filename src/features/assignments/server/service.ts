@@ -38,14 +38,11 @@ export async function listAssignments(input: ListInput) {
     const searchFilter = or(
       ilike(assignments.videoName, term),
       ilike(assignments.clientName, term),
-      ilike(assignments.assigneeLabel, term),
-      ilike(assignments.notes, term),
       ilike(assignments.rawFilesUrl, term),
       ilike(assignments.finalFileUrl, term),
       ilike(assignmentStatusDefinitions.name, term),
       sql`${assignments.status}::text ilike ${term}`,
       sql`${assignments.uploadStatus}::text ilike ${term}`,
-      sql`${assignments.priority}::text ilike ${term}`,
       sql`${assignments.dateAssigned}::text ilike ${term}`,
       exists(
         db
@@ -70,9 +67,6 @@ export async function listAssignments(input: ListInput) {
   }
   if (input.uploadStatus) {
     filters.push(eq(assignments.uploadStatus, input.uploadStatus));
-  }
-  if (input.assignee) {
-    filters.push(eq(assignments.assigneeLabel, input.assignee));
   }
   if (input.client) filters.push(eq(assignments.clientName, input.client));
   if (input.reviewOnly) {
@@ -105,14 +99,11 @@ export async function listAssignments(input: ListInput) {
   const direction = input.direction === "asc" ? sql`asc` : sql`desc`;
   const sortExpressions: Record<ListInput["sort"], SQL> = {
     updated: sql`${assignments.updatedAt} ${direction} nulls last`,
-    priority: sql`${assignments.priority} ${direction} nulls last`,
     dateAssigned: sql`${assignments.dateAssigned} ${direction} nulls last`,
     videoName: sql`regexp_replace(lower(${assignments.videoName}), '[0-9]+$', '') ${direction}, nullif(substring(${assignments.videoName} from '([0-9]+)$'), '')::integer ${direction} nulls last, lower(${assignments.videoName}) ${direction}`,
     clientName: sql`lower(${assignments.clientName}) ${direction} nulls last`,
-    assignee: sql`lower(${assignments.assigneeLabel}) ${direction} nulls last`,
     status: sql`lower(coalesce(${assignmentStatusDefinitions.name}, ${assignments.status}::text)) ${direction} nulls last`,
     uploadStatus: sql`${assignments.uploadStatus}::text ${direction} nulls last`,
-    notes: sql`lower(${assignments.notes}) ${direction} nulls last`,
     files: sql`(case when ${assignments.finalFileUrl} is not null then 2 when ${assignments.rawFilesUrl} is not null then 1 else 0 end) ${direction}`,
   };
   const assignmentTagsJson = sql<
@@ -140,8 +131,6 @@ export async function listAssignments(input: ListInput) {
       id: assignments.id,
       videoName: assignments.videoName,
       clientName: assignments.clientName,
-      assigneeLabel: assignments.assigneeLabel,
-      priority: assignments.priority,
       status: assignments.status,
       statusDefinitionId: assignments.statusDefinitionId,
       statusName: assignmentStatusDefinitions.name,
@@ -151,7 +140,6 @@ export async function listAssignments(input: ListInput) {
       rawFilesUrl: assignments.rawFilesUrl,
       finalFileUrl: assignments.finalFileUrl,
       notionPageUrl: assignments.notionPageUrl,
-      notes: assignments.notes,
       updatedAt: assignments.updatedAt,
       tags: assignmentTagsJson,
       total: sql<number>`count(*) over()`.mapWith(Number),
@@ -186,7 +174,7 @@ export async function listAssignments(input: ListInput) {
 }
 
 export async function getAssignmentOptions() {
-  const [statusRows, tagRows, assigneeRows, clientRows] = await Promise.all([
+  const [statusRows, tagRows, clientRows] = await Promise.all([
     db
       .select({
         id: assignmentStatusDefinitions.id,
@@ -205,10 +193,6 @@ export async function getAssignmentOptions() {
       .from(assignmentTags)
       .orderBy(asc(assignmentTags.name)),
     db
-      .selectDistinct({ value: assignments.assigneeLabel })
-      .from(assignments)
-      .orderBy(asc(assignments.assigneeLabel)),
-    db
       .select({ value: assignmentClients.canonicalName })
       .from(assignmentClients)
       .where(eq(assignmentClients.isHidden, false))
@@ -218,7 +202,6 @@ export async function getAssignmentOptions() {
   return {
     statuses: statusRows,
     tags: tagRows,
-    assignees: assigneeRows.flatMap(({ value }) => (value ? [value] : [])),
     clients: clientRows.map(({ value }) => value),
   };
 }

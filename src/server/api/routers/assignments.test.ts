@@ -52,7 +52,6 @@ describe("assignments router", () => {
     vi.mocked(getAssignmentOptions).mockResolvedValue({
       statuses: [],
       tags: [],
-      assignees: [],
       clients: [],
     });
     vi.mocked(updateAssignment).mockResolvedValue({
@@ -87,14 +86,14 @@ describe("assignments router", () => {
     await callerFor("manager").update({
       id: assignmentId,
       expectedUpdatedAt: "2026-08-07T12:00:00.000Z",
-      notes: "Updated",
+      rawFilesUrl: "https://example.com/updated",
     });
 
     expect(updateAssignment).toHaveBeenCalledWith(
       {
         id: assignmentId,
         expectedUpdatedAt: "2026-08-07T12:00:00.000Z",
-        notes: "Updated",
+        rawFilesUrl: "https://example.com/updated",
       },
       "user-1",
     );
