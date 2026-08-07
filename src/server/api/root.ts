@@ -1,3 +1,4 @@
+import { assignmentsRouter } from "~/server/api/routers/assignments";
 import { campaignTrackerRouter } from "~/server/api/routers/campaign-tracker";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { managementRouter } from "~/server/api/routers/management";
@@ -8,6 +9,7 @@ import { synchronizationRouter } from "~/server/api/routers/synchronization";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 export const appRouter = createTRPCRouter({
+  assignments: assignmentsRouter,
   campaignTracker: campaignTrackerRouter,
   dashboard: dashboardRouter,
   management: managementRouter,
