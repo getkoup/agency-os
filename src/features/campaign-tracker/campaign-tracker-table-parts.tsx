@@ -61,7 +61,7 @@ export function CampaignTrackerTableHeader({
           </TableHead>
         ))}
         <TableHead className="bg-secondary/35 border-border w-40 border-l text-center">
-          <span className="block">Average spend</span>
+          <span className="block">Average CPL</span>
           <span className="text-muted-foreground text-[0.625rem] font-medium tracking-wide uppercase">
             {averageDays} day{averageDays === 1 ? "" : "s"}
           </span>
@@ -125,8 +125,10 @@ export function CampaignTrackerCampaignCells({
         </TableCell>
       ))}
       <TableCell className="bg-secondary/20 border-border h-20 border-l text-center align-middle tabular-nums">
-        <p className="font-semibold">${row.averageDailySpend}</p>
-        <p className="text-muted-foreground mt-1 text-xs">spend/day</p>
+        <p className="font-semibold">
+          {row.averageCpl ? `$${row.averageCpl}` : "—"}
+        </p>
+        <p className="text-muted-foreground mt-1 text-xs">daily CPL</p>
       </TableCell>
       <TableCell className="bg-muted/25 border-border border-l py-3 pr-5 align-top">
         <RemarkCell

@@ -184,7 +184,7 @@ describe("campaign tracker queries", () => {
     );
   });
 
-  it("returns campaign types and daily CPL with combined leads", async () => {
+  it("returns campaign types, daily CPL, and average CPL", async () => {
     await saveCampaignRemark({
       campaignId,
       date: "2026-07-18",
@@ -203,7 +203,7 @@ describe("campaign tracker queries", () => {
           campaignName: "Tint Lead Form Campaign",
           campaignType: "Tint",
           remark: "Budget adjusted",
-          averageDailySpend: "53.33",
+          averageCpl: "23.33",
           daily: [
             { date: "2026-07-15", metrics: { totalLeads: 1, cpl: "10.00" } },
             { date: "2026-07-16", metrics: { totalLeads: 2, cpl: "20.00" } },
@@ -223,10 +223,10 @@ describe("campaign tracker queries", () => {
     });
   });
 
-  it("divides period spend by every configured calendar day", async () => {
+  it("averages days with a defined CPL across arbitrary periods", async () => {
     const result = await getCampaignTrackerRows("2026-07-18", 5);
 
-    expect(result.rows[0]?.averageDailySpend).toBe("34.00");
+    expect(result.rows[0]?.averageCpl).toBe("20.00");
   });
 
   it("updates and clears a dated remark", async () => {

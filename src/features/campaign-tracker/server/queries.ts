@@ -69,6 +69,7 @@ export async function getCampaignTrackerRows(
     focusDate,
     normalizedAverageDays,
   );
+  const metricFrom = averageFrom < from ? averageFrom : from;
   const campaignLimit = 500;
   const reportingContext = await getAgencyReportingContext();
   const activeCampaignRows = await db
@@ -112,88 +113,69 @@ export async function getCampaignTrackerRows(
       isTruncated,
     };
   }
-  const [
-    performanceRows,
-    averageSpendRows,
-    formLeadRows,
-    ruleRows,
-    remarkRows,
-  ] = await Promise.all([
-    db
-      .select({
-        campaignId: adPerformanceDaily.campaignId,
-        date: adPerformanceDaily.date,
-        spend: sql<string>`coalesce(sum(${adPerformanceDaily.spend}), 0)::numeric(14,2)`,
-        dmLeads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
-      })
-      .from(adPerformanceDaily)
-      .where(
-        and(
-          inArray(adPerformanceDaily.campaignId, campaignIds),
-          gte(adPerformanceDaily.date, from),
-          lte(adPerformanceDaily.date, focusDate),
+  const [performanceRows, formLeadRows, ruleRows, remarkRows] =
+    await Promise.all([
+      db
+        .select({
+          campaignId: adPerformanceDaily.campaignId,
+          date: adPerformanceDaily.date,
+          spend: sql<string>`coalesce(sum(${adPerformanceDaily.spend}), 0)::numeric(14,2)`,
+          dmLeads: sql<number>`coalesce(sum(${adPerformanceDaily.messagingConversations}), 0)::int`,
+        })
+        .from(adPerformanceDaily)
+        .where(
+          and(
+            inArray(adPerformanceDaily.campaignId, campaignIds),
+            gte(adPerformanceDaily.date, metricFrom),
+            lte(adPerformanceDaily.date, focusDate),
+          ),
+        )
+        .groupBy(adPerformanceDaily.campaignId, adPerformanceDaily.date),
+      db
+        .select({
+          campaignId: leads.campaignId,
+          date: sql<string>`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`,
+          facebookLeadFormLeads: count(),
+        })
+        .from(leads)
+        .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
+        .where(
+          and(
+            inArray(leads.campaignId, campaignIds),
+            sql`${leadReportingDateSql} >= ${metricFrom}::date`,
+            sql`${leadReportingDateSql} <= ${focusDate}::date`,
+          ),
+        )
+        .groupBy(leads.campaignId, sql`${leadReportingDateSql}`),
+      db
+        .select({
+          id: leadClassificationRules.id,
+          clientId: leadClassificationRules.clientId,
+          categoryName: leadClassificationRules.categoryName,
+          keywords: leadClassificationRules.keywords,
+          matchMode: leadClassificationRules.matchMode,
+          priority: leadClassificationRules.priority,
+        })
+        .from(leadClassificationRules)
+        .where(
+          and(
+            eq(leadClassificationRules.status, "active"),
+            inArray(leadClassificationRules.clientId, clientIds),
+          ),
         ),
-      )
-      .groupBy(adPerformanceDaily.campaignId, adPerformanceDaily.date),
-    db
-      .select({
-        campaignId: adPerformanceDaily.campaignId,
-        spend: sql<string>`coalesce(sum(${adPerformanceDaily.spend}), 0)::numeric(14,2)`,
-      })
-      .from(adPerformanceDaily)
-      .where(
-        and(
-          inArray(adPerformanceDaily.campaignId, campaignIds),
-          gte(adPerformanceDaily.date, averageFrom),
-          lte(adPerformanceDaily.date, focusDate),
+      db
+        .select({
+          campaignId: campaignDailyRemarks.campaignId,
+          remark: campaignDailyRemarks.remark,
+        })
+        .from(campaignDailyRemarks)
+        .where(
+          and(
+            inArray(campaignDailyRemarks.campaignId, campaignIds),
+            eq(campaignDailyRemarks.date, focusDate),
+          ),
         ),
-      )
-      .groupBy(adPerformanceDaily.campaignId),
-    db
-      .select({
-        campaignId: leads.campaignId,
-        date: sql<string>`to_char(${leadReportingDateSql}, 'YYYY-MM-DD')`,
-        facebookLeadFormLeads: count(),
-      })
-      .from(leads)
-      .innerJoin(sourceAccounts, eq(leads.sourceAccountId, sourceAccounts.id))
-      .where(
-        and(
-          inArray(leads.campaignId, campaignIds),
-          sql`${leadReportingDateSql} >= ${from}::date`,
-          sql`${leadReportingDateSql} <= ${focusDate}::date`,
-        ),
-      )
-      .groupBy(leads.campaignId, sql`${leadReportingDateSql}`),
-    db
-      .select({
-        id: leadClassificationRules.id,
-        clientId: leadClassificationRules.clientId,
-        categoryName: leadClassificationRules.categoryName,
-        keywords: leadClassificationRules.keywords,
-        matchMode: leadClassificationRules.matchMode,
-        priority: leadClassificationRules.priority,
-      })
-      .from(leadClassificationRules)
-      .where(
-        and(
-          eq(leadClassificationRules.status, "active"),
-          inArray(leadClassificationRules.clientId, clientIds),
-        ),
-      ),
-    db
-      .select({
-        campaignId: campaignDailyRemarks.campaignId,
-        remark: campaignDailyRemarks.remark,
-      })
-      .from(campaignDailyRemarks)
-      .where(
-        and(
-          inArray(campaignDailyRemarks.campaignId, campaignIds),
-          eq(campaignDailyRemarks.date, focusDate),
-        ),
-      ),
-  ]);
+    ]);
   const rulesByClient = new Map<string, LeadClassificationRule[]>();
   for (const rule of ruleRows) {
     const rules = rulesByClient.get(rule.clientId) ?? [];
@@ -206,6 +188,8 @@ export async function getCampaignTrackerRows(
   const metricsByCampaignDate = new Map<
     string,
     {
+      campaignId: string;
+      date: string;
       spend: number;
       facebookLeadFormLeads: number;
       dmLeads: number;
@@ -216,6 +200,8 @@ export async function getCampaignTrackerRows(
   }
   for (const row of performanceRows) {
     metricsByCampaignDate.set(metricKey(row.campaignId, row.date), {
+      campaignId: row.campaignId,
+      date: row.date,
       spend: Number(row.spend),
       facebookLeadFormLeads: 0,
       dmLeads: row.dmLeads,
@@ -225,6 +211,8 @@ export async function getCampaignTrackerRows(
     if (!row.campaignId) continue;
     const key = metricKey(row.campaignId, row.date);
     const metric = metricsByCampaignDate.get(key) ?? {
+      campaignId: row.campaignId,
+      date: row.date,
       spend: 0,
       facebookLeadFormLeads: 0,
       dmLeads: 0,
@@ -232,9 +220,27 @@ export async function getCampaignTrackerRows(
     metric.facebookLeadFormLeads += row.facebookLeadFormLeads;
     metricsByCampaignDate.set(key, metric);
   }
-  const averageSpendByCampaign = new Map(
-    averageSpendRows.map((row) => [row.campaignId, Number(row.spend)]),
-  );
+  const averageCplByCampaign = new Map<
+    string,
+    { dailyCplTotal: number; dayCount: number }
+  >();
+  for (const metric of metricsByCampaignDate.values()) {
+    if (metric.date < averageFrom) continue;
+    const totalLeads = metric.facebookLeadFormLeads + metric.dmLeads;
+    if (totalLeads === 0) continue;
+    const average = averageCplByCampaign.get(metric.campaignId) ?? {
+      dailyCplTotal: 0,
+      dayCount: 0,
+    };
+    average.dailyCplTotal += metric.spend / totalLeads;
+    average.dayCount += 1;
+    averageCplByCampaign.set(metric.campaignId, average);
+  }
+  function formatAverageCpl(campaignId: string): string | null {
+    const average = averageCplByCampaign.get(campaignId);
+    if (!average) return null;
+    return (average.dailyCplTotal / average.dayCount).toFixed(2);
+  }
   return {
     ...reportingContext,
     focusDate,
@@ -250,9 +256,7 @@ export async function getCampaignTrackerRows(
         campaign.name,
         rulesByClient.get(campaign.clientId) ?? [],
       ),
-      averageDailySpend: (
-        (averageSpendByCampaign.get(campaign.id) ?? 0) / normalizedAverageDays
-      ).toFixed(2),
+      averageCpl: formatAverageCpl(campaign.id),
       remark: remarksByCampaign.get(campaign.id) ?? "",
       daily: dates.map((date) => {
         const metric = metricsByCampaignDate.get(metricKey(campaign.id, date));
