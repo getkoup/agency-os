@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  ClipboardList,
   Building2,
   DatabaseZap,
   HandCoins,
@@ -43,6 +44,13 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     href: "/dashboard/campaign-tracker",
     label: "Campaign Tracker",
     icon: TableProperties,
+    roles: ["owner", "admin", "manager"],
+    group: "Workspace",
+  },
+  {
+    href: "/dashboard/assignments",
+    label: "Assignments",
+    icon: ClipboardList,
     roles: ["owner", "admin", "manager"],
     group: "Workspace",
   },
