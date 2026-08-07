@@ -18,9 +18,9 @@ export const assignmentUploadStatus = assignmentDashboard.enum(
 
 export const assignmentClients = assignmentDashboard.table("client", (d) => ({
   id: d.uuid().primaryKey(),
-  canonicalName: d.varchar({ length: 255 }).notNull(),
-  normalizedKey: d.varchar({ length: 255 }).notNull(),
-  isHidden: d.boolean().notNull(),
+  canonicalName: d.varchar("canonical_name", { length: 255 }).notNull(),
+  normalizedKey: d.varchar("normalized_key", { length: 255 }).notNull(),
+  isHidden: d.boolean("is_hidden").notNull(),
 }));
 
 export const assignmentStatusDefinitions = assignmentDashboard.table(
@@ -31,7 +31,7 @@ export const assignmentStatusDefinitions = assignmentDashboard.table(
     slug: d.varchar({ length: 80 }).notNull(),
     color: d.varchar({ length: 20 }).notNull(),
     position: d.integer().notNull(),
-    isActive: d.boolean().notNull(),
+    isActive: d.boolean("is_active").notNull(),
   }),
 );
 
@@ -43,37 +43,37 @@ export const assignmentTags = assignmentDashboard.table("tag", (d) => ({
 
 export const assignments = assignmentDashboard.table("assignment", (d) => ({
   id: d.uuid().primaryKey(),
-  videoName: d.varchar({ length: 500 }).notNull(),
-  clientName: d.varchar({ length: 255 }),
-  clientId: d.uuid(),
-  assigneeLabel: d.varchar({ length: 255 }),
+  videoName: d.varchar("video_name", { length: 500 }).notNull(),
+  clientName: d.varchar("client_name", { length: 255 }),
+  clientId: d.uuid("client_id"),
+  assigneeLabel: d.varchar("assignee_label", { length: 255 }),
   priority: d.integer(),
   status: assignmentStatus().notNull(),
-  statusDefinitionId: d.uuid(),
-  uploadStatus: assignmentUploadStatus().notNull(),
-  dateAssigned: d.date(),
-  rawFilesUrl: d.text(),
-  finalFileUrl: d.text(),
-  notionPageUrl: d.text(),
+  statusDefinitionId: d.uuid("status_definition_id"),
+  uploadStatus: assignmentUploadStatus("upload_status").notNull(),
+  dateAssigned: d.date("date_assigned"),
+  rawFilesUrl: d.text("raw_files_url"),
+  finalFileUrl: d.text("final_file_url"),
+  notionPageUrl: d.text("notion_page_url"),
   notes: d.text(),
-  locallyEditedAt: d.timestamp({ withTimezone: true }),
-  createdByUserId: d.varchar({ length: 255 }).notNull(),
-  updatedByUserId: d.varchar({ length: 255 }).notNull(),
-  updatedAt: d.timestamp({ withTimezone: true }).notNull(),
-  createdAt: d.timestamp({ withTimezone: true }).notNull(),
+  locallyEditedAt: d.timestamp("locally_edited_at", { withTimezone: true }),
+  createdByUserId: d.varchar("created_by_user_id", { length: 255 }).notNull(),
+  updatedByUserId: d.varchar("updated_by_user_id", { length: 255 }).notNull(),
+  updatedAt: d.timestamp("updated_at", { withTimezone: true }).notNull(),
+  createdAt: d.timestamp("created_at", { withTimezone: true }).notNull(),
 }));
 
 export const assignmentTagLinks = assignmentDashboard.table(
   "assignment_tag",
   (d) => ({
-    assignmentId: d.uuid().notNull(),
-    tagId: d.uuid().notNull(),
+    assignmentId: d.uuid("assignment_id").notNull(),
+    tagId: d.uuid("tag_id").notNull(),
   }),
 );
 
 export const assignmentReviewFlags = assignmentDashboard.table(
   "assignment_review_flag",
   (d) => ({
-    assignmentId: d.uuid().notNull(),
+    assignmentId: d.uuid("assignment_id").notNull(),
   }),
 );

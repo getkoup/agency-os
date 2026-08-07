@@ -27,9 +27,9 @@ async function createAssignmentTestTables() {
     `create schema if not exists assignment_dashboard`,
     `create table if not exists assignment_dashboard.client (
       id uuid primary key,
-      "canonicalName" varchar(255) not null,
-      "normalizedKey" varchar(255) not null,
-      "isHidden" boolean not null default false
+      canonical_name varchar(255) not null,
+      normalized_key varchar(255) not null,
+      is_hidden boolean not null default false
     )`,
     `create table if not exists assignment_dashboard.status_definition (
       id uuid primary key,
@@ -37,7 +37,7 @@ async function createAssignmentTestTables() {
       slug varchar(80) not null,
       color varchar(20) not null,
       position integer not null,
-      "isActive" boolean not null default true
+      is_active boolean not null default true
     )`,
     `create table if not exists assignment_dashboard.tag (
       id uuid primary key,
@@ -46,32 +46,32 @@ async function createAssignmentTestTables() {
     )`,
     `create table if not exists assignment_dashboard.assignment (
       id uuid primary key,
-      "videoName" varchar(500) not null,
-      "clientName" varchar(255),
-      "clientId" uuid,
-      "assigneeLabel" varchar(255),
+      video_name varchar(500) not null,
+      client_name varchar(255),
+      client_id uuid,
+      assignee_label varchar(255),
       priority integer,
       status text not null,
-      "statusDefinitionId" uuid,
-      "uploadStatus" text not null,
-      "dateAssigned" date,
-      "rawFilesUrl" text,
-      "finalFileUrl" text,
-      "notionPageUrl" text,
+      status_definition_id uuid,
+      upload_status text not null,
+      date_assigned date,
+      raw_files_url text,
+      final_file_url text,
+      notion_page_url text,
       notes text,
-      "locallyEditedAt" timestamptz,
-      "createdByUserId" varchar(255) not null,
-      "updatedByUserId" varchar(255) not null,
-      "updatedAt" timestamptz not null,
-      "createdAt" timestamptz not null
+      locally_edited_at timestamptz,
+      created_by_user_id varchar(255) not null,
+      updated_by_user_id varchar(255) not null,
+      updated_at timestamptz not null,
+      created_at timestamptz not null
     )`,
     `create table if not exists assignment_dashboard.assignment_tag (
-      "assignmentId" uuid not null,
-      "tagId" uuid not null,
-      primary key ("assignmentId", "tagId")
+      assignment_id uuid not null,
+      tag_id uuid not null,
+      primary key (assignment_id, tag_id)
     )`,
     `create table if not exists assignment_dashboard.assignment_review_flag (
-      "assignmentId" uuid not null
+      assignment_id uuid not null
     )`,
   ];
   for (const statement of statements) await db.execute(sql.raw(statement));
