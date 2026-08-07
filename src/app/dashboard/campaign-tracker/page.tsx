@@ -126,8 +126,8 @@ export default async function CampaignTrackerPage({
           </span>
           <span>Each date cell shows CPL and total leads.</span>
           <span>
-            Average spend includes the latest date and divides total spend by
-            the selected number of calendar days.
+            Average CPL includes the latest date and is the mean of daily CPL
+            values in the selected period.
           </span>
         </div>
         <CardContent className="space-y-4 p-4 sm:p-5">
