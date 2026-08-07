@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { parseCampaignAverageDays } from "~/features/campaign-tracker/average-days";
+import { CampaignTrackerAverageDays } from "~/features/campaign-tracker/campaign-tracker-average-days";
 import { CampaignCplThresholdSettings } from "~/features/campaign-tracker/campaign-cpl-threshold-settings";
 import { CampaignTrackerDateFilter } from "~/features/campaign-tracker/campaign-tracker-date-filter";
 import { CampaignTrackerGroupedView } from "~/features/campaign-tracker/campaign-tracker-grouped-view";
@@ -41,12 +43,16 @@ export default async function CampaignTrackerPage({
   const rawQuery = Array.isArray(rawSearch.query)
     ? rawSearch.query[0]
     : rawSearch.query;
+  const rawAverageDays = Array.isArray(rawSearch.averageDays)
+    ? rawSearch.averageDays[0]
+    : rawSearch.averageDays;
   const focusDate =
     z.string().date().safeParse(rawDate).data ?? reportingContext.today;
   const view = campaignTrackerViewSchema.safeParse(rawView).data ?? "grouped";
   const query = z.string().trim().max(100).safeParse(rawQuery).data ?? "";
+  const averageDays = parseCampaignAverageDays(rawAverageDays);
   const [result, thresholds] = await Promise.all([
-    api.campaignTracker.daily({ date: focusDate }),
+    api.campaignTracker.daily({ date: focusDate, averageDays }),
     api.campaignTracker.cplThresholds(),
   ]);
   const clientGroups = filterCampaignClientGroups(
@@ -93,6 +99,7 @@ export default async function CampaignTrackerPage({
             <CampaignTrackerViewToggle
               date={focusDate}
               query={query}
+              averageDays={averageDays}
               view={view}
             />
             {canConfigureThresholds ? (
@@ -101,6 +108,10 @@ export default async function CampaignTrackerPage({
                 initialThresholds={thresholds}
               />
             ) : null}
+            <CampaignTrackerAverageDays
+              key={averageDays}
+              averageDays={averageDays}
+            />
             <CampaignTrackerDateFilter date={focusDate} />
           </div>
         </div>
@@ -114,6 +125,10 @@ export default async function CampaignTrackerPage({
             {formatCplThresholdLabel(thresholds.criticalThreshold)}
           </span>
           <span>Each date cell shows CPL and total leads.</span>
+          <span>
+            Average spend includes the latest date and divides total spend by
+            the selected number of calendar days.
+          </span>
         </div>
         <CardContent className="space-y-4 p-4 sm:p-5">
           {result.isTruncated ? (
@@ -127,6 +142,7 @@ export default async function CampaignTrackerPage({
                 clientGroups={clientGroups}
                 dates={result.dates}
                 focusDate={result.focusDate}
+                averageDays={result.averageDays}
                 thresholds={thresholds}
               />
             ) : (
@@ -134,6 +150,7 @@ export default async function CampaignTrackerPage({
                 clientGroups={clientGroups}
                 dates={result.dates}
                 focusDate={result.focusDate}
+                averageDays={result.averageDays}
                 thresholds={thresholds}
               />
             )

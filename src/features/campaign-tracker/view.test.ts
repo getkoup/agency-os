@@ -24,4 +24,16 @@ describe("campaign tracker view URLs", () => {
       }),
     ).toBe("/dashboard/campaign-tracker?date=2026-08-03&query=tint&view=table");
   });
+
+  it("preserves non-default average days when changing views", () => {
+    expect(
+      campaignTrackerViewHref({
+        averageDays: 37,
+        date: "2026-08-03",
+        view: "table",
+      }),
+    ).toBe(
+      "/dashboard/campaign-tracker?date=2026-08-03&averageDays=37&view=table",
+    );
+  });
 });

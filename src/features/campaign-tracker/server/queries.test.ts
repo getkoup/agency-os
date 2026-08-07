@@ -5,6 +5,7 @@ import { saveCampaignRemark } from "~/features/campaign-tracker/server/actions";
 import {
   getCampaignTrackerRows,
   resolveCampaignTrackerDates,
+  resolveCampaignTrackerAverageFrom,
 } from "~/features/campaign-tracker/server/queries";
 import { db } from "~/server/db";
 import {
@@ -174,6 +175,15 @@ describe("campaign tracker queries", () => {
     ]);
   });
 
+  it("includes the latest date in arbitrary average periods", () => {
+    expect(resolveCampaignTrackerAverageFrom("2026-07-18", 3)).toBe(
+      "2026-07-16",
+    );
+    expect(resolveCampaignTrackerAverageFrom("2026-07-18", 37)).toBe(
+      "2026-06-12",
+    );
+  });
+
   it("returns campaign types and daily CPL with combined leads", async () => {
     await saveCampaignRemark({
       campaignId,
@@ -193,6 +203,7 @@ describe("campaign tracker queries", () => {
           campaignName: "Tint Lead Form Campaign",
           campaignType: "Tint",
           remark: "Budget adjusted",
+          averageDailySpend: "53.33",
           daily: [
             { date: "2026-07-15", metrics: { totalLeads: 1, cpl: "10.00" } },
             { date: "2026-07-16", metrics: { totalLeads: 2, cpl: "20.00" } },
@@ -210,6 +221,12 @@ describe("campaign tracker queries", () => {
         },
       ],
     });
+  });
+
+  it("divides period spend by every configured calendar day", async () => {
+    const result = await getCampaignTrackerRows("2026-07-18", 5);
+
+    expect(result.rows[0]?.averageDailySpend).toBe("34.00");
   });
 
   it("updates and clears a dated remark", async () => {

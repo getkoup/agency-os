@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import {
+  campaignAverageDaysSchema,
+  DEFAULT_CAMPAIGN_AVERAGE_DAYS,
+} from "~/features/campaign-tracker/average-days";
 import { campaignCplThresholdsSchema } from "~/features/campaign-tracker/cpl-thresholds";
 import { saveCampaignRemark } from "~/features/campaign-tracker/server/actions";
 import {
@@ -24,8 +28,17 @@ export const campaignTrackerRouter = createTRPCRouter({
       }),
     ),
   daily: staffProcedure
-    .input(z.object({ date: z.string().date() }))
-    .query(({ input }) => getCampaignTrackerRows(input.date)),
+    .input(
+      z.object({
+        date: z.string().date(),
+        averageDays: campaignAverageDaysSchema.default(
+          DEFAULT_CAMPAIGN_AVERAGE_DAYS,
+        ),
+      }),
+    )
+    .query(({ input }) =>
+      getCampaignTrackerRows(input.date, input.averageDays),
+    ),
   saveRemark: staffProcedure
     .input(
       z.object({
