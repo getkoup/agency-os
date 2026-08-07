@@ -327,10 +327,10 @@ export function AssignmentDashboard({
                   ) : null}
                 </TableCell>
                 <TableCell className="text-muted-foreground max-w-64 align-top text-sm whitespace-normal">
-                  {row.notes || "—"}
+                  {row.notes ?? "—"}
                 </TableCell>
                 <TableCell className="align-top">
-                  {row.clientName || "—"}
+                  {row.clientName ?? "—"}
                 </TableCell>
                 <TableCell className="align-top">
                   <Select
@@ -415,7 +415,7 @@ export function AssignmentDashboard({
                   {row.priority ? `P${row.priority}` : "—"}
                 </TableCell>
                 <TableCell className="align-top tabular-nums">
-                  {row.dateAssigned || "—"}
+                  {row.dateAssigned ?? "—"}
                 </TableCell>
                 <TableCell className="align-top">
                   <div className="flex flex-wrap gap-2">

@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm";
 import { type z } from "zod";
 
-import {
+import type {
   listAssignmentsSchema,
   updateAssignmentSchema,
 } from "~/features/assignments/schemas";
