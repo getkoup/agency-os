@@ -7,7 +7,9 @@ import {
   count,
   eq,
   exists,
+  gte,
   ilike,
+  lt,
   or,
   sql,
   type SQL,
@@ -212,6 +214,11 @@ export async function updateAssignment(input: UpdateInput, userId: string) {
     changes,
     "clientName",
   );
+  // JavaScript drops PostgreSQL's sub-millisecond precision during the UI round trip.
+  const expectedUpdatedAtDate = new Date(expectedUpdatedAt);
+  const expectedUpdatedAtUpperBound = new Date(
+    expectedUpdatedAtDate.getTime() + 1,
+  );
 
   return db.transaction(async (tx) => {
     const [client] =
@@ -247,7 +254,8 @@ export async function updateAssignment(input: UpdateInput, userId: string) {
       .where(
         and(
           eq(assignments.id, id),
-          eq(assignments.updatedAt, new Date(expectedUpdatedAt)),
+          gte(assignments.updatedAt, expectedUpdatedAtDate),
+          lt(assignments.updatedAt, expectedUpdatedAtUpperBound),
         ),
       )
       .returning({ id: assignments.id });

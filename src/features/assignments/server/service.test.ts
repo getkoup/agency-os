@@ -219,6 +219,36 @@ describe("shared assignment data module", () => {
     expect(links).toEqual([{ tagId: secondTagId }]);
   });
 
+  it("accepts the millisecond timestamp returned to the assignment UI", async () => {
+    const preciseUpdatedAt = "2026-08-07T12:00:00.123456Z";
+    await db.execute(sql`
+      update assignment_dashboard.assignment
+      set updated_at = ${preciseUpdatedAt}::timestamptz
+      where id = ${assignmentId}::uuid
+    `);
+
+    const [assignment] = await db
+      .select({ updatedAt: assignments.updatedAt })
+      .from(assignments)
+      .where(eq(assignments.id, assignmentId));
+
+    expect(assignment?.updatedAt.toISOString()).toBe(
+      "2026-08-07T12:00:00.123Z",
+    );
+    if (!assignment) throw new Error("Expected the assignment test fixture");
+
+    await expect(
+      updateAssignment(
+        {
+          id: assignmentId,
+          expectedUpdatedAt: assignment.updatedAt.toISOString(),
+          uploadStatus: "final_uploaded",
+        },
+        "agency-manager",
+      ),
+    ).resolves.toMatchObject({ id: assignmentId });
+  });
+
   it("rejects stale writes instead of overwriting another app", async () => {
     await updateAssignment(
       {
