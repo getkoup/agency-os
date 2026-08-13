@@ -9,6 +9,7 @@ import {
   updateSalesCommissionV2MappingRule,
   upsertSalespersonCommissionV2Rate,
 } from "~/features/sales-commissions-v2/server/actions";
+import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import {
   getSalesCommissionV2Report,
   getSalesCommissionV2Setup,
@@ -21,6 +22,9 @@ import { db } from "~/server/db";
 vi.mock("~/server/db", () => ({ db: {} }));
 vi.mock("~/server/auth", () => ({ auth: vi.fn() }));
 vi.mock("~/server/auth/current-user", () => ({ getCurrentUser: vi.fn() }));
+vi.mock("~/features/sales-commissions-v2/server/access", () => ({
+  canAccessSalesCommissionV2: vi.fn(),
+}));
 vi.mock("~/features/sales-commissions-v2/server/queries", () => ({
   getSalesCommissionV2Report: vi.fn(),
   getSalesCommissionV2Setup: vi.fn(),
@@ -66,6 +70,9 @@ function callerFor(role: UserRole | null) {
 describe("Sales & Commissions v2 router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(canAccessSalesCommissionV2).mockImplementation(
+      async (role) => role === "owner",
+    );
     vi.mocked(getSalesCommissionV2Report).mockResolvedValue({} as never);
     vi.mocked(getSalesCommissionV2Setup).mockResolvedValue({} as never);
     vi.mocked(createSalesCommissionV2Category).mockResolvedValue({
@@ -91,62 +98,73 @@ describe("Sales & Commissions v2 router", () => {
     });
   });
 
-  it.each(["owner", "admin", "manager"] as const)(
-    "allows %s to view V2 reports",
-    async (role) => {
-      await callerFor(role).report({
-        from: "2026-08-01",
-        to: "2026-08-31",
-        page: 1,
-        pageSize: 25,
-      });
-      expect(getSalesCommissionV2Report).toHaveBeenCalledOnce();
-    },
-  );
-
-  it("denies V2 report access to client users", async () => {
-    await expect(
-      callerFor("client").report({
-        from: "2026-08-01",
-        to: "2026-08-31",
-        page: 1,
-        pageSize: 25,
-      }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  it("allows owners to view V2 reports", async () => {
+    await callerFor("owner").report({
+      from: "2026-08-01",
+      to: "2026-08-31",
+      page: 1,
+      pageSize: 25,
+    });
+    expect(getSalesCommissionV2Report).toHaveBeenCalledOnce();
   });
 
-  it.each(["owner", "admin"] as const)(
-    "allows %s to configure V2 commissions",
+  it("allows admins only when the owner enables access", async () => {
+    const input = {
+      from: "2026-08-01",
+      to: "2026-08-31",
+      page: 1,
+      pageSize: 25,
+    };
+    await expect(callerFor("admin").report(input)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    vi.mocked(canAccessSalesCommissionV2).mockResolvedValue(true);
+    await expect(callerFor("admin").report(input)).resolves.toBeDefined();
+  });
+
+  it.each(["manager", "client"] as const)(
+    "denies V2 access to %s users",
     async (role) => {
-      const caller = callerFor(role);
-      await caller.setup({ clientId });
-      await caller.saveSettings({
-        clientId,
-        attributionMode: "created_by",
-      });
-      await caller.createCategory({ clientId, name: "Ceramic", sortOrder: 0 });
-      await caller.createMappingRule({
-        clientId,
-        categoryId,
-        name: "CC abbreviation",
-        field: "category",
-        keywords: ["cc"],
-        matchMode: "any",
-        priority: 100,
-      });
-      await caller.upsertCommissionRate({
-        clientId,
-        salespersonExternalUserId: "michael-va",
-        categoryId,
-        commissionValue: "30.00",
-      });
-      expect(getSalesCommissionV2Setup).toHaveBeenCalledWith({ clientId });
-      expect(saveSalesCommissionV2Settings).toHaveBeenCalledOnce();
-      expect(createSalesCommissionV2Category).toHaveBeenCalledOnce();
-      expect(createSalesCommissionV2MappingRule).toHaveBeenCalledOnce();
-      expect(upsertSalespersonCommissionV2Rate).toHaveBeenCalledOnce();
+      await expect(
+        callerFor(role).report({
+          from: "2026-08-01",
+          to: "2026-08-31",
+          page: 1,
+          pageSize: 25,
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
     },
   );
+
+  it("allows owners to configure V2 commissions", async () => {
+    const caller = callerFor("owner");
+    await caller.setup({ clientId });
+    await caller.saveSettings({
+      clientId,
+      attributionMode: "created_by",
+    });
+    await caller.createCategory({ clientId, name: "Ceramic", sortOrder: 0 });
+    await caller.createMappingRule({
+      clientId,
+      categoryId,
+      name: "CC abbreviation",
+      field: "category",
+      keywords: ["cc"],
+      matchMode: "any",
+      priority: 100,
+    });
+    await caller.upsertCommissionRate({
+      clientId,
+      salespersonExternalUserId: "michael-va",
+      categoryId,
+      commissionValue: "30.00",
+    });
+    expect(getSalesCommissionV2Setup).toHaveBeenCalledWith({ clientId });
+    expect(saveSalesCommissionV2Settings).toHaveBeenCalledOnce();
+    expect(createSalesCommissionV2Category).toHaveBeenCalledOnce();
+    expect(createSalesCommissionV2MappingRule).toHaveBeenCalledOnce();
+    expect(upsertSalespersonCommissionV2Rate).toHaveBeenCalledOnce();
+  });
 
   it("keeps every V2 configuration procedure unavailable to managers", async () => {
     const caller = callerFor("manager");

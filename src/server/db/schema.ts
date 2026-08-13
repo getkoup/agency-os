@@ -118,6 +118,7 @@ export const agencySettings = createTable(
       .numeric({ precision: 12, scale: 2 })
       .default("25.00")
       .notNull(),
+    salesCommissionsV2AdminEnabled: d.boolean().default(false).notNull(),
     updatedByUserId: d
       .varchar({ length: 255 })
       .references(() => users.id, { onDelete: "set null" }),

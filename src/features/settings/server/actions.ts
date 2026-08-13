@@ -255,6 +255,34 @@ export async function updateAgencyReportingTimezone(input: {
   return settings;
 }
 
+export async function updateSalesCommissionV2AdminAccess(input: {
+  enabled: boolean;
+  userId: string;
+}) {
+  const [settings] = await db
+    .insert(agencySettings)
+    .values({
+      id: AGENCY_SETTING_ID,
+      salesCommissionsV2AdminEnabled: input.enabled,
+      updatedByUserId: input.userId,
+    })
+    .onConflictDoUpdate({
+      target: agencySettings.id,
+      set: {
+        salesCommissionsV2AdminEnabled: input.enabled,
+        updatedByUserId: input.userId,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({
+      adminEnabled: agencySettings.salesCommissionsV2AdminEnabled,
+    });
+  if (!settings) {
+    throw new Error("Sales & Commissions v2 access update returned no row");
+  }
+  return settings;
+}
+
 export async function saveGhlClientConfiguration(input: {
   clientId: string;
   locationId: string;

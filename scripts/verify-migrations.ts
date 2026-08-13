@@ -390,9 +390,10 @@ try {
   ) {
     throw new Error("V2 client configuration did not cascade delete");
   }
+  await applyMigration(test, "drizzle/0024_calm_sway.sql");
   const [agencySetting] = await test`
     select "id", "reportingTimezone", "campaignCplWarningThreshold",
-      "campaignCplCriticalThreshold"
+      "campaignCplCriticalThreshold", "salesCommissionsV2AdminEnabled"
     from "agency_os_setting"
   `;
   if (
@@ -400,7 +401,8 @@ try {
     agencySetting.id !== 1 ||
     agencySetting.reportingTimezone !== "UTC" ||
     agencySetting.campaignCplWarningThreshold !== "15.00" ||
-    agencySetting.campaignCplCriticalThreshold !== "25.00"
+    agencySetting.campaignCplCriticalThreshold !== "25.00" ||
+    agencySetting.salesCommissionsV2AdminEnabled !== false
   ) {
     throw new Error("Agency settings defaults were not seeded correctly");
   }

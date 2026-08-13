@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import {
@@ -9,15 +10,21 @@ import {
   updateSalesCommissionV2MappingRule,
   upsertSalespersonCommissionV2Rate,
 } from "~/features/sales-commissions-v2/server/actions";
+import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import {
   getSalesCommissionV2Report,
   getSalesCommissionV2Setup,
 } from "~/features/sales-commissions-v2/server/queries";
-import {
-  agencyProcedure,
-  createTRPCRouter,
-  staffProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+
+const salesCommissionV2Procedure = protectedProcedure.use(
+  async ({ ctx, next }) => {
+    if (!(await canAccessSalesCommissionV2(ctx.currentUser.role))) {
+      throw new TRPCError({ code: "FORBIDDEN" });
+    }
+    return next({ ctx });
+  },
+);
 
 const id = z.string().uuid();
 const status = z.enum(["active", "inactive"]);
@@ -59,7 +66,7 @@ const commissionRateInput = z.object({
 });
 
 export const salesCommissionsV2Router = createTRPCRouter({
-  report: staffProcedure
+  report: salesCommissionV2Procedure
     .input(
       z.object({
         from: z.string().date(),
@@ -74,16 +81,16 @@ export const salesCommissionsV2Router = createTRPCRouter({
       }),
     )
     .query(({ input }) => getSalesCommissionV2Report(input)),
-  setup: agencyProcedure
+  setup: salesCommissionV2Procedure
     .input(z.object({ clientId: id.optional() }))
     .query(({ input }) => getSalesCommissionV2Setup(input)),
-  saveSettings: agencyProcedure
+  saveSettings: salesCommissionV2Procedure
     .input(z.object({ clientId: id, attributionMode }))
     .mutation(({ input }) => saveSalesCommissionV2Settings(input)),
-  createCategory: agencyProcedure
+  createCategory: salesCommissionV2Procedure
     .input(categoryInput)
     .mutation(({ input }) => createSalesCommissionV2Category(input)),
-  updateCategory: agencyProcedure
+  updateCategory: salesCommissionV2Procedure
     .input(
       categoryInput.extend({
         categoryId: id,
@@ -91,10 +98,10 @@ export const salesCommissionsV2Router = createTRPCRouter({
       }),
     )
     .mutation(({ input }) => updateSalesCommissionV2Category(input)),
-  createMappingRule: agencyProcedure
+  createMappingRule: salesCommissionV2Procedure
     .input(mappingRuleInput)
     .mutation(({ input }) => createSalesCommissionV2MappingRule(input)),
-  updateMappingRule: agencyProcedure
+  updateMappingRule: salesCommissionV2Procedure
     .input(
       mappingRuleInput.extend({
         ruleId: id,
@@ -102,10 +109,10 @@ export const salesCommissionsV2Router = createTRPCRouter({
       }),
     )
     .mutation(({ input }) => updateSalesCommissionV2MappingRule(input)),
-  upsertCommissionRate: agencyProcedure
+  upsertCommissionRate: salesCommissionV2Procedure
     .input(commissionRateInput.extend({ commissionValue: money }))
     .mutation(({ input }) => upsertSalespersonCommissionV2Rate(input)),
-  removeCommissionRate: agencyProcedure
+  removeCommissionRate: salesCommissionV2Procedure
     .input(commissionRateInput)
     .mutation(({ input }) => removeSalespersonCommissionV2Rate(input)),
 });

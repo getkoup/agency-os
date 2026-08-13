@@ -1,0 +1,1 @@
+ALTER TABLE "agency_os_setting" ADD COLUMN "salesCommissionsV2AdminEnabled" boolean DEFAULT false NOT NULL;

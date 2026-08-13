@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DASHBOARD_DESTINATIONS,
+  canViewDashboardDestination,
   isDestinationActive,
 } from "~/features/navigation/dashboard-destinations";
 
@@ -33,7 +34,7 @@ describe("dashboard sales commission destinations", () => {
     expect(isDestinationActive("/dashboarding", "/dashboard")).toBe(false);
   });
 
-  it("registers V2 immediately after V1 with staff-only roles", () => {
+  it("registers V2 immediately after V1 behind rollout access", () => {
     const v1Index = DASHBOARD_DESTINATIONS.findIndex(
       (destination) => destination.href === v1,
     );
@@ -41,8 +42,21 @@ describe("dashboard sales commission destinations", () => {
     expect(destination).toMatchObject({
       href: v2,
       label: "Sales & Commissions v2",
-      roles: ["owner", "admin", "manager"],
+      roles: ["owner", "admin"],
       group: "Workspace",
+      access: "sales_commissions_v2",
     });
+    expect(
+      destination && canViewDashboardDestination(destination, "owner", true),
+    ).toBe(true);
+    expect(
+      destination && canViewDashboardDestination(destination, "admin", false),
+    ).toBe(false);
+    expect(
+      destination && canViewDashboardDestination(destination, "admin", true),
+    ).toBe(true);
+    expect(
+      destination && canViewDashboardDestination(destination, "manager", true),
+    ).toBe(false);
   });
 });

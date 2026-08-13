@@ -27,6 +27,7 @@ import {
 } from "~/components/ui/sidebar";
 import {
   DASHBOARD_DESTINATIONS,
+  canViewDashboardDestination,
   isDestinationActive,
 } from "~/features/navigation/dashboard-destinations";
 import { USER_ROLE_LABELS, type UserRole } from "~/lib/roles";
@@ -36,10 +37,12 @@ export function AppSidebar({
   name,
   email,
   signOutAction,
+  canAccessSalesCommissionsV2,
 }: {
   role: UserRole;
   name: string | null;
   email: string;
+  canAccessSalesCommissionsV2: boolean;
   signOutAction: () => Promise<void>;
 }) {
   const pathname = usePathname();
@@ -77,7 +80,13 @@ export function AppSidebar({
       <SidebarContent className="px-2">
         {(["Workspace", "Administration"] as const).map((group) => {
           const destinations = DASHBOARD_DESTINATIONS.filter(
-            (item) => item.group === group && item.roles.includes(role),
+            (item) =>
+              item.group === group &&
+              canViewDashboardDestination(
+                item,
+                role,
+                canAccessSalesCommissionsV2,
+              ),
           );
           if (destinations.length === 0) return null;
 

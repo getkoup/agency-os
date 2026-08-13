@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Button } from "~/components/ui/button";
 import { PageHeader } from "~/features/dashboard/page-header";
 import { SalesCommissionV2Setup } from "~/features/sales-commissions-v2/sales-commission-v2-setup";
+import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -15,7 +16,7 @@ export default async function SalesCommissionV2SetupPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getAuthenticatedUser();
-  if (user.role !== "owner" && user.role !== "admin") notFound();
+  if (!(await canAccessSalesCommissionV2(user.role))) notFound();
   const search = await searchParams;
   const rawClientId = Array.isArray(search.clientId)
     ? search.clientId[0]
