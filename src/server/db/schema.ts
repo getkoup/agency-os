@@ -81,6 +81,10 @@ export const salespersonAttributionMode = pgEnum(
   "agency_os_salesperson_attribution_mode",
   ["created_by", "assigned_user", "created_by_then_assigned"],
 );
+export const salesCommissionV2MatchField = pgEnum(
+  "agency_os_sales_commission_v2_match_field",
+  ["category", "service"],
+);
 
 export const users = createTable(
   "user",
@@ -912,6 +916,149 @@ export const salespersonCommissionRates = createTable(
     index("salesperson_commission_client_idx").on(t.clientId),
     check(
       "salesperson_commission_value_nonnegative",
+      sql`${t.commissionValue} >= 0`,
+    ),
+  ],
+);
+
+export const salesCommissionV2Settings = createTable(
+  "sales_commission_v2_setting",
+  (d) => ({
+    clientId: d
+      .uuid()
+      .primaryKey()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    attributionMode: salespersonAttributionMode()
+      .default("created_by")
+      .notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+);
+
+export const salesCommissionV2Categories = createTable(
+  "sales_commission_v2_category",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: d.varchar({ length: 100 }).notNull(),
+    normalizedName: d.varchar({ length: 100 }).notNull(),
+    sortOrder: d.integer().default(0).notNull(),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("sales_commission_v2_category_client_normalized_idx").on(
+      t.clientId,
+      t.normalizedName,
+    ),
+    unique("sales_commission_v2_category_id_client_unique").on(
+      t.id,
+      t.clientId,
+    ),
+    index("sales_commission_v2_category_client_status_sort_idx").on(
+      t.clientId,
+      t.status,
+      t.sortOrder,
+    ),
+    check(
+      "sales_commission_v2_category_normalized_not_blank",
+      sql`length(trim(${t.normalizedName})) > 0`,
+    ),
+    check(
+      "sales_commission_v2_category_sort_nonnegative",
+      sql`${t.sortOrder} >= 0`,
+    ),
+  ],
+);
+
+export const salesCommissionV2MappingRules = createTable(
+  "sales_commission_v2_mapping_rule",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    categoryId: d.uuid().notNull(),
+    name: d.varchar({ length: 100 }).notNull(),
+    field: salesCommissionV2MatchField().notNull(),
+    keywords: d.text().array().notNull(),
+    matchMode: leadRuleMatchMode().default("any").notNull(),
+    priority: d.integer().default(0).notNull(),
+    status: recordStatus().default("active").notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("sales_commission_v2_rule_client_name_lower_idx").on(
+      t.clientId,
+      sql`lower(${t.name})`,
+    ),
+    index("sales_commission_v2_rule_client_status_priority_idx").on(
+      t.clientId,
+      t.status,
+      t.priority,
+    ),
+    foreignKey({
+      columns: [t.categoryId, t.clientId],
+      foreignColumns: [
+        salesCommissionV2Categories.id,
+        salesCommissionV2Categories.clientId,
+      ],
+      name: "sales_commission_v2_rule_category_client_fk",
+    }).onDelete("cascade"),
+    check(
+      "sales_commission_v2_rule_keywords_not_empty",
+      sql`cardinality(${t.keywords}) > 0`,
+    ),
+    check(
+      "sales_commission_v2_rule_priority_nonnegative",
+      sql`${t.priority} >= 0`,
+    ),
+  ],
+);
+
+export const salespersonCommissionV2Rates = createTable(
+  "salesperson_commission_v2_rate",
+  (d) => ({
+    id: d.uuid().defaultRandom().primaryKey(),
+    clientId: d
+      .uuid()
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    salespersonExternalUserId: d.varchar({ length: 255 }).notNull(),
+    categoryId: d.uuid().notNull(),
+    commissionValue: d.numeric({ precision: 14, scale: 2 }).notNull(),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [
+    uniqueIndex("salesperson_commission_v2_person_category_idx").on(
+      t.clientId,
+      t.salespersonExternalUserId,
+      t.categoryId,
+    ),
+    index("salesperson_commission_v2_client_idx").on(t.clientId),
+    foreignKey({
+      columns: [t.clientId, t.salespersonExternalUserId],
+      foreignColumns: [salespeople.clientId, salespeople.externalUserId],
+      name: "salesperson_commission_v2_salesperson_client_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.categoryId, t.clientId],
+      foreignColumns: [
+        salesCommissionV2Categories.id,
+        salesCommissionV2Categories.clientId,
+      ],
+      name: "salesperson_commission_v2_category_client_fk",
+    }).onDelete("cascade"),
+    check(
+      "salesperson_commission_v2_value_nonnegative",
       sql`${t.commissionValue} >= 0`,
     ),
   ],

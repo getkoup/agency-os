@@ -3,6 +3,7 @@ import { campaignTrackerRouter } from "~/server/api/routers/campaign-tracker";
 import { dashboardRouter } from "~/server/api/routers/dashboard";
 import { managementRouter } from "~/server/api/routers/management";
 import { salesCommissionsRouter } from "~/server/api/routers/sales-commissions";
+import { salesCommissionsV2Router } from "~/server/api/routers/sales-commissions-v2";
 import { salesTrackingRouter } from "~/server/api/routers/sales-tracking";
 import { settingsRouter } from "~/server/api/routers/settings";
 import { synchronizationRouter } from "~/server/api/routers/synchronization";
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   dashboard: dashboardRouter,
   management: managementRouter,
   salesCommissions: salesCommissionsRouter,
+  salesCommissionsV2: salesCommissionsV2Router,
   salesTracking: salesTrackingRouter,
   settings: settingsRouter,
   synchronization: synchronizationRouter,

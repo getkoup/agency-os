@@ -69,6 +69,13 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     group: "Workspace",
   },
   {
+    href: "/dashboard/sales-commissions-v2",
+    label: "Sales & Commissions v2",
+    icon: HandCoins,
+    roles: ["owner", "admin", "manager"],
+    group: "Workspace",
+  },
+  {
     href: "/dashboard/performance",
     label: "Creatives",
     icon: BarChart3,
@@ -120,5 +127,8 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
 ];
 
 export function isDestinationActive(pathname: string, href: string) {
-  return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  return (
+    pathname === href ||
+    (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+  );
 }
