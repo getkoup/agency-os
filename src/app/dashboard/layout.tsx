@@ -10,6 +10,7 @@ import {
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { AppSidebar } from "~/features/navigation/app-sidebar";
 import { DashboardRouteContext } from "~/features/navigation/dashboard-route-context";
+import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import { signOut } from "~/server/auth";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 
@@ -21,6 +22,7 @@ export default async function DashboardLayout({
       redirect("/login");
     throw error;
   });
+  const salesCommissionsV2Enabled = await canAccessSalesCommissionV2(user.role);
   return (
     <TooltipProvider>
       <SidebarProvider className="h-svh overflow-hidden bg-[#244b37] md:p-2.5 dark:bg-[#173d2b]">
@@ -28,6 +30,7 @@ export default async function DashboardLayout({
           role={user.role}
           name={user.name}
           email={user.email}
+          canAccessSalesCommissionsV2={salesCommissionsV2Enabled}
           signOutAction={async () => {
             "use server";
             await signOut({ redirectTo: "/login" });

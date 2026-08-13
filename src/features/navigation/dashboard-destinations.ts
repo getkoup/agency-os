@@ -23,6 +23,7 @@ export type DashboardDestination = {
   icon: LucideIcon;
   roles: UserRole[];
   group: "Workspace" | "Administration";
+  access?: "sales_commissions_v2";
 };
 
 export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
@@ -72,8 +73,9 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     href: "/dashboard/sales-commissions-v2",
     label: "Sales & Commissions v2",
     icon: HandCoins,
-    roles: ["owner", "admin", "manager"],
+    roles: ["owner", "admin"],
     group: "Workspace",
+    access: "sales_commissions_v2",
   },
   {
     href: "/dashboard/performance",
@@ -125,6 +127,17 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     group: "Administration",
   },
 ];
+
+export function canViewDashboardDestination(
+  destination: DashboardDestination,
+  role: UserRole,
+  salesCommissionsV2Enabled: boolean,
+) {
+  return (
+    destination.roles.includes(role) &&
+    (destination.access !== "sales_commissions_v2" || salesCommissionsV2Enabled)
+  );
+}
 
 export function isDestinationActive(pathname: string, href: string) {
   return (

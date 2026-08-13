@@ -8,8 +8,10 @@ import {
   saveGhlClientConfiguration,
   updateAgencyReportingTimezone,
   updateLeadClassificationRule,
+  updateSalesCommissionV2AdminAccess,
   updateRevenueRule,
 } from "~/features/settings/server/actions";
+import { getSalesCommissionV2AccessSettings } from "~/features/sales-commissions-v2/server/access";
 import { reportingTimezoneSchema } from "~/features/settings/reporting-timezone";
 import {
   getGhlConfigurationStatus,
@@ -42,6 +44,17 @@ export const settingsRouter = createTRPCRouter({
     .input(z.object({ reportingTimezone: reportingTimezoneSchema }))
     .mutation(({ ctx, input }) =>
       updateAgencyReportingTimezone({
+        ...input,
+        userId: ctx.currentUser.id,
+      }),
+    ),
+  salesCommissionsV2Access: agencyProcedure.query(() =>
+    getSalesCommissionV2AccessSettings(),
+  ),
+  updateSalesCommissionsV2AdminAccess: ownerProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      updateSalesCommissionV2AdminAccess({
         ...input,
         userId: ctx.currentUser.id,
       }),

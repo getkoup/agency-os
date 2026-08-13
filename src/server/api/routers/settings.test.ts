@@ -11,7 +11,9 @@ import {
   updateAgencyReportingTimezone,
   updateLeadClassificationRule,
   updateRevenueRule,
+  updateSalesCommissionV2AdminAccess,
 } from "~/features/settings/server/actions";
+import { getSalesCommissionV2AccessSettings } from "~/features/sales-commissions-v2/server/access";
 import {
   getGhlConfigurationStatus,
   listLeadClassificationRules,
@@ -32,8 +34,12 @@ vi.mock("~/features/settings/server/actions", () => ({
   resetGhlClientIntegration: vi.fn(),
   saveGhlClientConfiguration: vi.fn(),
   updateAgencyReportingTimezone: vi.fn(),
+  updateSalesCommissionV2AdminAccess: vi.fn(),
   updateLeadClassificationRule: vi.fn(),
   updateRevenueRule: vi.fn(),
+}));
+vi.mock("~/features/sales-commissions-v2/server/access", () => ({
+  getSalesCommissionV2AccessSettings: vi.fn(),
 }));
 vi.mock("~/features/settings/server/queries", () => ({
   listLeadClassificationRules: vi.fn(),
@@ -83,6 +89,9 @@ describe("settings router", () => {
       reportingTimezone: "UTC",
       updatedAt: null,
     });
+    vi.mocked(getSalesCommissionV2AccessSettings).mockResolvedValue({
+      adminEnabled: false,
+    });
     vi.mocked(listLeadClassificationRules).mockResolvedValue({
       rows: [],
       clientOptions: [],
@@ -111,6 +120,9 @@ describe("settings router", () => {
     ]);
     vi.mocked(updateAgencyReportingTimezone).mockResolvedValue({
       reportingTimezone: "America/Los_Angeles",
+    });
+    vi.mocked(updateSalesCommissionV2AdminAccess).mockResolvedValue({
+      adminEnabled: true,
     });
     vi.mocked(createLeadClassificationRule).mockResolvedValue({
       id: "classification-rule-1",
@@ -165,6 +177,27 @@ describe("settings router", () => {
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(updateAgencyReportingTimezone).not.toHaveBeenCalled();
+  });
+
+  it("keeps the V2 admin rollout control owner-only", async () => {
+    await expect(
+      callerFor("owner").salesCommissionsV2Access(),
+    ).resolves.toEqual({ adminEnabled: false });
+    await callerFor("owner").updateSalesCommissionsV2AdminAccess({
+      enabled: true,
+    });
+    expect(updateSalesCommissionV2AdminAccess).toHaveBeenCalledWith({
+      enabled: true,
+      userId: "user-1",
+    });
+    await expect(
+      callerFor("admin").salesCommissionsV2Access(),
+    ).resolves.toEqual({ adminEnabled: false });
+    await expect(
+      callerFor("admin").updateSalesCommissionsV2AdminAccess({
+        enabled: true,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("keeps GHL credential management owner-only", async () => {

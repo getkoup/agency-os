@@ -169,6 +169,13 @@
       "when": 1786650986239,
       "tag": "0023_complete_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786657208290,
+      "tag": "0024_calm_sway",
+      "breakpoints": true
     }
   ]
 }

@@ -31,6 +31,7 @@ import { PageHeader } from "~/features/dashboard/page-header";
 import { Pagination } from "~/features/dashboard/pagination";
 import { GlobalSalespersonV2Report } from "~/features/sales-commissions-v2/global-salesperson-v2-report";
 import { SalesCommissionV2Filters } from "~/features/sales-commissions-v2/sales-commission-v2-filters";
+import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import { cn } from "~/lib/utils";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
@@ -105,7 +106,7 @@ export default async function SalesCommissionsV2Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getAuthenticatedUser();
-  if (user.role === "client") notFound();
+  if (!(await canAccessSalesCommissionV2(user.role))) notFound();
   const [rawSearch, reportingContext] = await Promise.all([
     searchParams,
     api.dashboard.reportingContext(),
