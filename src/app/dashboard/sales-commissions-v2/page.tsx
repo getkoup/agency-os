@@ -96,6 +96,8 @@ function reportViewHref(
     }
   }
   next.set("view", view);
+  if (view === "salesperson") next.delete("globalSalespersonId");
+  else next.delete("clientId");
   next.set("salesCommissionV2Page", "1");
   return `/dashboard/sales-commissions-v2?${next.toString()}`;
 }
@@ -144,7 +146,7 @@ export default async function SalesCommissionsV2Page({
       <PageHeader
         eyebrow="Sales operations"
         title="Sales & Commissions v2"
-        description="Structured appointment pricing, showed revenue, and fixed salesperson category commissions. Deposits are informational only."
+        description="Booking-date reporting for structured pricing, showed revenue, and fixed salesperson category commissions."
         meta={
           canConfigure ? (
             <Button asChild>
@@ -159,9 +161,9 @@ export default async function SalesCommissionsV2Page({
       />
       <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-2">
         <div className="px-2">
-          <p className="text-sm font-semibold">Report view</p>
+          <p className="text-sm font-semibold">Group report</p>
           <p className="text-muted-foreground text-xs">
-            Global salesperson is the default; client view remains available.
+            Switch the breakdown; each view shows only its useful cross-filter.
           </p>
         </div>
         <div className="flex gap-2">
@@ -184,6 +186,7 @@ export default async function SalesCommissionsV2Page({
         </div>
       </div>
       <SalesCommissionV2Filters
+        view={search.view}
         values={{
           from: search.from,
           to: search.to,
@@ -225,7 +228,7 @@ export default async function SalesCommissionsV2Page({
         <MetricCard
           label="Attributed Revenue"
           value={`$${report.summary.attributedRevenue}`}
-          supporting="Valid Price on showed appointments"
+          supporting="Valid Price on showed bookings"
           icon={CircleDollarSign}
           highlighted
         />
@@ -310,9 +313,9 @@ export default async function SalesCommissionsV2Page({
                       <TableHead className="pl-5">Salesperson</TableHead>
                       <TableHead className="text-right">Booked</TableHead>
                       <TableHead className="text-right">Showed</TableHead>
-                      <TableHead className="text-right">No-show</TableHead>
                       <TableHead className="text-right">Show rate</TableHead>
-                      <TableHead>Categories</TableHead>
+                      <TableHead className="text-right">No-show</TableHead>
+                      <TableHead>Category breakdown</TableHead>
                       <TableHead className="text-right">Revenue</TableHead>
                       <TableHead className="pr-5 text-right">
                         Commission
@@ -338,14 +341,21 @@ export default async function SalesCommissionsV2Page({
                           {Math.round(person.summary.showRate * 100)}%
                         </TableCell>
                         <TableCell>
-                          <div className="flex max-w-md flex-wrap gap-1.5">
-                            {person.categories.length
-                              ? person.categories.map((category) => (
-                                  <Badge key={category.id} variant="secondary">
-                                    {category.name}: {category.summary.showed}
-                                  </Badge>
-                                ))
-                              : "—"}
+                          <div className="grid min-w-72 gap-1.5">
+                            {person.categories.map((category) => (
+                              <div
+                                key={category.id ?? "uncategorized"}
+                                className="flex items-center justify-between gap-4 text-xs"
+                              >
+                                <span>{category.name}</span>
+                                <span className="text-muted-foreground tabular-nums">
+                                  {category.summary.appointments} booked ·{" "}
+                                  {category.summary.showed} showed · $
+                                  {category.summary.attributedRevenue} · $
+                                  {category.summary.commission} commission
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
@@ -366,14 +376,14 @@ export default async function SalesCommissionsV2Page({
 
       <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
         <CardHeader className="border-border/70 border-b px-6 py-5">
-          <CardTitle>Appointment ledger ({report.total})</CardTitle>
+          <CardTitle>Booking ledger ({report.total})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {report.rows.length ? (
             <Table className="min-w-[150rem]">
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-6">Appointment</TableHead>
+                  <TableHead className="pl-6">Booked / appointment</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Lead/customer</TableHead>
                   <TableHead>Salesperson</TableHead>
@@ -402,11 +412,11 @@ export default async function SalesCommissionsV2Page({
                   >
                     <TableCell className="pl-6 whitespace-nowrap">
                       <p>
-                        {formatReportingDateTime(row.startsAt, row.timezone)}
+                        {formatReportingDateTime(row.bookedAt, row.timezone)}
                       </p>
                       <p className="text-muted-foreground mt-1 text-xs">
-                        {row.title ?? "Appointment"} · Booked{" "}
-                        {formatReportingDateTime(row.bookedAt, row.timezone)}
+                        Appointment{" "}
+                        {formatReportingDateTime(row.startsAt, row.timezone)}
                       </p>
                     </TableCell>
                     <TableCell>{row.clientName}</TableCell>
@@ -486,8 +496,8 @@ export default async function SalesCommissionsV2Page({
             <div className="p-6">
               <EmptyState
                 icon={HandCoins}
-                title="No appointments"
-                description="No synchronized appointments match these V2 filters."
+                title="No bookings"
+                description="No synchronized bookings match these V2 filters."
               />
             </div>
           )}

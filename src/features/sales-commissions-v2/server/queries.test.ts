@@ -174,6 +174,12 @@ describe("Sales & Commissions v2 reporting", () => {
         description: "Customer requested the usual package",
         startsAt: new Date("2026-08-17T14:00:00.000Z"),
       },
+      {
+        externalId: "v2-future-appointment-booked-in-range",
+        status: "confirmed" as const,
+        description: tintDescription,
+        startsAt: new Date("2027-09-20T14:00:00.000Z"),
+      },
     ];
     await db.insert(ghlAppointments).values(
       appointments.map((appointment) => ({
@@ -264,7 +270,7 @@ describe("Sales & Commissions v2 reporting", () => {
     });
 
     expect(report.summary).toMatchObject({
-      appointments: 4,
+      appointments: 5,
       showed: 3,
       noShows: 1,
       attributedRevenue: "968.00",
@@ -272,6 +278,7 @@ describe("Sales & Commissions v2 reporting", () => {
       commission: "50.00",
       needsReview: 1,
     });
+    expect(report.rows[0]?.id).toBeDefined();
     expect(report.clientGroups[0]?.summary.commission).toBe("50.00");
     expect(report.globalSalespersonGroups[0]).toMatchObject({
       id: globalSalespersonId,
@@ -285,8 +292,26 @@ describe("Sales & Commissions v2 reporting", () => {
         },
       ],
     });
+    expect(
+      report.globalSalespersonGroups[0]?.clients[0]?.categories.map(
+        (category) => ({
+          name: category.name,
+          appointments: category.summary.appointments,
+        }),
+      ),
+    ).toEqual([
+      { name: "Ceramic Coating", appointments: 2 },
+      { name: "Tint and detail", appointments: 2 },
+      { name: "Uncategorized", appointments: 1 },
+    ]);
+    const futureAppointment = report.rows.find(
+      (row) => row.status === "confirmed",
+    );
+    expect(futureAppointment?.startsAt).toEqual(
+      new Date("2027-09-20T14:00:00.000Z"),
+    );
 
-    expect(report.rows.map((row) => row.id)).toHaveLength(4);
+    expect(report.rows.map((row) => row.id)).toHaveLength(5);
     const ceramic = report.rows.find(
       (row) =>
         row.rawDescription === ceramicDescription && row.status === "showed",
@@ -310,7 +335,8 @@ describe("Sales & Commissions v2 reporting", () => {
       reviewReasons: [],
     });
     const tint = report.rows.find(
-      (row) => row.rawDescription === tintDescription,
+      (row) =>
+        row.rawDescription === tintDescription && row.status === "showed",
     );
     expect(tint).toMatchObject({
       parsedPrice: "469.00",
@@ -343,9 +369,9 @@ describe("Sales & Commissions v2 reporting", () => {
       review: "ready",
       pageSize: 1,
     });
-    expect(ready.total).toBe(3);
+    expect(ready.total).toBe(4);
     expect(ready.rows).toHaveLength(1);
-    expect(ready.rows[0]?.rawDescription).toBe(ceramicDescription);
+    expect(ready.rows[0]?.needsReview).toBe(false);
 
     const needsReview = await getSalesCommissionV2Report({
       ...reportInput,
@@ -373,7 +399,7 @@ describe("Sales & Commissions v2 reporting", () => {
       ...reportInput,
       globalSalespersonId,
     });
-    expect(report.total).toBe(4);
+    expect(report.total).toBe(5);
     expect(report.summary.commission).toBe("50.00");
 
     const setup = await getSalesCommissionV2Setup({ clientId });

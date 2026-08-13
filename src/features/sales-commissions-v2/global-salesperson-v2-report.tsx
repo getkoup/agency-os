@@ -85,6 +85,7 @@ export function GlobalSalespersonV2Report({
                   <TableHead className="text-right">Showed</TableHead>
                   <TableHead className="text-right">No-show</TableHead>
                   <TableHead className="text-right">Show rate</TableHead>
+                  <TableHead>Categories</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="pr-5 text-right">Commission</TableHead>
                 </TableRow>
@@ -111,6 +112,24 @@ export function GlobalSalespersonV2Report({
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {Math.round(client.summary.showRate * 100)}%
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid min-w-64 gap-1.5">
+                        {client.categories.map((category) => (
+                          <div
+                            key={category.id ?? "uncategorized"}
+                            className="flex items-center justify-between gap-4 text-xs"
+                          >
+                            <span>{category.name}</span>
+                            <span className="text-muted-foreground tabular-nums">
+                              {category.summary.appointments} booked ·{" "}
+                              {category.summary.showed} showed · $
+                              {category.summary.attributedRevenue} · $
+                              {category.summary.commission} commission
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       ${client.summary.attributedRevenue}

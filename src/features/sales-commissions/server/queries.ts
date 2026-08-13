@@ -160,12 +160,12 @@ export async function getSalesCommissionReport(input: ReportInput) {
     );
   }
 
-  const appointmentReportingDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.startsAt})::date`;
+  const appointmentCreatedDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.providerCreatedAt})::date`;
   const appointmentConditions = and(
     eq(ghlAppointments.deleted, false),
     eq(clients.status, "active"),
-    gte(appointmentReportingDate, input.from),
-    lte(appointmentReportingDate, input.to),
+    gte(appointmentCreatedDate, input.from),
+    lte(appointmentCreatedDate, input.to),
     input.clientId ? eq(clients.id, input.clientId) : undefined,
     input.status ? eq(ghlAppointments.status, input.status) : undefined,
   );
@@ -205,7 +205,10 @@ export async function getSalesCommissionReport(input: ReportInput) {
       .innerJoin(clients, eq(integrationMappings.clientId, clients.id))
       .innerJoin(ghlContacts, eq(ghlAppointments.contactId, ghlContacts.id))
       .where(appointmentConditions)
-      .orderBy(desc(ghlAppointments.startsAt), desc(ghlAppointments.id))
+      .orderBy(
+        desc(ghlAppointments.providerCreatedAt),
+        desc(ghlAppointments.id),
+      )
       .limit(MAX_REPORT_APPOINTMENTS + 1),
     db
       .select({ id: clients.id, name: clients.name })
