@@ -3,7 +3,22 @@ import { type CampaignTrackerRow } from "~/features/campaign-tracker/server/quer
 export interface CampaignClientGroup {
   id: string;
   name: string;
+  highestAverageCpl: number | null;
   rows: CampaignTrackerRow[];
+}
+
+function compareClientRank(
+  left: CampaignClientGroup,
+  right: CampaignClientGroup,
+): number {
+  const leftCpl = left.highestAverageCpl;
+  const rightCpl = right.highestAverageCpl;
+  if (leftCpl === null && rightCpl !== null) return 1;
+  if (leftCpl !== null && rightCpl === null) return -1;
+  if (leftCpl !== null && rightCpl !== null && leftCpl !== rightCpl) {
+    return rightCpl - leftCpl;
+  }
+  return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
 }
 
 export function groupCampaignsByClient(
@@ -15,11 +30,21 @@ export function groupCampaignsByClient(
       id: row.clientId,
       name: row.clientName,
       rows: [],
+      highestAverageCpl: null,
     };
     group.rows.push(row);
+    if (row.averageCpl !== null) {
+      const averageCpl = Number(row.averageCpl);
+      if (
+        group.highestAverageCpl === null ||
+        averageCpl > group.highestAverageCpl
+      ) {
+        group.highestAverageCpl = averageCpl;
+      }
+    }
     groupsById.set(row.clientId, group);
   }
-  return [...groupsById.values()];
+  return [...groupsById.values()].sort(compareClientRank);
 }
 
 export function filterCampaignClientGroups(

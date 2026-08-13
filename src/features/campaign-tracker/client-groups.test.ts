@@ -10,12 +10,13 @@ function campaign(input: {
   id: string;
   clientId: string;
   clientName: string;
+  averageCpl?: string | null;
 }): CampaignTrackerRow {
   return {
     ...input,
     campaignName: input.id,
     campaignType: "Uncategorized",
-    averageCpl: null,
+    averageCpl: input.averageCpl ?? null,
     remark: "",
     daily: [],
   };
@@ -40,10 +41,63 @@ const rows = [
 ];
 
 describe("campaign client groups", () => {
-  it("groups campaign rows while preserving client and row order", () => {
+  it("groups campaign rows while preserving row order", () => {
     expect(groupCampaignsByClient(rows)).toEqual([
-      { id: "client-1", name: "Alpha Auto", rows: [rows[0], rows[1]] },
-      { id: "client-2", name: "Beta Dental", rows: [rows[2]] },
+      {
+        id: "client-1",
+        name: "Alpha Auto",
+        highestAverageCpl: null,
+        rows: [rows[0], rows[1]],
+      },
+      {
+        id: "client-2",
+        name: "Beta Dental",
+        highestAverageCpl: null,
+        rows: [rows[2]],
+      },
+    ]);
+  });
+
+  it("ranks clients by their highest campaign average CPL", () => {
+    const ranked = groupCampaignsByClient([
+      campaign({
+        id: "Alpha Retargeting",
+        clientId: "client-alpha",
+        clientName: "Alpha Auto",
+        averageCpl: "80.00",
+      }),
+      campaign({
+        id: "Alpha Prospecting",
+        clientId: "client-alpha",
+        clientName: "Alpha Auto",
+        averageCpl: "20.00",
+      }),
+      campaign({
+        id: "Beta Prospecting",
+        clientId: "client-beta",
+        clientName: "Beta Dental",
+        averageCpl: "95.50",
+      }),
+      campaign({
+        id: "No Leads",
+        clientId: "client-none",
+        clientName: "No CPL Client",
+      }),
+    ]);
+
+    expect(
+      ranked.map(({ id, highestAverageCpl }) => ({
+        id,
+        highestAverageCpl,
+      })),
+    ).toEqual([
+      { id: "client-beta", highestAverageCpl: 95.5 },
+      { id: "client-alpha", highestAverageCpl: 80 },
+      { id: "client-none", highestAverageCpl: null },
+    ]);
+    expect(ranked[1]?.rows.map(({ id }) => id)).toEqual([
+      "Alpha Retargeting",
+      "Alpha Prospecting",
     ]);
   });
 
