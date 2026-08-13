@@ -162,6 +162,13 @@
       "when": 1785781293019,
       "tag": "0022_majestic_lady_ursula",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786650986239,
+      "tag": "0023_complete_dragon_man",
+      "breakpoints": true
     }
   ]
 }

@@ -151,6 +151,245 @@ try {
     throw new Error("Client synchronization state was not backfilled");
   }
   await applyMigration(test, "drizzle/0022_majestic_lady_ursula.sql");
+  await applyMigration(test, "drizzle/0023_complete_dragon_man.sql");
+  const [v2BackfillCategory] = await test`
+    insert into "agency_os_sales_commission_v2_category"
+      ("clientId", "name", "normalizedName")
+    values (${backfillClient.id}, 'Ceramic Coating', 'ceramic coating')
+    returning "id"
+  `;
+  const [v2SecondCategory] = await test`
+    insert into "agency_os_sales_commission_v2_category"
+      ("clientId", "name", "normalizedName")
+    values (${secondSalesClient.id}, 'Tint and detail', 'tint and detail')
+    returning "id"
+  `;
+  if (!v2BackfillCategory || !v2SecondCategory) {
+    throw new Error("V2 sales categories were not created");
+  }
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_category"
+          ("clientId", "name", "normalizedName")
+        values (${backfillClient.id}, 'Duplicate', 'ceramic coating')
+      `,
+    "V2 normalized category uniqueness",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_category"
+          ("clientId", "name", "normalizedName")
+        values (${backfillClient.id}, 'Blank', '   ')
+      `,
+    "V2 non-blank normalized category",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_category"
+          ("clientId", "name", "normalizedName", "sortOrder")
+        values (${backfillClient.id}, 'Negative', 'negative', -1)
+      `,
+    "V2 non-negative category sort order",
+  );
+  await test`
+    insert into "agency_os_sales_commission_v2_mapping_rule"
+      ("clientId", "categoryId", "name", "field", "keywords", "priority")
+    values (
+      ${backfillClient.id},
+      ${v2BackfillCategory.id},
+      'Ceramic abbreviation',
+      'category',
+      array['cc'],
+      100
+    )
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_mapping_rule"
+          ("clientId", "categoryId", "name", "field", "keywords")
+        values (
+          ${backfillClient.id},
+          ${v2BackfillCategory.id},
+          'Empty',
+          'category',
+          array[]::text[]
+        )
+      `,
+    "V2 non-empty mapping keywords",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_mapping_rule"
+          ("clientId", "categoryId", "name", "field", "keywords", "priority")
+        values (
+          ${backfillClient.id},
+          ${v2BackfillCategory.id},
+          'Negative',
+          'category',
+          array['negative'],
+          -1
+        )
+      `,
+    "V2 non-negative mapping priority",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_sales_commission_v2_mapping_rule"
+          ("clientId", "categoryId", "name", "field", "keywords")
+        values (
+          ${secondSalesClient.id},
+          ${v2BackfillCategory.id},
+          'Cross-client rule',
+          'service',
+          array['ceramic']
+        )
+      `,
+    "V2 cross-client mapping rule",
+  );
+  await test`
+    insert into "agency_os_salesperson_commission_v2_rate"
+      ("clientId", "salespersonExternalUserId", "categoryId", "commissionValue")
+    values (
+      ${backfillClient.id},
+      'placeholder-user',
+      ${v2BackfillCategory.id},
+      30
+    )
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_salesperson_commission_v2_rate"
+          ("clientId", "salespersonExternalUserId", "categoryId",
+           "commissionValue")
+        values (
+          ${backfillClient.id},
+          'placeholder-user',
+          ${v2BackfillCategory.id},
+          20
+        )
+      `,
+    "V2 commission rate uniqueness",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_salesperson_commission_v2_rate"
+          ("clientId", "salespersonExternalUserId", "categoryId",
+           "commissionValue")
+        values (
+          ${backfillClient.id},
+          'placeholder-user',
+          ${v2BackfillCategory.id},
+          -0.01
+        )
+      `,
+    "V2 non-negative commission rate",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_salesperson_commission_v2_rate"
+          ("clientId", "salespersonExternalUserId", "categoryId",
+           "commissionValue")
+        values (
+          ${secondSalesClient.id},
+          'custom-user',
+          ${v2SecondCategory.id},
+          20
+        )
+      `,
+    "V2 cross-client salesperson rate",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        insert into "agency_os_salesperson_commission_v2_rate"
+          ("clientId", "salespersonExternalUserId", "categoryId",
+           "commissionValue")
+        values (
+          ${backfillClient.id},
+          'placeholder-user',
+          ${v2SecondCategory.id},
+          20
+        )
+      `,
+    "V2 cross-client category rate",
+  );
+  const [v2CascadeClient] = await test`
+    insert into "agency_os_client" ("slug", "name")
+    values ('v2-cascade-client', 'V2 Cascade Client')
+    returning "id"
+  `;
+  if (!v2CascadeClient) throw new Error("V2 cascade client was not created");
+  await test`
+    insert into "agency_os_salesperson"
+      ("clientId", "externalUserId", "providerName")
+    values (${v2CascadeClient.id}, 'v2-cascade-user', 'V2 Cascade User')
+  `;
+  const [v2CascadeCategory] = await test`
+    insert into "agency_os_sales_commission_v2_category"
+      ("clientId", "name", "normalizedName")
+    values (${v2CascadeClient.id}, 'Cascade', 'cascade')
+    returning "id"
+  `;
+  if (!v2CascadeCategory)
+    throw new Error("V2 cascade category was not created");
+  await test`
+    insert into "agency_os_sales_commission_v2_setting" ("clientId")
+    values (${v2CascadeClient.id})
+  `;
+  await test`
+    insert into "agency_os_sales_commission_v2_mapping_rule"
+      ("clientId", "categoryId", "name", "field", "keywords")
+    values (
+      ${v2CascadeClient.id},
+      ${v2CascadeCategory.id},
+      'Cascade',
+      'category',
+      array['cascade']
+    )
+  `;
+  await test`
+    insert into "agency_os_salesperson_commission_v2_rate"
+      ("clientId", "salespersonExternalUserId", "categoryId", "commissionValue")
+    values (
+      ${v2CascadeClient.id},
+      'v2-cascade-user',
+      ${v2CascadeCategory.id},
+      1
+    )
+  `;
+  await test`
+    delete from "agency_os_client" where "id" = ${v2CascadeClient.id}
+  `;
+  const [v2CascadeCounts] = await test`
+    select
+      (select count(*)::int
+       from "agency_os_sales_commission_v2_setting"
+       where "clientId" = ${v2CascadeClient.id}) "settings",
+      (select count(*)::int
+       from "agency_os_sales_commission_v2_category"
+       where "clientId" = ${v2CascadeClient.id}) "categories",
+      (select count(*)::int
+       from "agency_os_sales_commission_v2_mapping_rule"
+       where "clientId" = ${v2CascadeClient.id}) "rules",
+      (select count(*)::int
+       from "agency_os_salesperson_commission_v2_rate"
+       where "clientId" = ${v2CascadeClient.id}) "rates"
+  `;
+  if (
+    !v2CascadeCounts ||
+    Object.values(v2CascadeCounts).some((count) => count !== 0)
+  ) {
+    throw new Error("V2 client configuration did not cascade delete");
+  }
   const [agencySetting] = await test`
     select "id", "reportingTimezone", "campaignCplWarningThreshold",
       "campaignCplCriticalThreshold"
