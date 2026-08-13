@@ -66,7 +66,7 @@ type MoneySummary = {
 };
 
 type CategoryGroup = {
-  id: string;
+  id: string | null;
   name: string;
   summary: MoneySummary;
 };
@@ -92,6 +92,7 @@ type GlobalSalespersonClientGroup = {
   name: string;
   localSalespersonNames: Set<string>;
   summary: MoneySummary;
+  categories: Map<string, CategoryGroup>;
 };
 
 type GlobalSalespersonGroup = {
@@ -174,12 +175,12 @@ export async function getSalesCommissionV2Report(
     );
   }
 
-  const appointmentReportingDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.startsAt})::date`;
+  const appointmentCreatedDate = sql<string>`timezone(${agencyReportingTimezoneSql}, ${ghlAppointments.providerCreatedAt})::date`;
   const appointmentConditions = and(
     eq(ghlAppointments.deleted, false),
     eq(clients.status, "active"),
-    gte(appointmentReportingDate, input.from),
-    lte(appointmentReportingDate, input.to),
+    gte(appointmentCreatedDate, input.from),
+    lte(appointmentCreatedDate, input.to),
     input.clientId ? eq(clients.id, input.clientId) : undefined,
     input.status ? eq(ghlAppointments.status, input.status) : undefined,
   );
@@ -219,7 +220,10 @@ export async function getSalesCommissionV2Report(
       .innerJoin(clients, eq(integrationMappings.clientId, clients.id))
       .innerJoin(ghlContacts, eq(ghlAppointments.contactId, ghlContacts.id))
       .where(appointmentConditions)
-      .orderBy(desc(ghlAppointments.startsAt), desc(ghlAppointments.id))
+      .orderBy(
+        desc(ghlAppointments.providerCreatedAt),
+        desc(ghlAppointments.id),
+      )
       .limit(MAX_REPORT_APPOINTMENTS + 1),
     db
       .select({ id: clients.id, name: clients.name })
@@ -527,16 +531,15 @@ export async function getSalesCommissionV2Report(
       categories: new Map<string, CategoryGroup>(),
     };
     addRowToSummary(person.summary, row);
-    if (row.category) {
-      let category = person.categories.get(row.category.id);
-      category ??= {
-        id: row.category.id,
-        name: row.category.name,
-        summary: emptySummary(),
-      };
-      addRowToSummary(category.summary, row);
-      person.categories.set(category.id, category);
-    }
+    const categoryKey = row.category?.id ?? "uncategorized";
+    let category = person.categories.get(categoryKey);
+    category ??= {
+      id: row.category?.id ?? null,
+      name: row.category?.name ?? "Uncategorized",
+      summary: emptySummary(),
+    };
+    addRowToSummary(category.summary, row);
+    person.categories.set(categoryKey, category);
     client.salespeople.set(salespersonKey, person);
     clientGroups.set(client.id, client);
 
@@ -568,12 +571,21 @@ export async function getSalesCommissionV2Report(
       id: row.clientId,
       name: row.clientName,
       localSalespersonNames: new Set<string>(),
+      categories: new Map<string, CategoryGroup>(),
       summary: emptySummary(),
     };
     if (row.salesperson) {
       globalClient.localSalespersonNames.add(row.salesperson.name);
     }
     addRowToSummary(globalClient.summary, row);
+    let globalCategory = globalClient.categories.get(categoryKey);
+    globalCategory ??= {
+      id: row.category?.id ?? null,
+      name: row.category?.name ?? "Uncategorized",
+      summary: emptySummary(),
+    };
+    addRowToSummary(globalCategory.summary, row);
+    globalClient.categories.set(categoryKey, globalCategory);
     globalPerson.clients.set(globalClient.id, globalClient);
     globalSalespersonGroups.set(globalSalespersonKey, globalPerson);
   }
@@ -629,6 +641,13 @@ export async function getSalesCommissionV2Report(
               (left, right) => left.localeCompare(right),
             ),
             summary: presentSummary(client.summary),
+            categories: [...client.categories.values()]
+              .map((category) => ({
+                id: category.id,
+                name: category.name,
+                summary: presentSummary(category.summary),
+              }))
+              .sort((left, right) => left.name.localeCompare(right.name)),
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
       }))

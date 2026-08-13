@@ -18,9 +18,11 @@ import {
 } from "~/features/dashboard/date-range-filter";
 
 export function SalesCommissionV2Filters({
+  view,
   values,
   options,
 }: {
+  view: "client" | "salesperson";
   values: {
     from: string;
     to: string;
@@ -50,11 +52,9 @@ export function SalesCommissionV2Filters({
     (!searchParams.has("from") && !searchParams.has("to")
       ? "thisMonth"
       : "custom")) as DatePreset;
-  const visibleGlobalSalespeople = values.clientId
-    ? options.globalSalespeople.filter((person) =>
-        person.clientIds.includes(values.clientId!),
-      )
-    : options.globalSalespeople;
+  const showClientFilter = view === "salesperson";
+  const showSalespersonFilter = view === "client";
+  const visibleGlobalSalespeople = options.globalSalespeople;
   const visibleCategories = values.clientId
     ? options.categories.filter(
         (category) => category.clientId === values.clientId,
@@ -93,9 +93,9 @@ export function SalesCommissionV2Filters({
             <SlidersHorizontal className="size-4" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-semibold">V2 reporting controls</p>
+            <p className="text-sm font-semibold">Report filters</p>
             <p className="text-muted-foreground text-xs">
-              Price revenue is recognized only when the appointment showed.
+              Dates use booking-created date. Filters match the selected view.
             </p>
           </div>
         </div>
@@ -112,33 +112,37 @@ export function SalesCommissionV2Filters({
           onChange={updateDates}
           className="md:col-span-2 xl:col-span-4"
         />
-        <FilterSelect
-          label="Client"
-          value={values.clientId ?? "all"}
-          onChange={(value) => update("clientId", value)}
-          className="xl:col-span-2"
-          options={[
-            { value: "all", label: "All clients" },
-            ...options.clients.map((client) => ({
-              value: client.id,
-              label: client.name,
-            })),
-          ]}
-        />
-        <FilterSelect
-          label="Salesperson"
-          value={values.globalSalespersonId ?? "all"}
-          onChange={(value) => update("globalSalespersonId", value)}
-          className="xl:col-span-2"
-          options={[
-            { value: "all", label: "All salespeople" },
-            { value: "unassigned", label: "Unassigned / widget" },
-            ...visibleGlobalSalespeople.map((person) => ({
-              value: person.id,
-              label: person.name,
-            })),
-          ]}
-        />
+        {showClientFilter ? (
+          <FilterSelect
+            label="Client"
+            value={values.clientId ?? "all"}
+            onChange={(value) => update("clientId", value)}
+            className="xl:col-span-2"
+            options={[
+              { value: "all", label: "All clients" },
+              ...options.clients.map((client) => ({
+                value: client.id,
+                label: client.name,
+              })),
+            ]}
+          />
+        ) : null}
+        {showSalespersonFilter ? (
+          <FilterSelect
+            label="Salesperson"
+            value={values.globalSalespersonId ?? "all"}
+            onChange={(value) => update("globalSalespersonId", value)}
+            className="xl:col-span-2"
+            options={[
+              { value: "all", label: "All salespeople" },
+              { value: "unassigned", label: "Unassigned / widget" },
+              ...visibleGlobalSalespeople.map((person) => ({
+                value: person.id,
+                label: person.name,
+              })),
+            ]}
+          />
+        ) : null}
         <FilterSelect
           label="Appointment status"
           value={values.status ?? "all"}

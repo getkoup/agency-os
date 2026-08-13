@@ -138,7 +138,7 @@ export default async function SalesCommissionsPage({
       <PageHeader
         eyebrow="Sales operations"
         title="Sales & Commissions"
-        description="One salesperson view with client-level appointment, revenue, no-show, and commission breakdowns."
+        description="Booking-date reporting with salesperson, client, revenue, no-show, and commission breakdowns."
         meta={
           canConfigure ? (
             <Button asChild>
@@ -217,7 +217,7 @@ export default async function SalesCommissionsPage({
         <MetricCard
           label="Attributed Revenue"
           value={`$${report.summary.attributedRevenue}`}
-          supporting="Showed appointments"
+          supporting="Showed bookings"
           icon={CircleDollarSign}
           highlighted
         />
@@ -365,14 +365,14 @@ export default async function SalesCommissionsPage({
 
       <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
         <CardHeader className="border-border/70 border-b px-6 py-5">
-          <CardTitle>Appointment ledger ({report.total})</CardTitle>
+          <CardTitle>Booking ledger ({report.total})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
           {report.rows.length ? (
             <Table className="min-w-[100rem]">
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-6">Appointment</TableHead>
+                  <TableHead className="pl-6">Booked / appointment</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Lead/customer</TableHead>
                   <TableHead>Salesperson</TableHead>
@@ -395,11 +395,11 @@ export default async function SalesCommissionsPage({
                   >
                     <TableCell className="pl-6 whitespace-nowrap">
                       <p>
-                        {formatReportingDateTime(row.startsAt, row.timezone)}
+                        {formatReportingDateTime(row.bookedAt, row.timezone)}
                       </p>
                       <p className="text-muted-foreground mt-1 text-xs">
-                        Booked{" "}
-                        {formatReportingDateTime(row.bookedAt, row.timezone)}
+                        Appointment{" "}
+                        {formatReportingDateTime(row.startsAt, row.timezone)}
                       </p>
                     </TableCell>
                     <TableCell>{row.clientName}</TableCell>
@@ -463,8 +463,8 @@ export default async function SalesCommissionsPage({
             <div className="p-6">
               <EmptyState
                 icon={HandCoins}
-                title="No appointments"
-                description="No synchronized appointments match these filters."
+                title="No bookings"
+                description="No synchronized bookings match these filters."
               />
             </div>
           )}

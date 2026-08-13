@@ -97,8 +97,8 @@ export function SalesCommissionFilters({
           <div>
             <p className="text-sm font-semibold">Reporting controls</p>
             <p className="text-muted-foreground text-xs">
-              One option per global salesperson; dates use the fixed agency
-              reporting timezone.
+              Dates use booking-created date in the fixed agency reporting
+              timezone.
             </p>
           </div>
         </div>
