@@ -47,7 +47,7 @@ export type SalesCommissionV2ReportInput = {
   from: string;
   to: string;
   clientId?: string;
-  globalSalespersonId?: string | "unassigned";
+  globalSalespersonId?: string;
   status?: AppointmentStatus;
   categoryId?: string;
   review?: "ready" | "needs_review";
