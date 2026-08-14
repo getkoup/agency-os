@@ -35,7 +35,6 @@ import {
   salesCommissionV2MappingRules,
   salesCommissionV2Settings,
   salespeople,
-  salespersonCommissionV2Rates,
 } from "~/server/db/schema";
 
 const MAX_REPORT_APPOINTMENTS = 10_000;
@@ -193,7 +192,6 @@ export async function getSalesCommissionV2Report(
     salespersonRows,
     categoryRows,
     ruleRows,
-    rateRows,
   ] = await Promise.all([
     getAgencyReportingContext(),
     db
@@ -234,6 +232,7 @@ export async function getSalesCommissionV2Report(
       .select({
         clientId: salesCommissionV2Settings.clientId,
         attributionMode: salesCommissionV2Settings.attributionMode,
+        commissionPercentage: salesCommissionV2Settings.commissionPercentage,
       })
       .from(salesCommissionV2Settings),
     db
@@ -314,21 +313,12 @@ export async function getSalesCommissionV2Report(
         desc(salesCommissionV2MappingRules.priority),
         asc(salesCommissionV2MappingRules.name),
       ),
-    db
-      .select({
-        clientId: salespersonCommissionV2Rates.clientId,
-        salespersonExternalUserId:
-          salespersonCommissionV2Rates.salespersonExternalUserId,
-        categoryId: salespersonCommissionV2Rates.categoryId,
-        commissionValue: salespersonCommissionV2Rates.commissionValue,
-      })
-      .from(salespersonCommissionV2Rates),
   ]);
 
   const isTruncated = appointmentRows.length > MAX_REPORT_APPOINTMENTS;
   const appointments = appointmentRows.slice(0, MAX_REPORT_APPOINTMENTS);
-  const settingsByClient = new Map<string, SalespersonAttributionMode>(
-    settingRows.map((row) => [row.clientId, row.attributionMode]),
+  const settingsByClient = new Map(
+    settingRows.map((row) => [row.clientId, row]),
   );
   const salespersonByExternalId = new Map(
     salespersonRows.map((row) => [
@@ -383,16 +373,12 @@ export async function getSalesCommissionV2Report(
     values.push(rule);
     rulesByClient.set(rule.clientId, values);
   }
-  const rateBySalespersonCategory = new Map(
-    rateRows.map((row) => [
-      `${row.clientId}:${row.salespersonExternalUserId}:${row.categoryId}`,
-      row.commissionValue,
-    ]),
-  );
 
   const evaluatedRows = appointments
     .map((appointment) => {
-      const mode = settingsByClient.get(appointment.clientId) ?? "created_by";
+      const clientSettings = settingsByClient.get(appointment.clientId);
+      const mode: SalespersonAttributionMode =
+        clientSettings?.attributionMode ?? "created_by";
       const externalUserId = resolveCreditedExternalUserId({
         mode,
         createdByUserExternalId: appointment.createdByUserExternalId,
@@ -413,19 +399,13 @@ export async function getSalesCommissionV2Report(
       const parsedPrice = duplicatedPrice
         ? { status: "invalid" as const, cents: null, formatted: null }
         : parseSalesCommissionV2Price(parsed.fields.price);
-      const commissionEligible =
-        salesperson !== null && categoryMatch.category !== null;
-      const commissionValue =
-        salesperson && categoryMatch.category
-          ? (rateBySalespersonCategory.get(
-              `${appointment.clientId}:${salesperson.externalUserId}:${categoryMatch.category.id}`,
-            ) ?? null)
-          : null;
+      const commissionEligible = salesperson !== null;
+      const commissionPercentage = clientSettings?.commissionPercentage ?? null;
       const financials = calculateSalesCommissionV2Financials({
         appointmentStatus: appointment.status,
         priceCents: parsedPrice.cents,
         commissionEligible,
-        commissionValue,
+        commissionPercentage,
       });
       const reviewReasons = [...parsed.reviewReasons];
       if (categoryMatch.status === "unmatched") {
@@ -435,8 +415,8 @@ export async function getSalesCommissionV2Report(
         addReviewReason(reviewReasons, "ambiguous_category");
       }
       if (!salesperson) addReviewReason(reviewReasons, "missing_salesperson");
-      if (financials.missingCommissionRate) {
-        addReviewReason(reviewReasons, "missing_commission_rate");
+      if (financials.missingCommissionPercentage) {
+        addReviewReason(reviewReasons, "missing_commission_percentage");
       }
       if (
         (appointment.status === "new" || appointment.status === "confirmed") &&
@@ -452,6 +432,7 @@ export async function getSalesCommissionV2Report(
         matchStatus: categoryMatch.status,
         fields: parsed.fields,
         parsedPrice: parsedPrice.formatted,
+        commissionPercentage,
         category: categoryMatch.category,
         mapping: {
           matchedBy: categoryMatch.matchedBy,
@@ -695,13 +676,16 @@ export async function getSalesCommissionV2Setup(input: { clientId?: string }) {
       salespeople: [],
       categories: [],
       rules: [],
-      rates: [],
+      commissionPercentage: null,
     };
   }
 
-  const [settings, people, categories, rules, rates] = await Promise.all([
+  const [settings, people, categories, rules] = await Promise.all([
     db
-      .select({ attributionMode: salesCommissionV2Settings.attributionMode })
+      .select({
+        attributionMode: salesCommissionV2Settings.attributionMode,
+        commissionPercentage: salesCommissionV2Settings.commissionPercentage,
+      })
       .from(salesCommissionV2Settings)
       .where(eq(salesCommissionV2Settings.clientId, selectedClientId))
       .limit(1),
@@ -753,25 +737,15 @@ export async function getSalesCommissionV2Setup(input: { clientId?: string }) {
         desc(salesCommissionV2MappingRules.priority),
         asc(salesCommissionV2MappingRules.name),
       ),
-    db
-      .select({
-        id: salespersonCommissionV2Rates.id,
-        salespersonExternalUserId:
-          salespersonCommissionV2Rates.salespersonExternalUserId,
-        categoryId: salespersonCommissionV2Rates.categoryId,
-        commissionValue: salespersonCommissionV2Rates.commissionValue,
-      })
-      .from(salespersonCommissionV2Rates)
-      .where(eq(salespersonCommissionV2Rates.clientId, selectedClientId)),
   ]);
 
   return {
     clients: clientRows,
     selectedClientId,
     attributionMode: settings[0]?.attributionMode ?? ("created_by" as const),
+    commissionPercentage: settings[0]?.commissionPercentage ?? null,
     salespeople: people,
     categories,
     rules,
-    rates,
   };
 }

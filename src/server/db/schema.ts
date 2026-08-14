@@ -932,9 +932,16 @@ export const salesCommissionV2Settings = createTable(
     attributionMode: salespersonAttributionMode()
       .default("created_by")
       .notNull(),
+    commissionPercentage: d.numeric({ precision: 5, scale: 2 }),
     createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
     updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
   }),
+  (t) => [
+    check(
+      "sales_commission_v2_percentage_range",
+      sql`${t.commissionPercentage} is null or (${t.commissionPercentage} >= 0 and ${t.commissionPercentage} <= 100)`,
+    ),
+  ],
 );
 
 export const salesCommissionV2Categories = createTable(
@@ -1020,47 +1027,6 @@ export const salesCommissionV2MappingRules = createTable(
     check(
       "sales_commission_v2_rule_priority_nonnegative",
       sql`${t.priority} >= 0`,
-    ),
-  ],
-);
-
-export const salespersonCommissionV2Rates = createTable(
-  "salesperson_commission_v2_rate",
-  (d) => ({
-    id: d.uuid().defaultRandom().primaryKey(),
-    clientId: d
-      .uuid()
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    salespersonExternalUserId: d.varchar({ length: 255 }).notNull(),
-    categoryId: d.uuid().notNull(),
-    commissionValue: d.numeric({ precision: 14, scale: 2 }).notNull(),
-    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
-    updatedAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
-  }),
-  (t) => [
-    uniqueIndex("salesperson_commission_v2_person_category_idx").on(
-      t.clientId,
-      t.salespersonExternalUserId,
-      t.categoryId,
-    ),
-    index("salesperson_commission_v2_client_idx").on(t.clientId),
-    foreignKey({
-      columns: [t.clientId, t.salespersonExternalUserId],
-      foreignColumns: [salespeople.clientId, salespeople.externalUserId],
-      name: "salesperson_commission_v2_salesperson_client_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.categoryId, t.clientId],
-      foreignColumns: [
-        salesCommissionV2Categories.id,
-        salesCommissionV2Categories.clientId,
-      ],
-      name: "salesperson_commission_v2_category_client_fk",
-    }).onDelete("cascade"),
-    check(
-      "salesperson_commission_v2_value_nonnegative",
-      sql`${t.commissionValue} >= 0`,
     ),
   ],
 );

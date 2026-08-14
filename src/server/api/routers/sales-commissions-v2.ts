@@ -4,11 +4,9 @@ import { z } from "zod";
 import {
   createSalesCommissionV2Category,
   createSalesCommissionV2MappingRule,
-  removeSalespersonCommissionV2Rate,
   saveSalesCommissionV2Settings,
   updateSalesCommissionV2Category,
   updateSalesCommissionV2MappingRule,
-  upsertSalespersonCommissionV2Rate,
 } from "~/features/sales-commissions-v2/server/actions";
 import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import {
@@ -41,10 +39,13 @@ const attributionMode = z.enum([
   "assigned_user",
   "created_by_then_assigned",
 ]);
-const money = z
+const commissionPercentage = z
   .string()
   .trim()
-  .regex(/^\d+(?:\.\d{1,2})?$/, "Use a non-negative USD value");
+  .regex(
+    /^(?:100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
+    "Use a percentage between 0 and 100 with at most two decimals",
+  );
 const categoryInput = z.object({
   clientId: id,
   name: z.string().trim().min(1).max(100),
@@ -58,11 +59,6 @@ const mappingRuleInput = z.object({
   keywords: z.array(z.string().trim().min(1).max(255)).min(1).max(20),
   matchMode: z.enum(["any", "all"]),
   priority: z.number().int().min(0).max(1_000),
-});
-const commissionRateInput = z.object({
-  clientId: id,
-  salespersonExternalUserId: z.string().trim().min(1).max(255),
-  categoryId: id,
 });
 
 export const salesCommissionsV2Router = createTRPCRouter({
@@ -85,7 +81,7 @@ export const salesCommissionsV2Router = createTRPCRouter({
     .input(z.object({ clientId: id.optional() }))
     .query(({ input }) => getSalesCommissionV2Setup(input)),
   saveSettings: salesCommissionV2Procedure
-    .input(z.object({ clientId: id, attributionMode }))
+    .input(z.object({ clientId: id, attributionMode, commissionPercentage }))
     .mutation(({ input }) => saveSalesCommissionV2Settings(input)),
   createCategory: salesCommissionV2Procedure
     .input(categoryInput)
@@ -109,10 +105,4 @@ export const salesCommissionsV2Router = createTRPCRouter({
       }),
     )
     .mutation(({ input }) => updateSalesCommissionV2MappingRule(input)),
-  upsertCommissionRate: salesCommissionV2Procedure
-    .input(commissionRateInput.extend({ commissionValue: money }))
-    .mutation(({ input }) => upsertSalespersonCommissionV2Rate(input)),
-  removeCommissionRate: salesCommissionV2Procedure
-    .input(commissionRateInput)
-    .mutation(({ input }) => removeSalespersonCommissionV2Rate(input)),
 });

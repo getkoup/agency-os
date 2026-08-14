@@ -29,7 +29,7 @@ export default async function SalesCommissionV2SetupPage({
       <PageHeader
         eyebrow="Sales operations setup"
         title="Sales & Commissions v2 Configuration"
-        description="Configure independent structured-field category mapping and fixed commission rates. Price revenue comes only from appointment descriptions."
+        description="Configure structured-field category mapping and one Price-based commission percentage per client."
         meta={
           <Button asChild variant="outline">
             <Link href="/dashboard/sales-commissions-v2">
@@ -44,9 +44,9 @@ export default async function SalesCommissionV2SetupPage({
           className="text-primary mt-0.5 size-4 shrink-0"
           aria-hidden="true"
         />
-        V2 settings, categories, mapping rules, and rates are separate from the
-        existing Sales &amp; Commissions configuration. Shared salesperson
-        identities are read-only here.
+        V2 settings, client percentages, categories, and mapping rules are
+        separate from the existing Sales &amp; Commissions configuration. Shared
+        salesperson identities are read-only here.
       </div>
       <SalesCommissionV2Setup result={result} />
     </div>

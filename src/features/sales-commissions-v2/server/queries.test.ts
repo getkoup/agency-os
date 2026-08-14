@@ -5,7 +5,6 @@ import {
   createSalesCommissionV2Category,
   createSalesCommissionV2MappingRule,
   saveSalesCommissionV2Settings,
-  upsertSalespersonCommissionV2Rate,
 } from "~/features/sales-commissions-v2/server/actions";
 import {
   getSalesCommissionV2Report,
@@ -45,6 +44,13 @@ Car : Mazda cx5
 Deposit status : $20 Collected Via Zelle
 
 Drop off Saturday 9:00 am`;
+
+const unmatchedDescription = `Lead Source : Referral
+Category : wraps
+Service : full wrap
+Price : $100
+Car : Ford F-150
+Deposit status : $50 Collected`;
 
 let clientId = "";
 let globalSalespersonId = "";
@@ -175,6 +181,12 @@ describe("Sales & Commissions v2 reporting", () => {
         startsAt: new Date("2026-08-17T14:00:00.000Z"),
       },
       {
+        externalId: "v2-unmatched-showed",
+        status: "showed" as const,
+        description: unmatchedDescription,
+        startsAt: new Date("2026-08-16T14:00:00.000Z"),
+      },
+      {
         externalId: "v2-future-appointment-booked-in-range",
         status: "confirmed" as const,
         description: tintDescription,
@@ -209,6 +221,7 @@ describe("Sales & Commissions v2 reporting", () => {
     await saveSalesCommissionV2Settings({
       clientId,
       attributionMode: "created_by",
+      commissionPercentage: "10.00",
     });
     const ceramic = await createSalesCommissionV2Category({
       clientId,
@@ -231,18 +244,6 @@ describe("Sales & Commissions v2 reporting", () => {
       matchMode: "any",
       priority: 100,
     });
-    await upsertSalespersonCommissionV2Rate({
-      clientId,
-      salespersonExternalUserId: "michael-va",
-      categoryId: ceramicCategoryId,
-      commissionValue: "30.00",
-    });
-    await upsertSalespersonCommissionV2Rate({
-      clientId,
-      salespersonExternalUserId: "michael-va",
-      categoryId: tintCategoryId,
-      commissionValue: "20.00",
-    });
 
     v1AfterV2 = await getSalesCommissionReport({
       ...reportInput,
@@ -263,32 +264,32 @@ describe("Sales & Commissions v2 reporting", () => {
     expect(v1AfterV2).toEqual(v1BeforeV2);
   });
 
-  it("reports Martinez showed revenue, no-show loss, and fixed commissions", async () => {
+  it("applies one client percentage to showed revenue across categories", async () => {
     const report = await getSalesCommissionV2Report({
       ...reportInput,
       clientId,
     });
 
     expect(report.summary).toMatchObject({
-      appointments: 5,
-      showed: 3,
+      appointments: 6,
+      showed: 4,
       noShows: 1,
-      attributedRevenue: "968.00",
+      attributedRevenue: "1068.00",
       missedRevenue: "499.00",
-      commission: "50.00",
-      needsReview: 1,
+      commission: "106.80",
+      needsReview: 2,
     });
     expect(report.rows[0]?.id).toBeDefined();
-    expect(report.clientGroups[0]?.summary.commission).toBe("50.00");
+    expect(report.clientGroups[0]?.summary.commission).toBe("106.80");
     expect(report.globalSalespersonGroups[0]).toMatchObject({
       id: globalSalespersonId,
       name: "Michael VA",
-      summary: { attributedRevenue: "968.00", commission: "50.00" },
+      summary: { attributedRevenue: "1068.00", commission: "106.80" },
       clients: [
         {
           id: clientId,
           localSalespersonNames: ["Michael VA"],
-          summary: { commission: "50.00" },
+          summary: { commission: "106.80" },
         },
       ],
     });
@@ -302,7 +303,7 @@ describe("Sales & Commissions v2 reporting", () => {
     ).toEqual([
       { name: "Ceramic Coating", appointments: 2 },
       { name: "Tint and detail", appointments: 2 },
-      { name: "Uncategorized", appointments: 1 },
+      { name: "Uncategorized", appointments: 2 },
     ]);
     const futureAppointment = report.rows.find(
       (row) => row.status === "confirmed",
@@ -311,7 +312,7 @@ describe("Sales & Commissions v2 reporting", () => {
       new Date("2027-09-20T14:00:00.000Z"),
     );
 
-    expect(report.rows.map((row) => row.id)).toHaveLength(5);
+    expect(report.rows.map((row) => row.id)).toHaveLength(6);
     const ceramic = report.rows.find(
       (row) =>
         row.rawDescription === ceramicDescription && row.status === "showed",
@@ -330,8 +331,9 @@ describe("Sales & Commissions v2 reporting", () => {
       category: { id: ceramicCategoryId, name: "Ceramic Coating" },
       mapping: { matchedBy: "rule", rule: { name: "CC abbreviation" } },
       salesperson: { name: "Michael VA" },
+      commissionPercentage: "10.00",
       attributedRevenue: "499.00",
-      commission: "30.00",
+      commission: "49.90",
       reviewReasons: [],
     });
     const tint = report.rows.find(
@@ -343,8 +345,9 @@ describe("Sales & Commissions v2 reporting", () => {
       fields: { depositStatus: "$20 Collected Via Zelle" },
       category: { id: tintCategoryId, name: "Tint and detail" },
       mapping: { matchedBy: "category_exact", rule: null },
+      commissionPercentage: "10.00",
       attributedRevenue: "469.00",
-      commission: "20.00",
+      commission: "46.90",
     });
     expect(report.rows.find((row) => row.status === "noshow")).toMatchObject({
       attributedRevenue: "0.00",
@@ -359,6 +362,15 @@ describe("Sales & Commissions v2 reporting", () => {
       commission: "0.00",
       needsReview: true,
       reviewReasons: ["legacy_description"],
+    });
+    expect(
+      report.rows.find((row) => row.rawDescription === unmatchedDescription),
+    ).toMatchObject({
+      category: null,
+      attributedRevenue: "100.00",
+      commissionPercentage: "10.00",
+      commission: "10.00",
+      reviewReasons: ["unmatched_category"],
     });
   });
 
@@ -378,8 +390,11 @@ describe("Sales & Commissions v2 reporting", () => {
       clientId,
       review: "needs_review",
     });
-    expect(needsReview.total).toBe(1);
-    expect(needsReview.rows[0]?.parseStatus).toBe("legacy_description");
+    expect(needsReview.total).toBe(2);
+    expect(needsReview.rows.map((row) => row.reviewReasons[0]).sort()).toEqual([
+      "legacy_description",
+      "unmatched_category",
+    ]);
 
     const ceramic = await getSalesCommissionV2Report({
       ...reportInput,
@@ -390,7 +405,7 @@ describe("Sales & Commissions v2 reporting", () => {
     expect(ceramic.summary).toMatchObject({
       attributedRevenue: "499.00",
       missedRevenue: "499.00",
-      commission: "30.00",
+      commission: "49.90",
     });
   });
 
@@ -399,17 +414,17 @@ describe("Sales & Commissions v2 reporting", () => {
       ...reportInput,
       globalSalespersonId,
     });
-    expect(report.total).toBe(5);
-    expect(report.summary.commission).toBe("50.00");
+    expect(report.total).toBe(6);
+    expect(report.summary.commission).toBe("106.80");
 
     const setup = await getSalesCommissionV2Setup({ clientId });
     expect(setup).toMatchObject({
       selectedClientId: clientId,
       attributionMode: "created_by",
+      commissionPercentage: "10.00",
     });
     expect(setup.categories).toHaveLength(2);
     expect(setup.rules).toHaveLength(1);
-    expect(setup.rates).toHaveLength(2);
     expect(setup.salespeople).toEqual([
       expect.objectContaining({
         externalUserId: "michael-va",

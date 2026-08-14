@@ -3,10 +3,7 @@ import "server-only";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 
-import {
-  formatUsdCents,
-  parseUsdToCents,
-} from "~/features/revenue/calculations";
+import { parseSalesCommissionV2PercentageToBasisPoints } from "~/features/sales-commissions-v2/calculations";
 import { normalizeAppointmentText } from "~/features/sales-commissions/calculations";
 import { db } from "~/server/db";
 import {
@@ -14,8 +11,6 @@ import {
   salesCommissionV2Categories,
   salesCommissionV2MappingRules,
   salesCommissionV2Settings,
-  salespeople,
-  salespersonCommissionV2Rates,
 } from "~/server/db/schema";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -38,13 +33,14 @@ function requiredName(value: string, label: string): string {
   return name;
 }
 
-function normalizedMoney(value: string, label: string): string {
+function normalizedPercentage(value: string): string {
   try {
-    return formatUsdCents(parseUsdToCents(value));
+    const basisPoints = parseSalesCommissionV2PercentageToBasisPoints(value);
+    return `${basisPoints / 100n}.${String(basisPoints % 100n).padStart(2, "0")}`;
   } catch (error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: `${label} must be a non-negative USD value with at most two decimals`,
+      message: "Commission percentage must be between 0 and 100",
       cause: error,
     });
   }
@@ -113,14 +109,24 @@ async function requireMappingRule(clientId: string, ruleId: string) {
 export async function saveSalesCommissionV2Settings(input: {
   clientId: string;
   attributionMode: "created_by" | "assigned_user" | "created_by_then_assigned";
+  commissionPercentage: string;
 }) {
   await requireClient(input.clientId);
+  const commissionPercentage = normalizedPercentage(input.commissionPercentage);
   await db
     .insert(salesCommissionV2Settings)
-    .values(input)
+    .values({
+      clientId: input.clientId,
+      attributionMode: input.attributionMode,
+      commissionPercentage,
+    })
     .onConflictDoUpdate({
       target: salesCommissionV2Settings.clientId,
-      set: { attributionMode: input.attributionMode, updatedAt: new Date() },
+      set: {
+        attributionMode: input.attributionMode,
+        commissionPercentage,
+        updatedAt: new Date(),
+      },
     });
   return { success: true as const };
 }
@@ -291,74 +297,4 @@ export async function updateSalesCommissionV2MappingRule(input: {
     }
     throw error;
   }
-}
-
-export async function upsertSalespersonCommissionV2Rate(input: {
-  clientId: string;
-  salespersonExternalUserId: string;
-  categoryId: string;
-  commissionValue: string;
-}) {
-  const [[person], [category]] = await Promise.all([
-    db
-      .select({ externalUserId: salespeople.externalUserId })
-      .from(salespeople)
-      .where(
-        and(
-          eq(salespeople.clientId, input.clientId),
-          eq(salespeople.externalUserId, input.salespersonExternalUserId),
-        ),
-      )
-      .limit(1),
-    db
-      .select({ id: salesCommissionV2Categories.id })
-      .from(salesCommissionV2Categories)
-      .where(
-        and(
-          eq(salesCommissionV2Categories.id, input.categoryId),
-          eq(salesCommissionV2Categories.clientId, input.clientId),
-        ),
-      )
-      .limit(1),
-  ]);
-  if (!person || !category) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Salesperson and category must belong to the selected client",
-    });
-  }
-
-  const commissionValue = normalizedMoney(input.commissionValue, "Commission");
-  await db
-    .insert(salespersonCommissionV2Rates)
-    .values({ ...input, commissionValue })
-    .onConflictDoUpdate({
-      target: [
-        salespersonCommissionV2Rates.clientId,
-        salespersonCommissionV2Rates.salespersonExternalUserId,
-        salespersonCommissionV2Rates.categoryId,
-      ],
-      set: { commissionValue, updatedAt: new Date() },
-    });
-  return { success: true as const };
-}
-
-export async function removeSalespersonCommissionV2Rate(input: {
-  clientId: string;
-  salespersonExternalUserId: string;
-  categoryId: string;
-}) {
-  await db
-    .delete(salespersonCommissionV2Rates)
-    .where(
-      and(
-        eq(salespersonCommissionV2Rates.clientId, input.clientId),
-        eq(
-          salespersonCommissionV2Rates.salespersonExternalUserId,
-          input.salespersonExternalUserId,
-        ),
-        eq(salespersonCommissionV2Rates.categoryId, input.categoryId),
-      ),
-    );
-  return { success: true as const };
 }

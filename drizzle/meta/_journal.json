@@ -176,6 +176,13 @@
       "when": 1786657208290,
       "tag": "0024_calm_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786728107477,
+      "tag": "0025_wealthy_secret_warriors",
+      "breakpoints": true
     }
   ]
 }
