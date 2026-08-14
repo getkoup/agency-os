@@ -5,6 +5,7 @@ import {
   matchSalesCommissionV2Category,
   parseSalesCommissionV2Description,
   parseSalesCommissionV2Price,
+  parseSalesCommissionV2PercentageToBasisPoints,
   type SalesCommissionV2CategoryInput,
   type SalesCommissionV2MappingRuleInput,
 } from "~/features/sales-commissions-v2/calculations";
@@ -279,7 +280,7 @@ describe("Sales & Commissions v2 calculations", () => {
     ).toBe("not_applicable");
   });
 
-  it("recognizes showed revenue and one fixed commission per appointment", () => {
+  it("calculates one client percentage for every showed appointment", () => {
     const ceramicPrice = parseSalesCommissionV2Price(
       parseSalesCommissionV2Description(ceramicDescription).fields.price,
     );
@@ -295,75 +296,96 @@ describe("Sales & Commissions v2 calculations", () => {
         appointmentStatus: "confirmed",
         priceCents: ceramicPrice.cents,
         commissionEligible: true,
-        commissionValue: "30.00",
+        commissionPercentage: "10.00",
       }),
     ).toEqual({
       attributedRevenue: "0.00",
       missedRevenue: "0.00",
       commission: "0.00",
-      missingCommissionRate: false,
+      missingCommissionPercentage: false,
     });
 
     const ceramic = calculateSalesCommissionV2Financials({
       appointmentStatus: "showed",
       priceCents: ceramicPrice.cents,
       commissionEligible: true,
-      commissionValue: "30.00",
+      commissionPercentage: "10.00",
     });
     const tint = calculateSalesCommissionV2Financials({
       appointmentStatus: "showed",
       priceCents: tintPrice.cents,
       commissionEligible: true,
-      commissionValue: "20.00",
+      commissionPercentage: "10.00",
     });
     expect(ceramic).toMatchObject({
       attributedRevenue: "499.00",
-      commission: "30.00",
+      commission: "49.90",
     });
     expect(tint).toMatchObject({
       attributedRevenue: "469.00",
-      commission: "20.00",
+      commission: "46.90",
     });
     expect(
       Number(ceramic.attributedRevenue) + Number(tint.attributedRevenue),
     ).toBe(968);
-    expect(Number(ceramic.commission) + Number(tint.commission)).toBe(50);
+    expect(Number(ceramic.commission) + Number(tint.commission)).toBe(96.8);
   });
 
-  it("records no-show missed revenue and only flags an eligible missing showed rate", () => {
+  it("rounds percentage commissions to the nearest cent", () => {
+    expect(
+      calculateSalesCommissionV2Financials({
+        appointmentStatus: "showed",
+        priceCents: 49_900n,
+        commissionEligible: true,
+        commissionPercentage: "12.50",
+      }).commission,
+    ).toBe("62.38");
+    expect(parseSalesCommissionV2PercentageToBasisPoints("0")).toBe(0n);
+    expect(parseSalesCommissionV2PercentageToBasisPoints("100.00")).toBe(
+      10_000n,
+    );
+    expect(() =>
+      parseSalesCommissionV2PercentageToBasisPoints("100.01"),
+    ).toThrow("between 0 and 100");
+    expect(() => parseSalesCommissionV2PercentageToBasisPoints("-1")).toThrow(
+      "between 0 and 100",
+    );
+  });
+
+  it("records no-show loss and flags only an eligible showed client without a percentage", () => {
     expect(
       calculateSalesCommissionV2Financials({
         appointmentStatus: "noshow",
         priceCents: 49_900n,
         commissionEligible: true,
-        commissionValue: "30.00",
+        commissionPercentage: "10.00",
       }),
     ).toEqual({
       attributedRevenue: "0.00",
       missedRevenue: "499.00",
       commission: "0.00",
-      missingCommissionRate: false,
+      missingCommissionPercentage: false,
     });
     expect(
       calculateSalesCommissionV2Financials({
         appointmentStatus: "showed",
         priceCents: null,
         commissionEligible: true,
-        commissionValue: null,
+        commissionPercentage: null,
       }),
     ).toEqual({
       attributedRevenue: "0.00",
       missedRevenue: "0.00",
       commission: "0.00",
-      missingCommissionRate: true,
+      missingCommissionPercentage: true,
     });
     expect(
       calculateSalesCommissionV2Financials({
         appointmentStatus: "showed",
-        priceCents: null,
-        commissionEligible: true,
-        commissionValue: "30.00",
-      }).commission,
-    ).toBe("30.00");
+        priceCents: 49_900n,
+        commissionEligible: false,
+        commissionPercentage: null,
+      }).missingCommissionPercentage,
+    ).toBe(false);
   });
 });

@@ -406,6 +406,46 @@ try {
   ) {
     throw new Error("Agency settings defaults were not seeded correctly");
   }
+  await applyMigration(test, "drizzle/0025_wealthy_secret_warriors.sql");
+  const [v2PercentageMigration] = await test`
+    select
+      to_regclass('agency_os_salesperson_commission_v2_rate') "legacyRateTable",
+      exists (
+        select 1
+        from information_schema.columns
+        where table_name = 'agency_os_sales_commission_v2_setting'
+          and column_name = 'commissionPercentage'
+      ) "hasCommissionPercentage"
+  `;
+  if (
+    !v2PercentageMigration?.hasCommissionPercentage ||
+    v2PercentageMigration.legacyRateTable !== null
+  ) {
+    throw new Error("V2 percentage commission migration is incorrect");
+  }
+  await test`
+    insert into "agency_os_sales_commission_v2_setting"
+      ("clientId", "commissionPercentage")
+    values (${backfillClient.id}, 12.5)
+  `;
+  await expectConstraintViolation(
+    () =>
+      test!`
+        update "agency_os_sales_commission_v2_setting"
+        set "commissionPercentage" = -0.01
+        where "clientId" = ${backfillClient.id}
+      `,
+    "V2 negative commission percentage",
+  );
+  await expectConstraintViolation(
+    () =>
+      test!`
+        update "agency_os_sales_commission_v2_setting"
+        set "commissionPercentage" = 100.01
+        where "clientId" = ${backfillClient.id}
+      `,
+    "V2 commission percentage above 100",
+  );
   await expectConstraintViolation(
     () =>
       test!`

@@ -3,11 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSalesCommissionV2Category,
   createSalesCommissionV2MappingRule,
-  removeSalespersonCommissionV2Rate,
   saveSalesCommissionV2Settings,
   updateSalesCommissionV2Category,
   updateSalesCommissionV2MappingRule,
-  upsertSalespersonCommissionV2Rate,
 } from "~/features/sales-commissions-v2/server/actions";
 import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import {
@@ -32,11 +30,9 @@ vi.mock("~/features/sales-commissions-v2/server/queries", () => ({
 vi.mock("~/features/sales-commissions-v2/server/actions", () => ({
   createSalesCommissionV2Category: vi.fn(),
   createSalesCommissionV2MappingRule: vi.fn(),
-  removeSalespersonCommissionV2Rate: vi.fn(),
   saveSalesCommissionV2Settings: vi.fn(),
   updateSalesCommissionV2Category: vi.fn(),
   updateSalesCommissionV2MappingRule: vi.fn(),
-  upsertSalespersonCommissionV2Rate: vi.fn(),
 }));
 
 const createCaller = createCallerFactory(salesCommissionsV2Router);
@@ -90,12 +86,6 @@ describe("Sales & Commissions v2 router", () => {
     vi.mocked(updateSalesCommissionV2MappingRule).mockResolvedValue({
       success: true,
     });
-    vi.mocked(upsertSalespersonCommissionV2Rate).mockResolvedValue({
-      success: true,
-    });
-    vi.mocked(removeSalespersonCommissionV2Rate).mockResolvedValue({
-      success: true,
-    });
   });
 
   it("allows owners to view V2 reports", async () => {
@@ -142,6 +132,7 @@ describe("Sales & Commissions v2 router", () => {
     await caller.saveSettings({
       clientId,
       attributionMode: "created_by",
+      commissionPercentage: "10.00",
     });
     await caller.createCategory({ clientId, name: "Ceramic", sortOrder: 0 });
     await caller.createMappingRule({
@@ -153,17 +144,14 @@ describe("Sales & Commissions v2 router", () => {
       matchMode: "any",
       priority: 100,
     });
-    await caller.upsertCommissionRate({
-      clientId,
-      salespersonExternalUserId: "michael-va",
-      categoryId,
-      commissionValue: "30.00",
-    });
     expect(getSalesCommissionV2Setup).toHaveBeenCalledWith({ clientId });
-    expect(saveSalesCommissionV2Settings).toHaveBeenCalledOnce();
+    expect(saveSalesCommissionV2Settings).toHaveBeenCalledWith({
+      clientId,
+      attributionMode: "created_by",
+      commissionPercentage: "10.00",
+    });
     expect(createSalesCommissionV2Category).toHaveBeenCalledOnce();
     expect(createSalesCommissionV2MappingRule).toHaveBeenCalledOnce();
-    expect(upsertSalespersonCommissionV2Rate).toHaveBeenCalledOnce();
   });
 
   it("keeps every V2 configuration procedure unavailable to managers", async () => {
@@ -172,7 +160,11 @@ describe("Sales & Commissions v2 router", () => {
       code: "FORBIDDEN",
     });
     await expect(
-      caller.saveSettings({ clientId, attributionMode: "created_by" }),
+      caller.saveSettings({
+        clientId,
+        attributionMode: "created_by",
+        commissionPercentage: "10.00",
+      }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(
       caller.createCategory({ clientId, name: "Ceramic", sortOrder: 0 }),
@@ -188,13 +180,16 @@ describe("Sales & Commissions v2 router", () => {
         priority: 100,
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects a client commission percentage above 100", async () => {
     await expect(
-      caller.upsertCommissionRate({
+      callerFor("owner").saveSettings({
         clientId,
-        salespersonExternalUserId: "michael-va",
-        categoryId,
-        commissionValue: "30.00",
+        attributionMode: "created_by",
+        commissionPercentage: "100.01",
       }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toThrow();
+    expect(saveSalesCommissionV2Settings).not.toHaveBeenCalled();
   });
 });

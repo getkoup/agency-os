@@ -1,0 +1,4 @@
+ALTER TABLE "agency_os_salesperson_commission_v2_rate" DISABLE ROW LEVEL SECURITY;--> statement-breakpoint
+DROP TABLE "agency_os_salesperson_commission_v2_rate" CASCADE;--> statement-breakpoint
+ALTER TABLE "agency_os_sales_commission_v2_setting" ADD COLUMN "commissionPercentage" numeric(5, 2);--> statement-breakpoint
+ALTER TABLE "agency_os_sales_commission_v2_setting" ADD CONSTRAINT "sales_commission_v2_percentage_range" CHECK ("agency_os_sales_commission_v2_setting"."commissionPercentage" is null or ("agency_os_sales_commission_v2_setting"."commissionPercentage" >= 0 and "agency_os_sales_commission_v2_setting"."commissionPercentage" <= 100));

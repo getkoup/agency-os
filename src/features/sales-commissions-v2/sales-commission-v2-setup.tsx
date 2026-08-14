@@ -22,10 +22,7 @@ import {
 } from "~/components/ui/table";
 import { SalesCommissionV2CategoryDialog } from "~/features/sales-commissions-v2/sales-commission-v2-category-dialog";
 import { SalesCommissionV2MappingRuleDialog } from "~/features/sales-commissions-v2/sales-commission-v2-mapping-rule-dialog";
-import {
-  AttributionModeV2Control,
-  CommissionRateV2Cell,
-} from "~/features/sales-commissions-v2/salesperson-v2-commission-settings";
+import { SalesCommissionV2ClientSettings } from "~/features/sales-commissions-v2/sales-commission-v2-client-settings";
 import { type RouterOutputs } from "~/trpc/react";
 
 type SetupResult = RouterOutputs["salesCommissionsV2"]["setup"];
@@ -37,9 +34,6 @@ export function SalesCommissionV2Setup({ result }: { result: SetupResult }) {
   const clientId = result.selectedClientId;
   const activeCategories = result.categories.filter(
     (category) => category.status === "active",
-  );
-  const activeSalespeople = result.salespeople.filter(
-    (person) => person.status === "active",
   );
 
   function selectClient(value: string) {
@@ -62,10 +56,10 @@ export function SalesCommissionV2Setup({ result }: { result: SetupResult }) {
     <div className="space-y-6">
       <Card className="shadow-sage border-border/80 gap-0 rounded-[1.25rem] py-0">
         <CardHeader className="border-border/70 border-b px-6 py-5">
-          <CardTitle>Client and V2 attribution</CardTitle>
+          <CardTitle>Client commission settings</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-5 p-6 md:grid-cols-2">
-          <div className="space-y-2">
+        <CardContent className="space-y-5 p-6">
+          <div className="max-w-xl space-y-2">
             <Label>Client</Label>
             <Select value={clientId} onValueChange={selectClient}>
               <SelectTrigger className="w-full">
@@ -81,10 +75,11 @@ export function SalesCommissionV2Setup({ result }: { result: SetupResult }) {
               </SelectContent>
             </Select>
           </div>
-          <AttributionModeV2Control
+          <SalesCommissionV2ClientSettings
             key={clientId}
             clientId={clientId}
-            value={result.attributionMode}
+            attributionMode={result.attributionMode}
+            commissionPercentage={result.commissionPercentage}
           />
         </CardContent>
       </Card>
@@ -280,71 +275,6 @@ export function SalesCommissionV2Setup({ result }: { result: SetupResult }) {
               No salesperson identities have been synchronized for this client.
             </p>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
-        <CardHeader className="border-border/70 border-b px-6 py-5">
-          <CardTitle>V2 commission matrix</CardTitle>
-          <p className="text-muted-foreground text-sm">
-            One fixed USD commission per showed appointment, salesperson, and
-            matched category.
-          </p>
-        </CardHeader>
-        <CardContent className="overflow-x-auto px-0">
-          {activeSalespeople.length && activeCategories.length ? (
-            <Table className="min-w-max">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="bg-card sticky left-0 z-10 min-w-56 pl-6">
-                    Salesperson
-                  </TableHead>
-                  {activeCategories.map((category) => (
-                    <TableHead
-                      key={category.id}
-                      className="min-w-52 text-center"
-                    >
-                      {category.name}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activeSalespeople.map((person) => (
-                  <TableRow key={person.id}>
-                    <TableCell className="bg-card sticky left-0 z-10 pl-6 font-medium">
-                      {person.displayName ??
-                        person.providerName ??
-                        `Unnamed • ${person.externalUserId.slice(-6)}`}
-                    </TableCell>
-                    {activeCategories.map((category) => {
-                      const rate = result.rates.find(
-                        (value) =>
-                          value.salespersonExternalUserId ===
-                            person.externalUserId &&
-                          value.categoryId === category.id,
-                      );
-                      return (
-                        <TableCell key={category.id}>
-                          <CommissionRateV2Cell
-                            clientId={clientId}
-                            salespersonExternalUserId={person.externalUserId}
-                            categoryId={category.id}
-                            initialValue={rate?.commissionValue ?? null}
-                          />
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-muted-foreground p-6 text-sm">
-              Active synchronized salespeople and active V2 categories are
-              required before rates can be entered.
-            </p>
-          )}
         </CardContent>
       </Card>
     </div>

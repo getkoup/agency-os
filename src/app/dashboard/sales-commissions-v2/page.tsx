@@ -75,7 +75,7 @@ const reviewReasonLabels = {
   unmatched_category: "Unmatched category",
   ambiguous_category: "Ambiguous category",
   missing_salesperson: "Missing salesperson",
-  missing_commission_rate: "Missing rate",
+  missing_commission_percentage: "Missing client percentage",
   past_unresolved_status: "Past unresolved",
 } as const;
 
@@ -146,7 +146,7 @@ export default async function SalesCommissionsV2Page({
       <PageHeader
         eyebrow="Sales operations"
         title="Sales & Commissions v2"
-        description="Booking-date reporting for structured pricing, showed revenue, and fixed salesperson category commissions."
+        description="Booking-date reporting for structured Price revenue with one configurable commission percentage per client."
         meta={
           canConfigure ? (
             <Button asChild>
@@ -486,7 +486,12 @@ export default async function SalesCommissionsV2Page({
                       ${row.missedRevenue}
                     </TableCell>
                     <TableCell className="pr-6 text-right font-semibold tabular-nums">
-                      ${row.commission}
+                      <p>${row.commission}</p>
+                      {row.commissionPercentage !== null ? (
+                        <p className="text-muted-foreground mt-1 text-xs font-normal">
+                          {row.commissionPercentage}% of Price
+                        </p>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

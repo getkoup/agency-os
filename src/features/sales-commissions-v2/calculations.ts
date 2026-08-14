@@ -33,7 +33,7 @@ export type SalesCommissionV2ReviewReason =
   | "unmatched_category"
   | "ambiguous_category"
   | "missing_salesperson"
-  | "missing_commission_rate"
+  | "missing_commission_percentage"
   | "past_unresolved_status";
 
 export type SalesCommissionV2MappingRuleInput = {
@@ -321,26 +321,46 @@ export function matchSalesCommissionV2Category(input: {
   };
 }
 
+export function parseSalesCommissionV2PercentageToBasisPoints(
+  value: string,
+): bigint {
+  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value.trim());
+  if (!match?.[1]) {
+    throw new Error("Commission percentage must be between 0 and 100");
+  }
+  const whole = Number(match[1]);
+  const fraction = Number((match[2] ?? "").padEnd(2, "0"));
+  if (whole > 100 || (whole === 100 && fraction > 0)) {
+    throw new Error("Commission percentage must be between 0 and 100");
+  }
+  return BigInt(whole * 100 + fraction);
+}
+
 export function calculateSalesCommissionV2Financials(input: {
   appointmentStatus:
     "new" | "confirmed" | "showed" | "cancelled" | "noshow" | "invalid";
   priceCents: bigint | null;
   commissionEligible: boolean;
-  commissionValue: string | null;
+  commissionPercentage: string | null;
 }) {
   const showed = input.appointmentStatus === "showed";
   const noShow = input.appointmentStatus === "noshow";
   const priceCents = input.priceCents ?? 0n;
   const commissionCents =
-    showed && input.commissionEligible && input.commissionValue !== null
-      ? parseUsdToCents(input.commissionValue)
+    showed && input.commissionEligible && input.commissionPercentage !== null
+      ? (priceCents *
+          parseSalesCommissionV2PercentageToBasisPoints(
+            input.commissionPercentage,
+          ) +
+          5_000n) /
+        10_000n
       : 0n;
 
   return {
     attributedRevenue: formatUsdCents(showed ? priceCents : 0n),
     missedRevenue: formatUsdCents(noShow ? priceCents : 0n),
     commission: formatUsdCents(commissionCents),
-    missingCommissionRate:
-      showed && input.commissionEligible && input.commissionValue === null,
+    missingCommissionPercentage:
+      showed && input.commissionEligible && input.commissionPercentage === null,
   };
 }
