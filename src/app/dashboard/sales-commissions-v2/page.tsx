@@ -115,7 +115,7 @@ export default async function SalesCommissionsV2Page({
     <div className="mx-auto max-w-[112rem] space-y-7">
       <PageHeader
         eyebrow="Sales operations"
-        title="Sales & Commissions v2"
+        title="Commission"
         description="Booking-date reporting for structured Price revenue with one configurable commission percentage per client."
         meta={
           canConfigure ? (
