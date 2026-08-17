@@ -41,7 +41,7 @@ describe("dashboard sales commission destinations", () => {
     const destination = DASHBOARD_DESTINATIONS[v1Index + 1];
     expect(destination).toMatchObject({
       href: v2,
-      label: "Sales & Commissions v2",
+      label: "Commission",
       roles: ["owner", "admin"],
       group: "Workspace",
       access: "sales_commissions_v2",
