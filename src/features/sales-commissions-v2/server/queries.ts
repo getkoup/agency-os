@@ -66,6 +66,8 @@ type MoneySummary = {
   commissionCents: bigint;
   needsReview: number;
   needsAttention: number;
+  eligibleBookings: number;
+  eligibleByStatus: Record<AppointmentStatus, number>;
 };
 
 type CategoryGroup = {
@@ -118,6 +120,15 @@ function emptySummary(): MoneySummary {
     commissionCents: 0n,
     needsReview: 0,
     needsAttention: 0,
+    eligibleBookings: 0,
+    eligibleByStatus: {
+      new: 0,
+      confirmed: 0,
+      showed: 0,
+      cancelled: 0,
+      noshow: 0,
+      invalid: 0,
+    },
   };
 }
 
@@ -140,6 +151,10 @@ function addRowToSummary(
   summary.commissionCents += parseUsdToCents(row.commission);
   if (row.needsReview) summary.needsReview += 1;
   if (row.needsAttention) summary.needsAttention += 1;
+  if (!row.needsAttention) {
+    summary.eligibleBookings += 1;
+    summary.eligibleByStatus[row.status] += 1;
+  }
 }
 
 function presentSummary(summary: MoneySummary) {
@@ -154,6 +169,8 @@ function presentSummary(summary: MoneySummary) {
     commission: formatUsdCents(summary.commissionCents),
     needsReview: summary.needsReview,
     needsAttention: summary.needsAttention,
+    eligibleBookings: summary.eligibleBookings,
+    eligibleByStatus: summary.eligibleByStatus,
   };
 }
 

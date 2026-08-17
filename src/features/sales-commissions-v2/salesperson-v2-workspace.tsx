@@ -222,7 +222,7 @@ export function SalespersonV2Workspace({
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
-          <Table className="min-w-[76rem]">
+          <Table className="min-w-[80rem]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="pl-5">Client</TableHead>
@@ -230,7 +230,7 @@ export function SalespersonV2Workspace({
                 <TableHead>Categories</TableHead>
                 <TableHead className="text-right">Booked</TableHead>
                 <TableHead className="text-right">Show rate</TableHead>
-                <TableHead className="text-right">No-shows</TableHead>
+                <TableHead className="text-right">Eligible bookings</TableHead>
                 <TableHead className="text-right">Flagged</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="pr-5 text-right">Commission</TableHead>
@@ -265,8 +265,8 @@ export function SalespersonV2Workspace({
                   <TableCell className="text-right tabular-nums">
                     {Math.round(client.summary.showRate * 100)}%
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {client.summary.noShows}
+                  <TableCell className="text-right">
+                    <EligibleBookings summary={client.summary} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {client.summary.needsAttention}
@@ -285,6 +285,36 @@ export function SalespersonV2Workspace({
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+const eligibleStatusPresentation = [
+  ["showed", "showed"],
+  ["confirmed", "confirmed"],
+  ["new", "new"],
+  ["noshow", "no-show"],
+  ["cancelled", "cancelled"],
+  ["invalid", "invalid"],
+] as const;
+
+function EligibleBookings({
+  summary,
+}: {
+  summary: GlobalSalespersonV2Group["clients"][number]["summary"];
+}) {
+  const breakdown: string[] = [];
+  for (const [status, label] of eligibleStatusPresentation) {
+    const count = summary.eligibleByStatus[status];
+    if (count > 0) breakdown.push(`${count} ${label}`);
+  }
+
+  return (
+    <div className="whitespace-nowrap">
+      <p className="font-medium tabular-nums">{summary.eligibleBookings}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        {breakdown.join(" · ") || "No eligible bookings"}
+      </p>
     </div>
   );
 }

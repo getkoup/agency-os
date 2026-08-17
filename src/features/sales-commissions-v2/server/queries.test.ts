@@ -297,12 +297,22 @@ describe("Sales & Commissions v2 reporting", () => {
       commission: "106.80",
       needsReview: 3,
       needsAttention: 2,
+      eligibleBookings: 5,
+      eligibleByStatus: {
+        showed: 3,
+        confirmed: 1,
+        new: 0,
+        noshow: 1,
+        cancelled: 0,
+        invalid: 0,
+      },
     });
     expect(report.rows[0]?.id).toBeDefined();
     expect(report.clientGroups[0]?.summary.commission).toBe("106.80");
     expect(report.clientGroups[0]?.summary).toMatchObject({
       noShows: 1,
       needsAttention: 2,
+      eligibleBookings: 5,
     });
     expect(report.globalSalespersonGroups[0]).toMatchObject({
       id: globalSalespersonId,
@@ -316,6 +326,12 @@ describe("Sales & Commissions v2 reporting", () => {
             commission: "106.80",
             noShows: 1,
             needsAttention: 2,
+            eligibleBookings: 5,
+            eligibleByStatus: {
+              showed: 3,
+              confirmed: 1,
+              noshow: 1,
+            },
           },
         },
       ],
