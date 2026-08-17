@@ -34,11 +34,13 @@ describe("dashboard sales commission destinations", () => {
     expect(isDestinationActive("/dashboarding", "/dashboard")).toBe(false);
   });
 
-  it("registers V2 immediately after V1 behind rollout access", () => {
-    const v1Index = DASHBOARD_DESTINATIONS.findIndex(
-      (destination) => destination.href === v1,
+  it("registers only the V2 commission destination behind rollout access", () => {
+    expect(
+      DASHBOARD_DESTINATIONS.some((destination) => destination.href === v1),
+    ).toBe(false);
+    const destination = DASHBOARD_DESTINATIONS.find(
+      (candidate) => candidate.href === v2,
     );
-    const destination = DASHBOARD_DESTINATIONS[v1Index + 1];
     expect(destination).toMatchObject({
       href: v2,
       label: "Commission",

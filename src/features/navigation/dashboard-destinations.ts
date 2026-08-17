@@ -63,13 +63,6 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
     group: "Workspace",
   },
   {
-    href: "/dashboard/sales-commissions",
-    label: "Sales & Commissions",
-    icon: HandCoins,
-    roles: ["owner", "admin", "manager"],
-    group: "Workspace",
-  },
-  {
     href: "/dashboard/sales-commissions-v2",
     label: "Commission",
     icon: HandCoins,
