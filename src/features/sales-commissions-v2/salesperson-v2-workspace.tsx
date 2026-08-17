@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { EligibleBookingsCell } from "~/features/sales-commissions-v2/eligible-bookings-cell";
 import {
   aggregateSalespersonV2Categories,
   formatSalesCommissionV2Cents,
@@ -266,7 +267,7 @@ export function SalespersonV2Workspace({
                     {Math.round(client.summary.showRate * 100)}%
                   </TableCell>
                   <TableCell className="text-right">
-                    <EligibleBookings summary={client.summary} />
+                    <EligibleBookingsCell summary={client.summary} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {client.summary.needsAttention}
@@ -285,36 +286,6 @@ export function SalespersonV2Workspace({
           </Table>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-const eligibleStatusPresentation = [
-  ["showed", "showed"],
-  ["confirmed", "confirmed"],
-  ["new", "new"],
-  ["noshow", "no-show"],
-  ["cancelled", "cancelled"],
-  ["invalid", "invalid"],
-] as const;
-
-function EligibleBookings({
-  summary,
-}: {
-  summary: GlobalSalespersonV2Group["clients"][number]["summary"];
-}) {
-  const breakdown: string[] = [];
-  for (const [status, label] of eligibleStatusPresentation) {
-    const count = summary.eligibleByStatus[status];
-    if (count > 0) breakdown.push(`${count} ${label}`);
-  }
-
-  return (
-    <div className="whitespace-nowrap">
-      <p className="font-medium tabular-nums">{summary.eligibleBookings}</p>
-      <p className="text-muted-foreground mt-0.5 text-xs">
-        {breakdown.join(" · ") || "No eligible bookings"}
-      </p>
     </div>
   );
 }

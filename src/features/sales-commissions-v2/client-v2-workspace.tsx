@@ -24,6 +24,7 @@ import {
   aggregateClientV2Categories,
   type ClientV2Group,
 } from "~/features/sales-commissions-v2/client-v2-presentation";
+import { EligibleBookingsCell } from "~/features/sales-commissions-v2/eligible-bookings-cell";
 import {
   formatSalesCommissionV2Cents,
   formatSalesCommissionV2Money,
@@ -213,14 +214,14 @@ export function ClientV2Workspace({ client }: { client: ClientV2Group }) {
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
-          <Table className="min-w-[72rem]">
+          <Table className="min-w-[76rem]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="pl-5">Salesperson</TableHead>
                 <TableHead>Categories</TableHead>
                 <TableHead className="text-right">Booked</TableHead>
                 <TableHead className="text-right">Show rate</TableHead>
-                <TableHead className="text-right">No-shows</TableHead>
+                <TableHead className="text-right">Eligible bookings</TableHead>
                 <TableHead className="text-right">Flagged</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="pr-5 text-right">Commission</TableHead>
@@ -250,8 +251,8 @@ export function ClientV2Workspace({ client }: { client: ClientV2Group }) {
                   <TableCell className="text-right tabular-nums">
                     {Math.round(person.summary.showRate * 100)}%
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {person.summary.noShows}
+                  <TableCell className="text-right">
+                    <EligibleBookingsCell summary={person.summary} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {person.summary.needsAttention}
