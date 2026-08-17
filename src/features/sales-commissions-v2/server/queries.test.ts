@@ -52,6 +52,12 @@ Price : $100
 Car : Ford F-150
 Deposit status : $50 Collected`;
 
+const incompleteStructuredDescription = `Lead Source : Referral
+Category : cc
+Price : $250
+Car : Chevrolet Tahoe
+Deposit status : $25 Collected`;
+
 let clientId = "";
 let globalSalespersonId = "";
 let ceramicCategoryId = "";
@@ -187,6 +193,12 @@ describe("Sales & Commissions v2 reporting", () => {
         startsAt: new Date("2026-08-16T14:00:00.000Z"),
       },
       {
+        externalId: "v2-incomplete-structure-showed",
+        status: "showed" as const,
+        description: incompleteStructuredDescription,
+        startsAt: new Date("2026-08-15T14:00:00.000Z"),
+      },
+      {
         externalId: "v2-future-appointment-booked-in-range",
         status: "confirmed" as const,
         description: tintDescription,
@@ -271,13 +283,13 @@ describe("Sales & Commissions v2 reporting", () => {
     });
 
     expect(report.summary).toMatchObject({
-      appointments: 6,
-      showed: 4,
+      appointments: 7,
+      showed: 5,
       noShows: 1,
       attributedRevenue: "1068.00",
       missedRevenue: "499.00",
       commission: "106.80",
-      needsReview: 2,
+      needsReview: 3,
     });
     expect(report.rows[0]?.id).toBeDefined();
     expect(report.clientGroups[0]?.summary.commission).toBe("106.80");
@@ -303,7 +315,7 @@ describe("Sales & Commissions v2 reporting", () => {
     ).toEqual([
       { name: "Ceramic Coating", appointments: 2 },
       { name: "Tint and detail", appointments: 2 },
-      { name: "Uncategorized", appointments: 2 },
+      { name: "Uncategorized", appointments: 3 },
     ]);
     const futureAppointment = report.rows.find(
       (row) => row.status === "confirmed",
@@ -312,7 +324,7 @@ describe("Sales & Commissions v2 reporting", () => {
       new Date("2027-09-20T14:00:00.000Z"),
     );
 
-    expect(report.rows.map((row) => row.id)).toHaveLength(6);
+    expect(report.rows.map((row) => row.id)).toHaveLength(7);
     const ceramic = report.rows.find(
       (row) =>
         row.rawDescription === ceramicDescription && row.status === "showed",
@@ -364,6 +376,24 @@ describe("Sales & Commissions v2 reporting", () => {
       reviewReasons: ["legacy_description"],
     });
     expect(
+      report.rows.find(
+        (row) => row.rawDescription === incompleteStructuredDescription,
+      ),
+    ).toMatchObject({
+      parseStatus: "invalid_structure",
+      parsedPrice: "250.00",
+      attributedRevenue: "0.00",
+      missedRevenue: "0.00",
+      commission: "0.00",
+      needsReview: true,
+      reviewReasons: ["missing_service"],
+    });
+    expect(report.attentionTotal).toBe(2);
+    expect(report.attentionRows.map((row) => row.parseStatus).sort()).toEqual([
+      "invalid_structure",
+      "legacy_description",
+    ]);
+    expect(
       report.rows.find((row) => row.rawDescription === unmatchedDescription),
     ).toMatchObject({
       category: null,
@@ -390,9 +420,10 @@ describe("Sales & Commissions v2 reporting", () => {
       clientId,
       review: "needs_review",
     });
-    expect(needsReview.total).toBe(2);
+    expect(needsReview.total).toBe(3);
     expect(needsReview.rows.map((row) => row.reviewReasons[0]).sort()).toEqual([
       "legacy_description",
+      "missing_service",
       "unmatched_category",
     ]);
 
@@ -414,7 +445,7 @@ describe("Sales & Commissions v2 reporting", () => {
       ...reportInput,
       globalSalespersonId,
     });
-    expect(report.total).toBe(6);
+    expect(report.total).toBe(7);
     expect(report.summary.commission).toBe("106.80");
 
     const setup = await getSalesCommissionV2Setup({ clientId });

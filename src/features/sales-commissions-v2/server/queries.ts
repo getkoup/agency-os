@@ -399,12 +399,12 @@ export async function getSalesCommissionV2Report(
       const parsedPrice = duplicatedPrice
         ? { status: "invalid" as const, cents: null, formatted: null }
         : parseSalesCommissionV2Price(parsed.fields.price);
-      const commissionEligible = salesperson !== null;
+      const financiallyEligible = parsed.status === "structured";
       const commissionPercentage = clientSettings?.commissionPercentage ?? null;
       const financials = calculateSalesCommissionV2Financials({
         appointmentStatus: appointment.status,
-        priceCents: parsedPrice.cents,
-        commissionEligible,
+        priceCents: financiallyEligible ? parsedPrice.cents : null,
+        commissionEligible: financiallyEligible && salesperson !== null,
         commissionPercentage,
       });
       const reviewReasons = [...parsed.reviewReasons];
@@ -574,6 +574,14 @@ export async function getSalesCommissionV2Report(
   const total = evaluatedRows.length;
   const start = (input.page - 1) * input.pageSize;
   const rows = evaluatedRows.slice(start, start + input.pageSize);
+  const attentionRows = evaluatedRows.filter(
+    (row) => row.parseStatus !== "structured",
+  );
+  const attentionTotal = attentionRows.length;
+  const paginatedAttentionRows = attentionRows.slice(
+    start,
+    start + input.pageSize,
+  );
 
   return {
     ...reportingContext,
@@ -641,6 +649,8 @@ export async function getSalesCommissionV2Report(
       }),
     rows,
     total,
+    attentionRows: paginatedAttentionRows,
+    attentionTotal,
     isTruncated,
     options: {
       clients: clientRows,

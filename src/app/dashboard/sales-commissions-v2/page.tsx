@@ -15,7 +15,6 @@ import { z } from "zod";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Table,
   TableBody,
@@ -24,15 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { formatReportingDateTime } from "~/features/dashboard/date-format";
-import { EmptyState } from "~/features/dashboard/empty-state";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
-import { Pagination } from "~/features/dashboard/pagination";
 import { GlobalSalespersonV2Report } from "~/features/sales-commissions-v2/global-salesperson-v2-report";
 import { SalesCommissionV2Filters } from "~/features/sales-commissions-v2/sales-commission-v2-filters";
+import { SalesCommissionV2AttentionTable } from "~/features/sales-commissions-v2/sales-commission-v2-attention-table";
 import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
-import { cn } from "~/lib/utils";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
 
@@ -51,33 +47,6 @@ const searchSchema = z.object({
   review: z.enum(["ready", "needs_review"]).optional(),
   salesCommissionV2Page: z.coerce.number().int().positive().default(1),
 });
-
-const statusPresentation = {
-  showed: { label: "Showed", className: "bg-emerald-500/15 text-emerald-800" },
-  noshow: { label: "No-show", className: "bg-red-500/15 text-red-800" },
-  confirmed: { label: "Confirmed", className: "bg-blue-500/15 text-blue-800" },
-  new: { label: "New", className: "bg-sky-500/15 text-sky-800" },
-  cancelled: {
-    label: "Cancelled",
-    className: "bg-muted text-muted-foreground",
-  },
-  invalid: { label: "Invalid", className: "bg-muted text-muted-foreground" },
-} as const;
-
-const reviewReasonLabels = {
-  missing_description: "Missing description",
-  legacy_description: "Legacy description",
-  duplicate_field: "Duplicate field",
-  missing_category: "Missing category",
-  missing_service: "Missing service",
-  missing_price: "Missing price",
-  invalid_price: "Invalid price",
-  unmatched_category: "Unmatched category",
-  ambiguous_category: "Ambiguous category",
-  missing_salesperson: "Missing salesperson",
-  missing_commission_percentage: "Missing client percentage",
-  past_unresolved_status: "Past unresolved",
-} as const;
 
 function defaultDates(today: string) {
   return { from: `${today.slice(0, 7)}-01`, to: today };
@@ -374,155 +343,13 @@ export default async function SalesCommissionsV2Page({
         </section>
       ) : null}
 
-      <Card className="shadow-sage border-border/80 gap-0 overflow-hidden rounded-[1.25rem] py-0">
-        <CardHeader className="border-border/70 border-b px-6 py-5">
-          <CardTitle>Booking ledger ({report.total})</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto px-0">
-          {report.rows.length ? (
-            <Table className="min-w-[150rem]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-6">Booked / appointment</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Lead/customer</TableHead>
-                  <TableHead>Salesperson</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Lead source</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="min-w-64">Service</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Car</TableHead>
-                  <TableHead className="min-w-56">Deposit status</TableHead>
-                  <TableHead>Mapping</TableHead>
-                  <TableHead className="min-w-64">Review</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Missed</TableHead>
-                  <TableHead className="pr-6 text-right">Commission</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className={cn(
-                      row.status === "noshow" &&
-                        "bg-red-500/10 hover:bg-red-500/15",
-                    )}
-                  >
-                    <TableCell className="pl-6 whitespace-nowrap">
-                      <p>
-                        {formatReportingDateTime(row.bookedAt, row.timezone)}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        Appointment{" "}
-                        {formatReportingDateTime(row.startsAt, row.timezone)}
-                      </p>
-                    </TableCell>
-                    <TableCell>{row.clientName}</TableCell>
-                    <TableCell className="font-medium">
-                      {row.contactName ?? "Unnamed contact"}
-                    </TableCell>
-                    <TableCell>
-                      {row.salesperson?.name ?? "Unassigned / widget"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={statusPresentation[row.status].className}
-                      >
-                        {statusPresentation[row.status].label}
-                      </Badge>
-                    </TableCell>
-                    <RawField value={row.fields.leadSource} />
-                    <RawField value={row.fields.category} />
-                    <RawField value={row.fields.service} />
-                    <TableCell>
-                      <p>{row.fields.price ?? "—"}</p>
-                      {row.parsedPrice ? (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          Sum ${row.parsedPrice}
-                        </p>
-                      ) : null}
-                    </TableCell>
-                    <RawField value={row.fields.car} />
-                    <RawField value={row.fields.depositStatus} />
-                    <TableCell>
-                      {row.category ? (
-                        <div>
-                          <p className="font-medium">{row.category.name}</p>
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {row.mapping.matchedBy === "rule"
-                              ? row.mapping.rule?.name
-                              : row.mapping.matchedBy === "category_exact"
-                                ? "Exact Category"
-                                : "Exact Service"}
-                          </p>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1.5">
-                        {row.reviewReasons.length ? (
-                          row.reviewReasons.map((reason) => (
-                            <Badge
-                              key={reason}
-                              variant="outline"
-                              className="border-amber-500/40 text-amber-800"
-                            >
-                              {reviewReasonLabels[reason]}
-                            </Badge>
-                          ))
-                        ) : (
-                          <Badge variant="secondary">Ready</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      ${row.attributedRevenue}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      ${row.missedRevenue}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right font-semibold tabular-nums">
-                      <p>${row.commission}</p>
-                      {row.commissionPercentage !== null ? (
-                        <p className="text-muted-foreground mt-1 text-xs font-normal">
-                          {row.commissionPercentage}% of Price
-                        </p>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="p-6">
-              <EmptyState
-                icon={HandCoins}
-                title="No bookings"
-                description="No synchronized bookings match these V2 filters."
-              />
-            </div>
-          )}
-        </CardContent>
-        <Pagination
-          pathname="/dashboard/sales-commissions-v2"
-          searchParams={rawSearch}
-          pageKey="salesCommissionV2Page"
-          page={search.salesCommissionV2Page}
-          pageSize={25}
-          total={report.total}
-        />
-      </Card>
+      <SalesCommissionV2AttentionTable
+        rows={report.attentionRows}
+        total={report.attentionTotal}
+        searchParams={rawSearch}
+        page={search.salesCommissionV2Page}
+      />
     </div>
-  );
-}
-
-function RawField({ value }: { value: string | null }) {
-  return (
-    <TableCell className="max-w-72 whitespace-normal">{value ?? "—"}</TableCell>
   );
 }
 
