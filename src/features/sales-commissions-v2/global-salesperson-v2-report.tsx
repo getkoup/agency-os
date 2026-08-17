@@ -1,24 +1,29 @@
-import { Badge } from "~/components/ui/badge";
-import { Card, CardContent } from "~/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import { type RouterOutputs } from "~/trpc/react";
+"use client";
 
-type GlobalSalespersonGroup =
-  RouterOutputs["salesCommissionsV2"]["report"]["globalSalespersonGroups"][number];
+import { useState } from "react";
+import { CheckCircle2, UsersRound } from "lucide-react";
+
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  formatSalesCommissionV2Money,
+  getSalespersonInitials,
+  type GlobalSalespersonV2Group,
+} from "~/features/sales-commissions-v2/salesperson-v2-presentation";
+import { SalespersonV2Workspace } from "~/features/sales-commissions-v2/salesperson-v2-workspace";
+import { cn } from "~/lib/utils";
 
 export function GlobalSalespersonV2Report({
   groups,
 }: {
-  groups: GlobalSalespersonGroup[];
+  groups: GlobalSalespersonV2Group[];
 }) {
-  if (!groups.length) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selectedPerson =
+    groups.find(
+      (person, index) => salespersonKey(person, index) === selectedKey,
+    ) ?? groups[0];
+
+  if (!selectedPerson) {
     return (
       <Card>
         <CardContent className="text-muted-foreground p-6 text-sm">
@@ -29,132 +34,95 @@ export function GlobalSalespersonV2Report({
   }
 
   return (
-    <section className="space-y-4" aria-label="V2 sales grouped by salesperson">
-      {groups.map((person, index) => (
-        <details
-          key={person.id ?? `unassigned-${index}`}
-          open={groups.length === 1 || index === 0}
-          className="group/person border-border/80 bg-card overflow-hidden rounded-[1.1rem] border shadow-sm"
-        >
-          <summary className="from-primary/[0.06] via-secondary/25 to-card hover:from-primary/[0.1] cursor-pointer list-none bg-gradient-to-r px-5 py-4 [&::-webkit-details-marker]:hidden">
-            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold tracking-tight">
-                    {person.name}
-                  </h2>
-                  {person.isUnnamed ? (
-                    <Badge variant="outline">Unnamed</Badge>
-                  ) : person.hasCustomDisplayName ? (
-                    <Badge variant="secondary">Global display name</Badge>
-                  ) : null}
-                </div>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {person.clients.length} client
-                  {person.clients.length === 1 ? "" : "s"} ·{" "}
-                  {person.summary.appointments} appointments
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-                <SummaryValue
-                  label="Showed"
-                  value={String(person.summary.showed)}
-                />
-                <SummaryValue
-                  label="Revenue"
-                  value={`$${person.summary.attributedRevenue}`}
-                />
-                <SummaryValue
-                  label="Missed"
-                  value={`$${person.summary.missedRevenue}`}
-                />
-                <SummaryValue
-                  label="Commission"
-                  value={`$${person.summary.commission}`}
-                />
-              </div>
+    <section
+      className="grid gap-5 xl:grid-cols-[19rem_minmax(0,1fr)]"
+      aria-label="V2 sales grouped by salesperson"
+    >
+      <Card className="h-fit gap-0 overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle>Sales team</CardTitle>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Select a person to inspect
+              </p>
             </div>
-          </summary>
-          <div className="border-border/70 overflow-x-auto border-t">
-            <Table className="min-w-[64rem]">
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-5">Client</TableHead>
-                  <TableHead>Client salesperson name</TableHead>
-                  <TableHead className="text-right">Booked</TableHead>
-                  <TableHead className="text-right">Showed</TableHead>
-                  <TableHead className="text-right">No-show</TableHead>
-                  <TableHead className="text-right">Show rate</TableHead>
-                  <TableHead>Categories</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="pr-5 text-right">Commission</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {person.clients.map((client) => (
-                  <TableRow key={client.id}>
-                    <TableCell className="pl-5 font-medium">
-                      {client.name}
-                    </TableCell>
-                    <TableCell>
-                      {client.localSalespersonNames.length
-                        ? client.localSalespersonNames.join(", ")
-                        : "Unassigned / widget"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {client.summary.appointments}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {client.summary.showed}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {client.summary.noShows}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {Math.round(client.summary.showRate * 100)}%
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid min-w-64 gap-1.5">
-                        {client.categories.map((category) => (
-                          <div
-                            key={category.id ?? "uncategorized"}
-                            className="flex items-center justify-between gap-4 text-xs"
-                          >
-                            <span>{category.name}</span>
-                            <span className="text-muted-foreground tabular-nums">
-                              {category.summary.appointments} booked ·{" "}
-                              {category.summary.showed} showed · $
-                              {category.summary.attributedRevenue} · $
-                              {category.summary.commission} commission
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      ${client.summary.attributedRevenue}
-                    </TableCell>
-                    <TableCell className="pr-5 text-right font-semibold tabular-nums">
-                      ${client.summary.commission}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <span className="bg-secondary grid size-9 place-items-center rounded-xl">
+              <UsersRound className="size-4" aria-hidden="true" />
+            </span>
           </div>
-        </details>
-      ))}
+        </CardHeader>
+        <CardContent className="max-h-[48rem] space-y-1 overflow-y-auto p-2">
+          {groups.map((person, index) => {
+            const key = salespersonKey(person, index);
+            const isSelected = person === selectedPerson;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSelectedKey(key)}
+                aria-pressed={isSelected}
+                className={cn(
+                  "hover:bg-muted flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors",
+                  isSelected &&
+                    "bg-primary text-primary-foreground hover:bg-primary",
+                )}
+              >
+                <span
+                  className={cn(
+                    "bg-secondary text-secondary-foreground grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold",
+                    isSelected &&
+                      "bg-primary-foreground/15 text-primary-foreground",
+                  )}
+                >
+                  {getSalespersonInitials(person.name)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {person.name}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-muted-foreground mt-0.5 block text-xs",
+                      isSelected && "text-primary-foreground/70",
+                    )}
+                  >
+                    {formatSalesCommissionV2Money(
+                      person.summary.attributedRevenue,
+                    )}{" "}
+                    revenue
+                  </span>
+                </span>
+                {person.summary.needsReview > 0 ? (
+                  <span
+                    className={cn(
+                      "grid min-w-5 place-items-center rounded-full bg-amber-500/15 px-1.5 text-xs font-semibold text-amber-800",
+                      isSelected &&
+                        "bg-primary-foreground/15 text-primary-foreground",
+                    )}
+                  >
+                    {person.summary.needsReview}
+                  </span>
+                ) : (
+                  <CheckCircle2
+                    className={cn(
+                      "size-4 text-emerald-600",
+                      isSelected && "text-primary-foreground",
+                    )}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <SalespersonV2Workspace person={selectedPerson} />
     </section>
   );
 }
 
-function SummaryValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <p className="text-muted-foreground text-[0.6875rem] uppercase">
-        {label}
-      </p>
-      <p className="font-semibold tabular-nums">{value}</p>
-    </div>
-  );
+function salespersonKey(person: GlobalSalespersonV2Group, index: number) {
+  return person.id ?? `${person.name}:${index}`;
 }
