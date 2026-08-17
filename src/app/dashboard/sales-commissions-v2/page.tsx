@@ -15,19 +15,11 @@ import { z } from "zod";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
 import { MetricCard } from "~/features/dashboard/metric-card";
 import { PageHeader } from "~/features/dashboard/page-header";
+import { ClientV2Report } from "~/features/sales-commissions-v2/client-v2-report";
 import { GlobalSalespersonV2Report } from "~/features/sales-commissions-v2/global-salesperson-v2-report";
 import { SalesCommissionV2Filters } from "~/features/sales-commissions-v2/sales-commission-v2-filters";
-import { SalesCommissionV2AttentionTable } from "~/features/sales-commissions-v2/sales-commission-v2-attention-table";
 import { canAccessSalesCommissionV2 } from "~/features/sales-commissions-v2/server/access";
 import { getAuthenticatedUser } from "~/server/auth/current-user";
 import { api } from "~/trpc/server";
@@ -45,6 +37,8 @@ const searchSchema = z.object({
     .optional(),
   categoryId: z.string().uuid().optional(),
   review: z.enum(["ready", "needs_review"]).optional(),
+  selectedGlobalSalespersonKey: z.string().min(1).max(100).optional(),
+  selectedClientId: z.string().uuid().optional(),
   salesCommissionV2Page: z.coerce.number().int().positive().default(1),
 });
 
@@ -67,6 +61,8 @@ function reportViewHref(
   next.set("view", view);
   if (view === "salesperson") next.delete("globalSalespersonId");
   else next.delete("clientId");
+  next.delete("selectedGlobalSalespersonKey");
+  next.delete("selectedClientId");
   next.set("salesCommissionV2Page", "1");
   return `/dashboard/sales-commissions-v2?${next.toString()}`;
 }
@@ -92,6 +88,8 @@ export default async function SalesCommissionsV2Page({
     appointmentStatus: rawSearch.appointmentStatus,
     categoryId: rawSearch.categoryId,
     review: rawSearch.review,
+    selectedGlobalSalespersonKey: rawSearch.selectedGlobalSalespersonKey,
+    selectedClientId: rawSearch.selectedClientId,
     salesCommissionV2Page: rawSearch.salesCommissionV2Page,
   });
   const search = parsed.success
@@ -105,6 +103,9 @@ export default async function SalesCommissionsV2Page({
     status: search.appointmentStatus,
     categoryId: search.categoryId,
     review: search.review,
+    attentionView: search.view,
+    selectedGlobalSalespersonKey: search.selectedGlobalSalespersonKey,
+    selectedClientId: search.selectedClientId,
     page: search.salesCommissionV2Page,
     pageSize: 25,
   });
@@ -235,131 +236,28 @@ export default async function SalesCommissionsV2Page({
       </section>
 
       {search.view === "salesperson" ? (
-        <GlobalSalespersonV2Report groups={report.globalSalespersonGroups} />
-      ) : report.clientGroups.length ? (
-        <section className="space-y-4" aria-label="V2 sales grouped by client">
-          {report.clientGroups.map((client) => (
-            <details
-              key={client.id}
-              open={report.clientGroups.length === 1}
-              className="border-border/80 bg-card overflow-hidden rounded-[1.1rem] border shadow-sm"
-            >
-              <summary className="from-primary/[0.06] via-secondary/25 to-card hover:from-primary/[0.1] cursor-pointer list-none bg-gradient-to-r px-5 py-4 [&::-webkit-details-marker]:hidden">
-                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-                  <div>
-                    <h2 className="font-semibold tracking-tight">
-                      {client.name}
-                    </h2>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {client.summary.appointments} appointments ·{" "}
-                      {client.salespeople.length} salesperson groups
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-                    <SummaryValue
-                      label="Showed"
-                      value={String(client.summary.showed)}
-                    />
-                    <SummaryValue
-                      label="Revenue"
-                      value={`$${client.summary.attributedRevenue}`}
-                    />
-                    <SummaryValue
-                      label="Missed"
-                      value={`$${client.summary.missedRevenue}`}
-                    />
-                    <SummaryValue
-                      label="Commission"
-                      value={`$${client.summary.commission}`}
-                    />
-                  </div>
-                </div>
-              </summary>
-              <div className="border-border/70 overflow-x-auto border-t">
-                <Table className="min-w-[70rem]">
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="pl-5">Salesperson</TableHead>
-                      <TableHead className="text-right">Booked</TableHead>
-                      <TableHead className="text-right">Showed</TableHead>
-                      <TableHead className="text-right">Show rate</TableHead>
-                      <TableHead className="text-right">No-show</TableHead>
-                      <TableHead>Category breakdown</TableHead>
-                      <TableHead className="text-right">Revenue</TableHead>
-                      <TableHead className="pr-5 text-right">
-                        Commission
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {client.salespeople.map((person) => (
-                      <TableRow key={person.id ?? "unassigned"}>
-                        <TableCell className="pl-5 font-medium">
-                          {person.name}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {person.summary.appointments}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {person.summary.showed}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {person.summary.noShows}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {Math.round(person.summary.showRate * 100)}%
-                        </TableCell>
-                        <TableCell>
-                          <div className="grid min-w-72 gap-1.5">
-                            {person.categories.map((category) => (
-                              <div
-                                key={category.id ?? "uncategorized"}
-                                className="flex items-center justify-between gap-4 text-xs"
-                              >
-                                <span>{category.name}</span>
-                                <span className="text-muted-foreground tabular-nums">
-                                  {category.summary.appointments} booked ·{" "}
-                                  {category.summary.showed} showed · $
-                                  {category.summary.attributedRevenue} · $
-                                  {category.summary.commission} commission
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          ${person.summary.attributedRevenue}
-                        </TableCell>
-                        <TableCell className="pr-5 text-right font-semibold tabular-nums">
-                          ${person.summary.commission}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </details>
-          ))}
-        </section>
-      ) : null}
-
-      <SalesCommissionV2AttentionTable
-        rows={report.attentionRows}
-        total={report.attentionTotal}
-        searchParams={rawSearch}
-        page={search.salesCommissionV2Page}
-      />
-    </div>
-  );
-}
-
-function SummaryValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <p className="text-muted-foreground text-[0.6875rem] uppercase">
-        {label}
-      </p>
-      <p className="font-semibold tabular-nums">{value}</p>
+        <GlobalSalespersonV2Report
+          key={`salesperson:${report.attentionSelectionKey ?? "none"}:${search.salesCommissionV2Page}`}
+          groups={report.globalSalespersonGroups}
+          selectedKey={report.attentionSelectionKey}
+          attentionRows={report.attentionRows}
+          attentionTotal={report.attentionTotal}
+          attentionScopes={report.attentionScopes}
+          searchParams={rawSearch}
+          page={search.salesCommissionV2Page}
+        />
+      ) : (
+        <ClientV2Report
+          key={`client:${report.attentionSelectionKey ?? "none"}:${search.salesCommissionV2Page}`}
+          groups={report.clientGroups}
+          selectedId={report.attentionSelectionKey}
+          attentionRows={report.attentionRows}
+          attentionTotal={report.attentionTotal}
+          attentionScopes={report.attentionScopes}
+          searchParams={rawSearch}
+          page={search.salesCommissionV2Page}
+        />
+      )}
     </div>
   );
 }

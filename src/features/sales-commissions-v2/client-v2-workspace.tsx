@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   AlertTriangle,
+  Building2,
   CalendarCheck,
   CheckCircle2,
   CircleDollarSign,
@@ -20,63 +21,53 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import {
-  aggregateSalespersonV2Categories,
+  aggregateClientV2Categories,
+  type ClientV2Group,
+} from "~/features/sales-commissions-v2/client-v2-presentation";
+import {
   formatSalesCommissionV2Cents,
   formatSalesCommissionV2Money,
-  getSalespersonInitials,
-  type GlobalSalespersonV2Group,
 } from "~/features/sales-commissions-v2/salesperson-v2-presentation";
 
-export function SalespersonV2Workspace({
-  person,
-}: {
-  person: GlobalSalespersonV2Group;
-}) {
+export function ClientV2Workspace({ client }: { client: ClientV2Group }) {
   const categoryContributions = useMemo(
-    () => aggregateSalespersonV2Categories(person),
-    [person],
+    () => aggregateClientV2Categories(client),
+    [client],
   );
-  const readyRecords = person.summary.appointments - person.summary.needsReview;
+  const readyRecords = client.summary.appointments - client.summary.needsReview;
   const readiness =
-    person.summary.appointments === 0
+    client.summary.appointments === 0
       ? 0
-      : Math.round((readyRecords / person.summary.appointments) * 100);
+      : Math.round((readyRecords / client.summary.appointments) * 100);
 
   return (
     <div className="space-y-5">
       <Card className="from-primary/[0.08] via-card to-card border-primary/15 bg-gradient-to-r shadow-sm">
         <CardContent className="flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center">
           <div className="flex items-center gap-4">
-            <span className="bg-primary text-primary-foreground grid size-14 shrink-0 place-items-center rounded-2xl text-sm font-semibold">
-              {getSalespersonInitials(person.name)}
+            <span className="bg-primary text-primary-foreground grid size-14 shrink-0 place-items-center rounded-2xl">
+              <Building2 className="size-6" aria-hidden="true" />
             </span>
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-heading text-2xl font-medium">
-                  {person.name}
-                </h2>
-                {person.isUnnamed ? (
-                  <Badge variant="outline">Unnamed</Badge>
-                ) : person.hasCustomDisplayName ? (
-                  <Badge variant="secondary">Global display name</Badge>
-                ) : null}
-              </div>
+              <h2 className="font-heading text-2xl font-medium">
+                {client.name}
+              </h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                {person.clients.length} client
-                {person.clients.length === 1 ? "" : "s"} ·{" "}
-                {person.summary.appointments} appointments
+                {client.salespeople.length} salesperson
+                {client.salespeople.length === 1 ? "" : " groups"} ·{" "}
+                {client.summary.appointments} appointments
               </p>
             </div>
           </div>
           <Badge
             className={
-              person.summary.needsReview > 0
+              client.summary.needsAttention > 0
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-800"
                 : "border-emerald-500/30 bg-emerald-500/10 text-emerald-800"
             }
           >
-            {person.summary.needsReview > 0
-              ? `${person.summary.needsReview} need review`
+            {client.summary.needsAttention > 0
+              ? `${client.summary.needsAttention} flagged`
               : "Ready"}
           </Badge>
         </CardContent>
@@ -85,26 +76,26 @@ export function SalespersonV2Workspace({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CompactMetric
           label="Appointments"
-          value={person.summary.appointments.toLocaleString()}
-          supporting={`${person.summary.showed.toLocaleString()} showed`}
+          value={client.summary.appointments.toLocaleString()}
+          supporting={`${client.summary.showed.toLocaleString()} showed`}
           icon={CalendarCheck}
         />
         <CompactMetric
           label="Show rate"
-          value={`${Math.round(person.summary.showRate * 100)}%`}
-          supporting={`${person.summary.noShows.toLocaleString()} no-shows`}
+          value={`${Math.round(client.summary.showRate * 100)}%`}
+          supporting={`${client.summary.noShows.toLocaleString()} no-shows`}
           icon={Percent}
         />
         <CompactMetric
           label="Revenue"
-          value={formatSalesCommissionV2Money(person.summary.attributedRevenue)}
+          value={formatSalesCommissionV2Money(client.summary.attributedRevenue)}
           supporting="Attributed revenue"
           icon={CircleDollarSign}
         />
         <CompactMetric
           label="Commission"
-          value={formatSalesCommissionV2Money(person.summary.commission)}
-          supporting={`${person.summary.needsReview} records need review`}
+          value={formatSalesCommissionV2Money(client.summary.commission)}
+          supporting={`${client.summary.needsAttention} bookings flagged`}
           icon={HandCoins}
         />
       </div>
@@ -114,8 +105,8 @@ export function SalespersonV2Workspace({
           <CardHeader>
             <CardTitle>Category contribution</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Attributed revenue by category across this salesperson&apos;s
-              clients.
+              Attributed revenue by category across this client&apos;s
+              salespeople.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -150,7 +141,7 @@ export function SalespersonV2Workspace({
               ))
             ) : (
               <p className="text-muted-foreground text-sm">
-                No category revenue for this salesperson.
+                No category revenue for this client.
               </p>
             )}
           </CardContent>
@@ -165,7 +156,7 @@ export function SalespersonV2Workspace({
                   Booking records clear of review flags.
                 </p>
               </div>
-              {person.summary.needsReview > 0 ? (
+              {client.summary.needsReview > 0 ? (
                 <AlertTriangle
                   className="size-5 text-amber-700"
                   aria-hidden="true"
@@ -185,15 +176,15 @@ export function SalespersonV2Workspace({
                   {readiness}%
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {readyRecords} of {person.summary.appointments} records ready
+                  {readyRecords} of {client.summary.appointments} records ready
                 </p>
               </div>
               <Badge
                 variant={
-                  person.summary.needsReview === 0 ? "secondary" : "outline"
+                  client.summary.needsReview === 0 ? "secondary" : "outline"
                 }
               >
-                {person.summary.needsReview} open
+                {client.summary.needsReview} open
               </Badge>
             </div>
             <div className="bg-muted mt-5 h-2.5 overflow-hidden rounded-full">
@@ -207,7 +198,7 @@ export function SalespersonV2Workspace({
                 Missed revenue
               </p>
               <p className="mt-1 text-lg font-semibold tabular-nums">
-                {formatSalesCommissionV2Money(person.summary.missedRevenue)}
+                {formatSalesCommissionV2Money(client.summary.missedRevenue)}
               </p>
             </div>
           </CardContent>
@@ -216,17 +207,16 @@ export function SalespersonV2Workspace({
 
       <Card className="gap-0 overflow-hidden py-0 shadow-sm">
         <CardHeader className="border-b px-5 py-4">
-          <CardTitle>Client performance</CardTitle>
+          <CardTitle>Salesperson performance</CardTitle>
           <p className="text-muted-foreground mt-1 text-sm">
-            Revenue, commission, and attribution by client account.
+            Revenue, commission, no-shows, and flagged bookings by salesperson.
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto px-0">
-          <Table className="min-w-[76rem]">
+          <Table className="min-w-[72rem]">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="pl-5">Client</TableHead>
-                <TableHead>Client salesperson name</TableHead>
+                <TableHead className="pl-5">Salesperson</TableHead>
                 <TableHead>Categories</TableHead>
                 <TableHead className="text-right">Booked</TableHead>
                 <TableHead className="text-right">Show rate</TableHead>
@@ -237,19 +227,14 @@ export function SalespersonV2Workspace({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {person.clients.map((client) => (
-                <TableRow key={client.id}>
+              {client.salespeople.map((person) => (
+                <TableRow key={person.id ?? person.name}>
                   <TableCell className="pl-5 font-medium">
-                    {client.name}
-                  </TableCell>
-                  <TableCell>
-                    {client.localSalespersonNames.length
-                      ? client.localSalespersonNames.join(", ")
-                      : "Unassigned / widget"}
+                    {person.name}
                   </TableCell>
                   <TableCell>
                     <div className="flex max-w-80 flex-wrap gap-1.5">
-                      {client.categories.map((category) => (
+                      {person.categories.map((category) => (
                         <Badge
                           key={category.id ?? `uncategorized-${category.name}`}
                           variant="outline"
@@ -260,24 +245,24 @@ export function SalespersonV2Workspace({
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {client.summary.appointments}
+                    {person.summary.appointments}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {Math.round(client.summary.showRate * 100)}%
+                    {Math.round(person.summary.showRate * 100)}%
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {client.summary.noShows}
+                    {person.summary.noShows}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {client.summary.needsAttention}
+                    {person.summary.needsAttention}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatSalesCommissionV2Money(
-                      client.summary.attributedRevenue,
+                      person.summary.attributedRevenue,
                     )}
                   </TableCell>
                   <TableCell className="pr-5 text-right font-semibold tabular-nums">
-                    {formatSalesCommissionV2Money(client.summary.commission)}
+                    {formatSalesCommissionV2Money(person.summary.commission)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -301,17 +286,21 @@ function CompactMetric({
   icon: LucideIcon;
 }) {
   return (
-    <Card className="gap-3 p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-          {label}
-        </p>
-        <Icon className="text-primary size-4" aria-hidden="true" />
-      </div>
-      <p className="font-heading text-2xl font-medium tracking-tight tabular-nums">
-        {value}
-      </p>
-      <p className="text-muted-foreground text-xs">{supporting}</p>
+    <Card className="gap-3 py-4 shadow-sm">
+      <CardContent className="flex items-start justify-between gap-3 px-4">
+        <div>
+          <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            {label}
+          </p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+            {value}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">{supporting}</p>
+        </div>
+        <span className="bg-secondary text-secondary-foreground grid size-9 shrink-0 place-items-center rounded-xl">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+      </CardContent>
     </Card>
   );
 }
