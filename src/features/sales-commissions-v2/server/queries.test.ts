@@ -62,6 +62,9 @@ let clientId = "";
 let globalSalespersonId = "";
 let ceramicCategoryId = "";
 let tintCategoryId = "";
+let integrationMappingId = "";
+let calendarId = "";
+let contactId = "";
 let v1BeforeV2: Awaited<ReturnType<typeof getSalesCommissionReport>>;
 let v1AfterV2: Awaited<ReturnType<typeof getSalesCommissionReport>>;
 
@@ -95,6 +98,7 @@ describe("Sales & Commissions v2 reporting", () => {
       })
       .returning({ id: integrationMappings.id });
     if (!mapping) throw new Error("Could not create V2 integration mapping");
+    integrationMappingId = mapping.id;
 
     const [[calendar], [contact], [globalSalesperson]] = await Promise.all([
       db
@@ -124,6 +128,8 @@ describe("Sales & Commissions v2 reporting", () => {
     if (!calendar || !contact || !globalSalesperson) {
       throw new Error("Could not create V2 shared fixtures");
     }
+    calendarId = calendar.id;
+    contactId = contact.id;
     globalSalespersonId = globalSalesperson.id;
     await db.insert(globalSalespersonIdentities).values({
       globalSalespersonId,
@@ -290,9 +296,14 @@ describe("Sales & Commissions v2 reporting", () => {
       missedRevenue: "499.00",
       commission: "106.80",
       needsReview: 3,
+      needsAttention: 2,
     });
     expect(report.rows[0]?.id).toBeDefined();
     expect(report.clientGroups[0]?.summary.commission).toBe("106.80");
+    expect(report.clientGroups[0]?.summary).toMatchObject({
+      noShows: 1,
+      needsAttention: 2,
+    });
     expect(report.globalSalespersonGroups[0]).toMatchObject({
       id: globalSalespersonId,
       name: "Michael VA",
@@ -301,7 +312,11 @@ describe("Sales & Commissions v2 reporting", () => {
         {
           id: clientId,
           localSalespersonNames: ["Michael VA"],
-          summary: { commission: "106.80" },
+          summary: {
+            commission: "106.80",
+            noShows: 1,
+            needsAttention: 2,
+          },
         },
       ],
     });
@@ -404,6 +419,85 @@ describe("Sales & Commissions v2 reporting", () => {
     });
   });
 
+  it("scopes attention bookings without changing report filters or totals", async () => {
+    const [unassignedAppointment] = await db
+      .insert(ghlAppointments)
+      .values({
+        integrationMappingId,
+        calendarId,
+        contactId,
+        externalId: "v2-unassigned-legacy-showed",
+        status: "showed",
+        title: "Unassigned appointment",
+        description: "Legacy booking description",
+        startsAt: new Date("2026-08-14T14:00:00.000Z"),
+        endsAt: new Date("2026-08-14T15:00:00.000Z"),
+        providerCreatedAt: new Date("2026-08-01T12:00:00.000Z"),
+        providerUpdatedAt: new Date("2026-08-01T12:00:00.000Z"),
+        rawPayload: {},
+      })
+      .returning({ id: ghlAppointments.id });
+    if (!unassignedAppointment) {
+      throw new Error("Could not create unassigned attention fixture");
+    }
+
+    try {
+      const salespersonReport = await getSalesCommissionV2Report({
+        ...reportInput,
+        clientId,
+        attentionView: "salesperson",
+        selectedGlobalSalespersonKey: globalSalespersonId,
+      });
+      expect(salespersonReport.summary.appointments).toBe(8);
+      expect(salespersonReport.attentionSelectionKey).toBe(globalSalespersonId);
+      expect(salespersonReport.attentionTotal).toBe(2);
+      expect(
+        salespersonReport.attentionRows.every(
+          (row) => row.globalSalespersonKey === globalSalespersonId,
+        ),
+      ).toBe(true);
+      expect(
+        salespersonReport.attentionScopes.map((scope) => ({
+          key: scope.key,
+          total: scope.total,
+        })),
+      ).toEqual(
+        expect.arrayContaining([
+          { key: globalSalespersonId, total: 2 },
+          { key: "unassigned", total: 1 },
+        ]),
+      );
+
+      const unassignedReport = await getSalesCommissionV2Report({
+        ...reportInput,
+        clientId,
+        attentionView: "salesperson",
+        selectedGlobalSalespersonKey: "unassigned",
+      });
+      expect(unassignedReport.summary.appointments).toBe(8);
+      expect(unassignedReport.attentionSelectionKey).toBe("unassigned");
+      expect(unassignedReport.attentionTotal).toBe(1);
+      expect(unassignedReport.attentionRows[0]?.title).toBe(
+        "Unassigned appointment",
+      );
+
+      const clientReport = await getSalesCommissionV2Report({
+        ...reportInput,
+        attentionView: "client",
+        selectedClientId: clientId,
+      });
+      expect(clientReport.attentionSelectionKey).toBe(clientId);
+      expect(clientReport.attentionTotal).toBe(3);
+      expect(clientReport.attentionScopes).toMatchObject([
+        { key: clientId, total: 3 },
+      ]);
+    } finally {
+      await db
+        .delete(ghlAppointments)
+        .where(eq(ghlAppointments.id, unassignedAppointment.id));
+    }
+  });
+
   it("filters review and category states before pagination", async () => {
     const ready = await getSalesCommissionV2Report({
       ...reportInput,
@@ -414,6 +508,7 @@ describe("Sales & Commissions v2 reporting", () => {
     expect(ready.total).toBe(4);
     expect(ready.rows).toHaveLength(1);
     expect(ready.rows[0]?.needsReview).toBe(false);
+    expect(ready.attentionTotal).toBe(0);
 
     const needsReview = await getSalesCommissionV2Report({
       ...reportInput,
@@ -426,6 +521,7 @@ describe("Sales & Commissions v2 reporting", () => {
       "missing_service",
       "unmatched_category",
     ]);
+    expect(needsReview.attentionTotal).toBe(2);
 
     const ceramic = await getSalesCommissionV2Report({
       ...reportInput,
@@ -438,6 +534,18 @@ describe("Sales & Commissions v2 reporting", () => {
       missedRevenue: "499.00",
       commission: "49.90",
     });
+    expect(ceramic.attentionTotal).toBe(0);
+
+    const noShows = await getSalesCommissionV2Report({
+      ...reportInput,
+      clientId,
+      status: "noshow",
+      attentionView: "salesperson",
+      selectedGlobalSalespersonKey: globalSalespersonId,
+    });
+    expect(noShows.total).toBe(1);
+    expect(noShows.summary.noShows).toBe(1);
+    expect(noShows.attentionTotal).toBe(0);
   });
 
   it("filters by global identity and exposes independent setup records", async () => {

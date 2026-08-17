@@ -47,6 +47,9 @@ export type SalesCommissionV2ReportInput = {
   to: string;
   clientId?: string;
   globalSalespersonId?: string;
+  attentionView?: "salesperson" | "client";
+  selectedGlobalSalespersonKey?: string;
+  selectedClientId?: string;
   status?: AppointmentStatus;
   categoryId?: string;
   review?: "ready" | "needs_review";
@@ -62,6 +65,7 @@ type MoneySummary = {
   missedRevenueCents: bigint;
   commissionCents: bigint;
   needsReview: number;
+  needsAttention: number;
 };
 
 type CategoryGroup = {
@@ -101,6 +105,7 @@ type GlobalSalespersonGroup = {
   hasCustomDisplayName: boolean;
   summary: MoneySummary;
   clients: Map<string, GlobalSalespersonClientGroup>;
+  key: string;
 };
 
 function emptySummary(): MoneySummary {
@@ -112,6 +117,7 @@ function emptySummary(): MoneySummary {
     missedRevenueCents: 0n,
     commissionCents: 0n,
     needsReview: 0,
+    needsAttention: 0,
   };
 }
 
@@ -123,6 +129,7 @@ function addRowToSummary(
     missedRevenue: string;
     commission: string;
     needsReview: boolean;
+    needsAttention: boolean;
   },
 ) {
   summary.appointments += 1;
@@ -132,6 +139,7 @@ function addRowToSummary(
   summary.missedRevenueCents += parseUsdToCents(row.missedRevenue);
   summary.commissionCents += parseUsdToCents(row.commission);
   if (row.needsReview) summary.needsReview += 1;
+  if (row.needsAttention) summary.needsAttention += 1;
 }
 
 function presentSummary(summary: MoneySummary) {
@@ -145,6 +153,7 @@ function presentSummary(summary: MoneySummary) {
     missedRevenue: formatUsdCents(summary.missedRevenueCents),
     commission: formatUsdCents(summary.commissionCents),
     needsReview: summary.needsReview,
+    needsAttention: summary.needsAttention,
   };
 }
 
@@ -399,6 +408,7 @@ export async function getSalesCommissionV2Report(
       const parsedPrice = duplicatedPrice
         ? { status: "invalid" as const, cents: null, formatted: null }
         : parseSalesCommissionV2Price(parsed.fields.price);
+      const needsAttention = parsed.status !== "structured";
       const financiallyEligible = parsed.status === "structured";
       const commissionPercentage = clientSettings?.commissionPercentage ?? null;
       const financials = calculateSalesCommissionV2Financials({
@@ -432,6 +442,9 @@ export async function getSalesCommissionV2Report(
         matchStatus: categoryMatch.status,
         fields: parsed.fields,
         parsedPrice: parsedPrice.formatted,
+        globalSalespersonKey:
+          salesperson?.globalSalespersonId ??
+          (salesperson ? `local:${salesperson.id}` : "unassigned"),
         commissionPercentage,
         category: categoryMatch.category,
         mapping: {
@@ -464,6 +477,7 @@ export async function getSalesCommissionV2Report(
           : null,
         ...financials,
         reviewReasons,
+        needsAttention,
         needsReview: reviewReasons.length > 0,
       };
     })
@@ -525,11 +539,7 @@ export async function getSalesCommissionV2Report(
     clientGroups.set(client.id, client);
 
     const globalSalesperson = row.salesperson?.globalSalesperson ?? null;
-    const globalSalespersonKey = globalSalesperson
-      ? globalSalesperson.id
-      : row.salesperson
-        ? `local:${row.salesperson.id}`
-        : "unassigned";
+    const globalSalespersonKey = row.globalSalespersonKey;
     let globalPerson = globalSalespersonGroups.get(globalSalespersonKey);
     globalPerson ??= {
       id: globalSalesperson?.id ?? null,
@@ -543,6 +553,7 @@ export async function getSalesCommissionV2Report(
         globalSalesperson?.hasCustomDisplayName ??
         row.salesperson?.hasCustomDisplayName ??
         false,
+      key: globalSalespersonKey,
       summary: emptySummary(),
       clients: new Map<string, GlobalSalespersonClientGroup>(),
     };
@@ -571,14 +582,116 @@ export async function getSalesCommissionV2Report(
     globalSalespersonGroups.set(globalSalespersonKey, globalPerson);
   }
 
+  const presentedClientGroups = [...clientGroups.values()]
+    .map((client) => ({
+      id: client.id,
+      name: client.name,
+      summary: presentSummary(client.summary),
+      salespeople: [...client.salespeople.values()]
+        .map((person) => ({
+          id: person.id,
+          name: person.name,
+          isUnnamed: person.isUnnamed,
+          hasCustomDisplayName: person.hasCustomDisplayName,
+          summary: presentSummary(person.summary),
+          categories: [...person.categories.values()]
+            .map((category) => ({
+              id: category.id,
+              name: category.name,
+              summary: presentSummary(category.summary),
+            }))
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        }))
+        .sort((left, right) => {
+          const leftCommission = parseUsdToCents(left.summary.commission);
+          const rightCommission = parseUsdToCents(right.summary.commission);
+          if (rightCommission > leftCommission) return 1;
+          if (rightCommission < leftCommission) return -1;
+          return left.name.localeCompare(right.name);
+        }),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const presentedGlobalSalespersonGroups = [...globalSalespersonGroups.values()]
+    .map((person) => ({
+      key: person.key,
+      id: person.id,
+      name: person.name,
+      isUnnamed: person.isUnnamed,
+      hasCustomDisplayName: person.hasCustomDisplayName,
+      summary: presentSummary(person.summary),
+      clients: [...person.clients.values()]
+        .map((client) => ({
+          id: client.id,
+          name: client.name,
+          localSalespersonNames: [...client.localSalespersonNames].sort(
+            (left, right) => left.localeCompare(right),
+          ),
+          summary: presentSummary(client.summary),
+          categories: [...client.categories.values()]
+            .map((category) => ({
+              id: category.id,
+              name: category.name,
+              summary: presentSummary(category.summary),
+            }))
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    }))
+    .sort((left, right) => {
+      const leftCommission = parseUsdToCents(left.summary.commission);
+      const rightCommission = parseUsdToCents(right.summary.commission);
+      if (rightCommission > leftCommission) return 1;
+      if (rightCommission < leftCommission) return -1;
+      return left.name.localeCompare(right.name);
+    });
+  const attentionSelectionKey =
+    input.attentionView === "salesperson"
+      ? (presentedGlobalSalespersonGroups.find(
+          (person) => person.key === input.selectedGlobalSalespersonKey,
+        )?.key ??
+        presentedGlobalSalespersonGroups[0]?.key ??
+        null)
+      : input.attentionView === "client"
+        ? (presentedClientGroups.find(
+            (client) => client.id === input.selectedClientId,
+          )?.id ??
+          presentedClientGroups[0]?.id ??
+          null)
+        : null;
+  const attentionRowsByScope = new Map<string, typeof evaluatedRows>();
+  for (const row of evaluatedRows) {
+    if (!row.needsAttention) continue;
+    const scopeKey =
+      input.attentionView === "salesperson"
+        ? row.globalSalespersonKey
+        : input.attentionView === "client"
+          ? row.clientId
+          : "all";
+    const scopeRows = attentionRowsByScope.get(scopeKey) ?? [];
+    scopeRows.push(row);
+    attentionRowsByScope.set(scopeKey, scopeRows);
+  }
+  const attentionScopeKeys =
+    input.attentionView === "salesperson"
+      ? presentedGlobalSalespersonGroups.map((person) => person.key)
+      : input.attentionView === "client"
+        ? presentedClientGroups.map((client) => client.id)
+        : ["all"];
+  const selectedAttentionRows =
+    attentionRowsByScope.get(attentionSelectionKey ?? "all") ?? [];
+  const attentionScopes = attentionScopeKeys.map((key) => {
+    const scopeRows = attentionRowsByScope.get(key) ?? [];
+    return {
+      key,
+      total: scopeRows.length,
+      rows: scopeRows.slice(0, input.pageSize),
+    };
+  });
   const total = evaluatedRows.length;
   const start = (input.page - 1) * input.pageSize;
   const rows = evaluatedRows.slice(start, start + input.pageSize);
-  const attentionRows = evaluatedRows.filter(
-    (row) => row.parseStatus !== "structured",
-  );
-  const attentionTotal = attentionRows.length;
-  const paginatedAttentionRows = attentionRows.slice(
+  const attentionTotal = selectedAttentionRows.length;
+  const paginatedAttentionRows = selectedAttentionRows.slice(
     start,
     start + input.pageSize,
   );
@@ -586,71 +699,14 @@ export async function getSalesCommissionV2Report(
   return {
     ...reportingContext,
     summary: presentSummary(summary),
-    clientGroups: [...clientGroups.values()]
-      .map((client) => ({
-        id: client.id,
-        name: client.name,
-        summary: presentSummary(client.summary),
-        salespeople: [...client.salespeople.values()]
-          .map((person) => ({
-            id: person.id,
-            name: person.name,
-            isUnnamed: person.isUnnamed,
-            hasCustomDisplayName: person.hasCustomDisplayName,
-            summary: presentSummary(person.summary),
-            categories: [...person.categories.values()]
-              .map((category) => ({
-                id: category.id,
-                name: category.name,
-                summary: presentSummary(category.summary),
-              }))
-              .sort((left, right) => left.name.localeCompare(right.name)),
-          }))
-          .sort((left, right) => {
-            const leftCommission = parseUsdToCents(left.summary.commission);
-            const rightCommission = parseUsdToCents(right.summary.commission);
-            if (rightCommission > leftCommission) return 1;
-            if (rightCommission < leftCommission) return -1;
-            return left.name.localeCompare(right.name);
-          }),
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
-    globalSalespersonGroups: [...globalSalespersonGroups.values()]
-      .map((person) => ({
-        id: person.id,
-        name: person.name,
-        isUnnamed: person.isUnnamed,
-        hasCustomDisplayName: person.hasCustomDisplayName,
-        summary: presentSummary(person.summary),
-        clients: [...person.clients.values()]
-          .map((client) => ({
-            id: client.id,
-            name: client.name,
-            localSalespersonNames: [...client.localSalespersonNames].sort(
-              (left, right) => left.localeCompare(right),
-            ),
-            summary: presentSummary(client.summary),
-            categories: [...client.categories.values()]
-              .map((category) => ({
-                id: category.id,
-                name: category.name,
-                summary: presentSummary(category.summary),
-              }))
-              .sort((left, right) => left.name.localeCompare(right.name)),
-          }))
-          .sort((left, right) => left.name.localeCompare(right.name)),
-      }))
-      .sort((left, right) => {
-        const leftCommission = parseUsdToCents(left.summary.commission);
-        const rightCommission = parseUsdToCents(right.summary.commission);
-        if (rightCommission > leftCommission) return 1;
-        if (rightCommission < leftCommission) return -1;
-        return left.name.localeCompare(right.name);
-      }),
+    clientGroups: presentedClientGroups,
+    globalSalespersonGroups: presentedGlobalSalespersonGroups,
     rows,
     total,
     attentionRows: paginatedAttentionRows,
     attentionTotal,
+    attentionSelectionKey,
+    attentionScopes,
     isTruncated,
     options: {
       clients: clientRows,
