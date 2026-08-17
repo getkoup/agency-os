@@ -71,7 +71,7 @@ export const DASHBOARD_DESTINATIONS: DashboardDestination[] = [
   },
   {
     href: "/dashboard/sales-commissions-v2",
-    label: "Sales & Commissions v2",
+    label: "Commission",
     icon: HandCoins,
     roles: ["owner", "admin"],
     group: "Workspace",
